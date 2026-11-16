@@ -28,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 8.5"
+VERSIONE = "task 8.6"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
@@ -148,7 +148,7 @@ def _responsabili(nomi):
     """[(nome, thread)] dei responsabili: le voci stringa di nomi-isole.json, piu' il Capo."""
     out = [("Capo", None)]
     for k, v in nomi.items():
-        if isinstance(v, str) and _senza_boss(v) and _senza_boss(v).lower() != "capo":
+        if str(k).startswith("cmsg_") and isinstance(v, str) and _senza_boss(v) and _senza_boss(v).lower() != "capo":
             out.append((_senza_boss(v), k))
     return out
 
@@ -183,7 +183,9 @@ def _con_nomi(sessions):
     canonico = {n.lower(): n for n in nomi_resp}
     # titolo del thread -> titolo del suo responsabile (anche per le sessioni con la riga "Thread:")
     per_titolo = {"capo": "Capo"}
-    for v in nomi.values():
+    for k, v in nomi.items():
+        if not str(k).startswith("cmsg_"):          # es. "aggiornato_utc": non e' un thread
+            continue
         if isinstance(v, str):
             per_titolo[_senza_boss(v).lower()] = _senza_boss(v)
         elif isinstance(v, dict) and v.get("titolo"):
