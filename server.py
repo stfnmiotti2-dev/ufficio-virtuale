@@ -26,7 +26,7 @@ import scanner
 HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8")}
-VERSIONE = "task 4"
+VERSIONE = "task 4.1"
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
 
@@ -153,7 +153,7 @@ class Handler(BaseHTTPRequestHandler):
             res = chat.read_chat(Path(info["file"]), da)
         except OSError as exc:
             return self._send(500, json.dumps({"errore": str(exc)}).encode(), "application/json")
-        res["sessione"] = {k: info[k] for k in ("id", "titolo", "progetto", "stato", "attivita")}
+        res["sessione"] = {k: info[k] for k in ("id", "titolo", "progetto", "stato", "attivita", "link", "commessa")}
         body = json.dumps(res, ensure_ascii=False).encode("utf-8")
         self._send(200, body, "application/json; charset=utf-8")
 

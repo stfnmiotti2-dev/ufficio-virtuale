@@ -38,6 +38,10 @@
   .icona { font-size: 16px; }
   .dettaglio { color: var(--muted); font-family: Consolas, monospace; font-size: 12px; overflow-wrap: anywhere;
                padding-left: 26px; }
+  .lavoro { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--text); }
+  .lavoro .commessa { background: #3a3220; color: #f2c66d; border-radius: 4px; padding: 0 6px; font-weight: 600; }
+  .lavoro .link { color: #8fb8ff; text-decoration: none; margin-left: auto; }
+  .lavoro .link:hover { text-decoration: underline; }
   .meta { color: var(--muted); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
   .lavora { --c: var(--lavora); } .pensa { --c: var(--pensa); } .ferma { --c: var(--ferma); }
   .finito { --c: var(--finito); } .inattiva, .vuota, .sconosciuto { --c: var(--inattiva); }
@@ -110,6 +114,18 @@ function render() {
     q.dataset.ts = s.modificato;
     top.append(q);
     card.append(top, el("div", "titolo", s.titolo || "(senza titolo)"));
+    const lavoro = el("div", "lavoro");
+    if (s.commessa) lavoro.append(el("span", "commessa", "📌 " + s.commessa));
+    if (s.progetto_tia) lavoro.append(el("span", "", "🧩 " + s.progetto_tia));
+    if (s.progetto_claude) lavoro.append(el("span", "", "🗂️ " + s.progetto_claude));
+    if (s.link) {
+      const a = el("a", "link", "apri su claude.ai ↗");
+      a.href = s.link; a.target = "_blank"; a.rel = "noopener";
+      a.title = "Apre la chat nel progetto claude.ai";
+      a.onclick = ev => ev.stopPropagation();
+      lavoro.append(a);
+    }
+    if (lavoro.childNodes.length) card.append(lavoro);
     if (s.attivita) {
       const a = el("div", "attivita");
       a.append(el("span", "icona", s.icona || ""), el("span", "", s.attivita));

@@ -174,7 +174,13 @@ async function caricaUnaVolta() {
   const s = res.sessione;
   document.getElementById("titolo").textContent = s.titolo || "(senza titolo)";
   document.title = (s.titolo || "Chat") + " · Ufficio virtuale";
-  document.getElementById("info").textContent = `${s.progetto} · ${s.stato}${s.attivita ? " · " + s.attivita : ""}`;
+  const info = document.getElementById("info");
+  info.textContent = `${s.commessa ? "📌 " + s.commessa + " · " : ""}${s.progetto} · ${s.stato}${s.attivita ? " · " + s.attivita : ""}`;
+  if (s.link && primo) {
+    const a = el("a", "", "apri su claude.ai ↗");
+    a.href = s.link; a.target = "_blank"; a.rel = "noopener";
+    document.querySelector("header").insertBefore(a, document.querySelector("header label"));
+  }
   if (primo && res.troncato) chat.append(el("div", "avviso", "Sessione molto lunga: mostro solo l'ultima parte."));
   if (primo && !res.voci.length) chat.append(el("div", "avviso", "Nessun messaggio ancora."));
   for (const v of res.voci) aggiungi(v);

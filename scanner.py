@@ -120,46 +120,84 @@ _THREAD_TITLE = re.compile(rb'Thread title: \\"((?:[^"\\]|\\.)*?)\\"')
 MIN_TITLE = 15            # un messaggio piu' corto ("Ora", "pc on") non fa da titolo
 
 
+_PROJECT = re.compile(rb'<project id=\\?"(chan_[A-Za-z0-9]{10,})\\?"[^>]*?name=\\?"([^"\\]+)')
+_PROJECT_CTX = re.compile(rb'Project: \\"([^"\\]+)\\" \(id: `(chan_[A-Za-z0-9]{10,})`\)')
+_THREAD = re.compile(rb'<thread ts=\\?"(cmsg_[A-Za-z0-9]{10,})')
+_COMMESSA = re.compile(r"(?<![\w])(\d{2}_\d{3})(?![\w])")    # es. 24_247
+
+
 def _first_title(path, max_bytes=32 * 1024 * 1024):
-    """Cartella di lavoro e titolo della sessione.
-    1) il titolo del thread claude.ai, se il transcript lo contiene;
-    2) altrimenti il primo messaggio della persona lungo almeno MIN_TITLE caratteri;
-    3) altrimenti il primo messaggio qualsiasi.
+    """Compatibilita': cartella e titolo."""
+    meta = session_meta(path, max_bytes)
+    return meta["cwd"], meta["titolo"]
+
+
+def session_meta(path, max_bytes=32 * 1024 * 1024):
+    """Dati dall'inizio della sessione:
+    - titolo: il titolo del thread claude.ai se c'e', altrimenti il primo messaggio
+      della persona lungo almeno MIN_TITLE caratteri, altrimenti il primo messaggio;
+    - progetto claude.ai (nome e id) e thread, per il link alla chat;
+    - commessa: il primo codice tipo 24_247 nei messaggi della persona.
     Legge riga per riga: le righe possono essere enormi (screenshot in base64)."""
-    cwd, first, title, read = None, None, None, 0
+    meta = {"cwd": None, "titolo": None, "progetto_claude": None, "chan": None,
+            "thread": None, "commessa": None}
+    first, title, thread_title, read = None, None, None, 0
     with open(path, "rb") as f:
         for raw in f:
             read += len(raw)
             if read > max_bytes:
                 break
-            m = _THREAD_TITLE.search(raw)
-            if m:
-                try:
-                    t = json.loads(b'"' + m.group(1) + b'"').strip()
-                except ValueError:
-                    t = m.group(1).decode("utf-8", "replace").strip()
-                if t:
-                    return cwd or _cwd_of(raw), _short(t, 70)
-            if b'"type":"user"' not in raw and b'"type": "user"' not in raw and cwd is not None:
+            if thread_title is None:
+                m = _THREAD_TITLE.search(raw)
+                if m:
+                    try:
+                        thread_title = json.loads(b'"' + m.group(1) + b'"').strip()
+                    except ValueError:
+                        thread_title = m.group(1).decode("utf-8", "replace").strip()
+            if meta["chan"] is None or meta["progetto_claude"] is None:
+                m = _PROJECT.search(raw) or None
+                if m:
+                    meta["chan"], meta["progetto_claude"] = (m.group(1).decode(),
+                                                             m.group(2).decode("utf-8", "replace"))
+                else:
+                    m = _PROJECT_CTX.search(raw)
+                    if m:
+                        meta["progetto_claude"], meta["chan"] = (m.group(1).decode("utf-8", "replace"),
+                                                                 m.group(2).decode())
+            if meta["thread"] is None:
+                m = _THREAD.search(raw)
+                if m:
+                    meta["thread"] = m.group(1).decode()
+            done = (thread_title or title) and meta["chan"] and meta["thread"] and meta["commessa"]
+            if done:
+                break
+            if b'"type":"user"' not in raw and b'"type": "user"' not in raw and meta["cwd"] is not None:
                 continue
             try:
                 rec = json.loads(raw)
             except ValueError:
                 continue
-            if cwd is None and rec.get("cwd"):
-                cwd = rec["cwd"]
-            if title or rec.get("type") != "user" or rec.get("isMeta") or rec.get("isSidechain"):
+            if meta["cwd"] is None and rec.get("cwd"):
+                meta["cwd"] = rec["cwd"]
+            if rec.get("type") != "user" or rec.get("isMeta") or rec.get("isSidechain"):
                 continue
             t = _title_from(_text_of(rec.get("message", {}).get("content")))
             if not t or t.startswith("Caveat:"):
                 continue
+            if meta["commessa"] is None:
+                m = _COMMESSA.search(t)
+                if m:
+                    meta["commessa"] = m.group(1)
             first = first or t
-            if len(t) >= MIN_TITLE:
+            if title is None and len(t) >= MIN_TITLE:
                 title = t
-                # continuo un po' solo per cercare il titolo del thread
-                max_bytes = min(max_bytes, read + 512 * 1024)
-    t = title or first
-    return cwd, (_short(t, 70) if t else None)
+                # continuo ancora un po' per titolo del thread, progetto e commessa
+                max_bytes = min(max_bytes, read + 2 * 1024 * 1024)
+    t = thread_title or title or first
+    meta["titolo"] = _short(t, 70) if t else None
+    if meta["chan"] and meta["thread"]:
+        meta["link"] = f"https://claude.ai/code/project/{meta['chan']}?thread={meta['thread']}"
+    return meta
 
 
 def _cwd_of(raw):
@@ -187,9 +225,14 @@ def analyze(path):
         "sotto_agenti": 0,
         "icona": "",
         "dettaglio": "",
+        "progetto_tia": None,
     }
 
-    info["cartella"], info["titolo"] = _first_title(path)
+    meta = session_meta(path)
+    info["cartella"], info["titolo"] = meta["cwd"], meta["titolo"]
+    info["progetto_claude"] = meta["progetto_claude"]
+    info["commessa"] = meta["commessa"]
+    info["link"] = meta.get("link")
     # titoli espliciti (rinomina della sessione o riassunto), se presenti
     for rec in head + tail:
         if rec.get("type") in ("custom-title", "ai-title") and rec.get(rec["type"].replace("-t", "T")):
@@ -215,6 +258,11 @@ def analyze(path):
             for b in content:
                 if isinstance(b, dict) and b.get("type") == "tool_use":
                     pending[b.get("id")] = b
+                    inp = b.get("input") if isinstance(b.get("input"), dict) else {}
+                    if etichette.short_name(b.get("name", "")).lower() == "tia_project" and \
+                            inp.get("action") in ("open", "retrieve", "create") and (inp.get("path") or inp.get("name")):
+                        p_tia = re.split(r"[\\/]", str(inp.get("path") or inp.get("name")).rstrip("\\/"))[-1]
+                        info["progetto_tia"] = re.sub(r"\.(ap|zap)\d+$", "", p_tia, flags=re.I)
                     icon, text = etichette.label(b.get("name", "?"), b.get("input"))
                     info["ultimo_strumento"] = f"{icon} {text}"
         if rec["type"] == "user" and isinstance(content, list):
