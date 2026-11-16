@@ -136,6 +136,7 @@
   <span class="tia" id="tia" title="Stima dalle sessioni delle ultime 2 ore: TIA aperti e non ancora chiusi. Regola: massimo 2 per versione e 3 in totale."></span>
   <span class="spia" id="spia"></span>
   <label><input type="checkbox" id="soloAttive"> solo attive</label>
+  <label title="Di base i link aprono l'app Claude per PC. Spunta se preferisci il browser."><input type="checkbox" id="linkBrowser"> link nel browser</label>
   <span class="live" id="live">non collegato</span>
   <span class="conta" id="versione" style="font-size:12px">server: versione vecchia</span>
 </header>
@@ -161,6 +162,13 @@ const lista = document.getElementById("lista");
 const soloAttive = document.getElementById("soloAttive");
 soloAttive.checked = true;                           // di base solo le attive: le vecchie sono rumore
 try { if (localStorage.getItem("soloAttive") === "0") soloAttive.checked = false; } catch (e) {}
+const linkBrowser = document.getElementById("linkBrowser");
+try { linkBrowser.checked = localStorage.getItem("linkBrowser") === "1"; } catch (e) {}
+linkBrowser.onchange = () => {
+  try { localStorage.setItem("linkBrowser", linkBrowser.checked ? "1" : "0"); } catch (e) {}
+  render();
+  if (window.Ufficio) Ufficio.disegna(sessioni, extra);
+};
 soloAttive.onchange = () => {
   try { localStorage.setItem("soloAttive", soloAttive.checked ? "1" : "0"); } catch (e) {}
   render();
@@ -226,7 +234,7 @@ function render() {
     const [cls, etichetta] = STATI[s.stato] || ["sconosciuto", s.stato];
     const card = el("article", "card " + cls);
     card.title = "Apri la chat completa";
-    card.onclick = () => s.cloud ? (s.link && window.open(s.link, "_blank", "noopener"))
+    card.onclick = () => s.link ? apriLink(s.link)
       : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
     const top = el("div", "top");
     top.append(el("span", "stato", etichetta));
@@ -247,7 +255,7 @@ function render() {
     if (s.progetto_claude) lavoro.append(el("span", "", "🗂️ " + s.progetto_claude));
     if (s.link) {
       const a = el("a", "link", "apri su claude.ai ↗");
-      a.href = s.link; a.target = "_blank"; a.rel = "noopener";
+      collegaLink(a, s.link);
       a.title = "Apre la chat nel progetto claude.ai";
       a.onclick = ev => ev.stopPropagation();
       lavoro.append(a);
@@ -283,8 +291,8 @@ function aspettano() {
     q.dataset.ts = s.modificato;
     riga.append(q);
     const a = el("a", "", "Rispondi ↗");
-    a.target = "_blank"; a.rel = "noopener";
-    a.href = s.link || "/chat?id=" + encodeURIComponent(s.id);
+    if (s.link) collegaLink(a, s.link);
+    else { a.href = "/chat?id=" + encodeURIComponent(s.id); a.target = "_blank"; }
     a.title = s.link ? "Apre il thread su claude.ai" : "Apre la chat della sessione";
     riga.append(a);
     lista.append(riga);
@@ -318,7 +326,7 @@ function commesse() {
     parte("Aspetta", c.aspetta);
     if (c.link) {
       const a = el("a", "", "APRI");
-      a.href = c.link; a.target = "_blank"; a.rel = "noopener";
+      collegaLink(a, c.link);
       k.append(a);
     }
     dove.append(k);

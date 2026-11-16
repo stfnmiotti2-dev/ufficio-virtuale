@@ -1,3 +1,22 @@
+(function () {
+  // Link a claude.ai: di base si aprono nell'app Claude per PC (claude://claude.ai/...), senza passare dal browser.
+  // Con "apri nel browser" spuntato (o senza app) restano link web normali.
+  function nelBrowser() { try { return localStorage.getItem("linkBrowser") === "1"; } catch (e) { return false; } }
+  function perApp(url) {
+    return !nelBrowser() && /^https:\/\/claude\.ai\//.test(url || "") ? url.replace(/^https:\/\//, "claude://") : null;
+  }
+  window.apriLink = function (url) {
+    if (!url) return;
+    const app = perApp(url);
+    if (app) location.href = app; else window.open(url, "_blank", "noopener");
+  };
+  window.collegaLink = function (a, url) {
+    const app = perApp(url);
+    a.href = app || url;
+    if (app) { a.removeAttribute("target"); a.title = (a.title ? a.title + " " : "") + "(nell'app Claude)"; }
+    else { a.target = "_blank"; a.rel = "noopener"; }
+  };
+})();
 // Ufficio virtuale - la stanza in pixel art.
 // Tutto disegnato con rettangoli su un canvas piccolo, poi ingrandito senza sfocare:
 // nessuna immagine esterna, nessuna licenza. Fumetti ed etichette sono HTML sopra il canvas.
@@ -370,7 +389,7 @@
       (s.thread && (gr.chiave.startsWith("t:") || gr.chiave.startsWith("r:")) ? s.link : null);
     if (link) {
       const a = document.createElement("a");
-      a.href = link; a.target = "_blank"; a.rel = "noopener";
+      collegaLink(a, link);
       a.textContent = "↗";
       a.title = gr.chiave === "r:capo" ? "Apri la chat principale del progetto" : "Apri la chat del responsabile";
       c.append(a);
@@ -485,7 +504,7 @@
       Object.assign(porta.style, { left: u.x * scala + "px", top: (u.y + ISOLA_H) * scala + "px",
                                    width: UFF_W * scala + "px", height: UFF_H * scala + "px" });
       porta.title = link ? "Apri la chat di " + (u.gr.chiave === "r:capo" ? "Capo" : (s0.responsabile || "questo responsabile")) + " su claude.ai" : "";
-      if (link) porta.onclick = () => window.open(link, "_blank", "noopener");
+      if (link) porta.onclick = () => apriLink(link);
       strato.append(porta);
     }
     for (const a of aree) cartello(a.gr, a.x, a.y + 3, a.w, scala, false);
@@ -502,7 +521,7 @@
         zona = document.createElement("div");
         zona.append(document.createElement("div"), document.createElement("div"));
         zona.lastChild.className = "targa";
-        zona.onclick = () => s.cloud ? (s.link && window.open(s.link, "_blank", "noopener"))
+        zona.onclick = () => s.link ? apriLink(s.link)
           : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
         zone.set(s.id, zona);
         strato.append(zona);
