@@ -366,9 +366,6 @@ function collega() {
 collega();
 fetch("/api/versione").then(r => r.ok ? r.json() : null).then(v => {
   if (v) document.getElementById("versione").textContent = "versione: " + v.versione + (v.git ? " · " + v.git : "");
-  if (v && v.indirizzo_tablet) document.getElementById("versione").title = "Dal tablet (stessa Wi-Fi): http://" + v.indirizzo_tablet + ":" + location.port;
-  if (v && v.indirizzo_tablet && ["localhost", "127.0.0.1"].includes(location.hostname))
-    document.getElementById("versione").textContent += " · 📱 " + v.indirizzo_tablet + ":" + location.port;
 }).catch(() => {});
 // se il server si aggiorna, ricarico la pagina con la versione nuova
 let versioneIniziale = null;
