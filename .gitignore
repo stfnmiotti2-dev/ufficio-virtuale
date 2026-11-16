@@ -1,0 +1,8 @@
+__pycache__/
+*.log
+.versione-git
+*.nuovo
+diagnosi-titoli.txt
+etichette-mie.json
+links.json
+task*-*.png

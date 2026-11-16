@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ufficio virtuale</title>
+<style>
+  :root {
+    --bg: #1b1d24; --card: #252833; --line: #343846; --text: #e8e9ee; --muted: #9a9fb0;
+    --lavora: #4cc38a; --pensa: #5aa9f0; --ferma: #f2b14a; --finito: #8b90a3; --inattiva: #5d6272;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 20px;
+           border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  .conta { color: var(--muted); }
+  .live { margin-left: auto; color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+  .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--inattiva); }
+  .live.on::before { background: var(--lavora); }
+  label { color: var(--muted); font-size: 13px; }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+         gap: 14px; padding: 18px 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--c);
+          border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;
+          cursor: pointer; transition: border-color .15s, transform .15s; }
+  .card:hover { border-color: var(--c); transform: translateY(-1px); }
+  .top { display: flex; align-items: center; gap: 8px; }
+  .stato { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+           color: var(--c); }
+  .card.lavora .stato::before, .card.pensa .stato::before { content: "● "; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .quando { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .titolo { font-weight: 600; overflow-wrap: anywhere; }
+  .attivita { color: var(--text); font-size: 14px; display: flex; gap: 8px; align-items: baseline;
+              overflow-wrap: anywhere; }
+  .icona { font-size: 16px; }
+  .dettaglio { color: var(--muted); font-family: Consolas, monospace; font-size: 12px; overflow-wrap: anywhere;
+               padding-left: 26px; }
+  .meta { color: var(--muted); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .lavora { --c: var(--lavora); } .pensa { --c: var(--pensa); } .ferma { --c: var(--ferma); }
+  .finito { --c: var(--finito); } .inattiva, .vuota, .sconosciuto { --c: var(--inattiva); }
+  .card.inattiva, .card.vuota { opacity: .65; }
+  .vuoto { color: var(--muted); padding: 40px 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ufficio virtuale</h1>
+  <span class="conta" id="conta"></span>
+  <label><input type="checkbox" id="soloAttive"> solo attive</label>
+  <span class="live" id="live">non collegato</span>
+  <span class="conta" id="versione" style="font-size:12px">server: versione vecchia</span>
+</header>
+<main id="lista"><div class="vuoto">Carico le sessioni…</div></main>
+
+<script>
+const STATI = {
+  "lavora": ["lavora", "lavora"],
+  "pensa": ["pensa", "pensa"],
+  "ferma?": ["ferma", "ferma da un po'"],
+  "finito": ["finito", "ha finito"],
+  "inattiva": ["inattiva", "inattiva"],
+  "vuota": ["vuota", "vuota"],
+};
+let sessioni = [];
+const lista = document.getElementById("lista");
+const soloAttive = document.getElementById("soloAttive");
+try { soloAttive.checked = localStorage.getItem("soloAttive") === "1"; } catch (e) {}
+soloAttive.onchange = () => {
+  try { localStorage.setItem("soloAttive", soloAttive.checked ? "1" : "0"); } catch (e) {}
+  render();
+};
+
+function fa(ts) {
+  if (!ts) return "-";
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (s < 60) return s + " s fa";
+  if (s < 3600) return Math.floor(s / 60) + " min fa";
+  return Math.floor(s / 3600) + " h " + Math.floor(s % 3600 / 60) + " min fa";
+}
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function render() {
+  const attive = ["lavora", "pensa", "ferma?"];
+  const vis = soloAttive.checked ? sessioni.filter(s => attive.includes(s.stato)) : sessioni;
+  const nAttive = sessioni.filter(s => attive.includes(s.stato)).length;
+  document.getElementById("conta").textContent =
+    `${sessioni.length} sessioni, ${nAttive} al lavoro`;
+  lista.replaceChildren();
+  if (!vis.length) {
+    lista.append(el("div", "vuoto", soloAttive.checked ? "Nessun agente al lavoro adesso." : "Nessuna sessione recente."));
+    return;
+  }
+  for (const s of vis) {
+    const [cls, etichetta] = STATI[s.stato] || ["sconosciuto", s.stato];
+    const card = el("article", "card " + cls);
+    card.title = "Apri la chat completa";
+    card.onclick = () => window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
+    const top = el("div", "top");
+    top.append(el("span", "stato", etichetta));
+    const q = el("span", "quando", fa(s.modificato));
+    q.dataset.ts = s.modificato;
+    top.append(q);
+    card.append(top, el("div", "titolo", s.titolo || "(senza titolo)"));
+    if (s.attivita) {
+      const a = el("div", "attivita");
+      a.append(el("span", "icona", s.icona || ""), el("span", "", s.attivita));
+      card.append(a);
+    }
+    if (s.dettaglio) card.append(el("div", "dettaglio", s.dettaglio));
+    const meta = el("div", "meta");
+    meta.append(el("span", "", "📁 " + s.progetto));
+    if (s.ultimo_strumento && s.stato !== "lavora")
+      meta.append(el("span", "", "ultima azione: " + s.ultimo_strumento));
+    if (s.sotto_agenti) meta.append(el("span", "", "👥 " + s.sotto_agenti + " sotto-agenti"));
+    meta.append(el("span", "", s.id.slice(0, 8)));
+    card.append(meta);
+    lista.append(card);
+  }
+}
+
+// aggiorna i "x min fa" senza ridisegnare tutto
+setInterval(() => {
+  for (const q of document.querySelectorAll(".quando")) q.textContent = fa(+q.dataset.ts);
+}, 1000);
+
+function collega() {
+  const live = document.getElementById("live");
+  const es = new EventSource("/api/stream");
+  es.addEventListener("sessioni", ev => {
+    sessioni = JSON.parse(ev.data);
+    render();
+  });
+  es.onopen = () => { live.textContent = "live"; live.classList.add("on"); };
+  es.onerror = () => { live.textContent = "server non raggiungibile, riprovo…"; live.classList.remove("on"); };
+}
+collega();
+fetch("/api/versione").then(r => r.ok ? r.json() : null).then(v => {
+  if (v) document.getElementById("versione").textContent = "versione: " + v.versione + (v.git ? " · " + v.git : "");
+}).catch(() => {});
+// se il server si aggiorna, ricarico la pagina con la versione nuova
+let versioneIniziale = null;
+async function controllaVersione() {
+  try {
+    const v = await (await fetch("/api/versione", { cache: "no-store" })).json();
+    const id = v.versione + "/" + (v.git || "");
+    if (versioneIniziale === null) versioneIniziale = id;
+    else if (id !== versioneIniziale) location.reload();
+  } catch (e) {}
+}
+controllaVersione();
+setInterval(controllaVersione, 20000);
+</script>
+</body>
+</html>

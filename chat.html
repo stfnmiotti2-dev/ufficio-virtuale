@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat · Ufficio virtuale</title>
+<style>
+  :root {
+    --bg: #1b1d24; --card: #252833; --line: #343846; --text: #e8e9ee; --muted: #9a9fb0;
+    --utente: #2f3d58; --ok: #4cc38a; --err: #f06b6b; --tool: #20232c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 "Segoe UI", system-ui, sans-serif; }
+  header { position: sticky; top: 0; z-index: 1; background: var(--bg); border-bottom: 1px solid var(--line);
+           padding: 12px 20px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  header a { color: var(--muted); text-decoration: none; }
+  header a:hover { color: var(--text); }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; flex: 1 1 300px; overflow-wrap: anywhere; }
+  .info { color: var(--muted); font-size: 12px; }
+  label { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px 20px 80px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { padding: 10px 14px; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .utente { background: var(--utente); align-self: flex-end; max-width: 85%; }
+  .agente { background: var(--card); border: 1px solid var(--line); }
+  .ts { display: block; color: var(--muted); font-size: 11px; margin-bottom: 3px; white-space: normal; }
+  details { background: var(--tool); border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+  details > summary { cursor: pointer; padding: 6px 12px; color: var(--muted); list-style: none;
+                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary b { color: var(--text); font-weight: 600; }
+  .tecnico { font: 11px Consolas, monospace; opacity: .7; }
+  details.err { border-color: var(--err); }
+  details.err > summary { color: var(--err); }
+  .esito { margin-right: 6px; }
+  pre { margin: 0; padding: 8px 12px; border-top: 1px solid var(--line); max-height: 420px; overflow: auto;
+        font: 12px/1.45 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+  pre.err { color: var(--err); }
+  .pensiero { font-style: italic; }
+  .avviso { color: var(--muted); font-size: 12px; text-align: center; }
+  #giu { position: fixed; right: 20px; bottom: 20px; background: var(--card); color: var(--text);
+         border: 1px solid var(--line); border-radius: 20px; padding: 6px 14px; cursor: pointer; display: none; }
+</style>
+</head>
+<body>
+<header>
+  <a href="/">← Ufficio</a>
+  <h1 id="titolo">Carico…</h1>
+  <span class="info" id="info"></span>
+  <label><input type="checkbox" id="mostraStrumenti" checked> strumenti</label>
+</header>
+<main id="chat"></main>
+<button id="giu">↓ nuovi messaggi</button>
+
+<script>
+const params = new URLSearchParams(location.search);
+const id = params.get("id");
+const chat = document.getElementById("chat");
+const giu = document.getElementById("giu");
+const strumenti = {};          // id tool_use -> elemento <details>
+let offset = null;
+
+const mostra = document.getElementById("mostraStrumenti");
+try { mostra.checked = localStorage.getItem("strumenti") !== "0"; } catch (e) {}
+function applicaFiltro() {
+  document.body.classList.toggle("senzaStrumenti", !mostra.checked);
+  for (const d of document.querySelectorAll("details.tool")) d.style.display = mostra.checked ? "" : "none";
+}
+mostra.onchange = () => { try { localStorage.setItem("strumenti", mostra.checked ? "1" : "0"); } catch (e) {} applicaFiltro(); };
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function ora(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return d.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+function nomeStrumento(n) {
+  return n.startsWith("mcp__") ? n.split("__").slice(1).join("/") : n;
+}
+let ETICHETTE = {};
+// stessa logica di etichette.py: "strumento:azione", poi "strumento"
+function etichetta(nome, inputJson) {
+  let inp = {};
+  try { inp = JSON.parse(inputJson) || {}; } catch (e) {}
+  const tool = (nome.startsWith("mcp__") ? nome.split("__").pop() : nome).toLowerCase();
+  const azione = String(inp.action || "").toLowerCase();
+  const hit = (azione && ETICHETTE[tool + ":" + azione]) || ETICHETTE[tool];
+  if (!hit) return null;
+  let testo = hit[1].replace(/\{(\w+)\}/g, (_, k) => {
+    if (k === "nomefile") {
+      const v = String(inp.file_path || inp.notebook_path || inp.path || "");
+      return v.replace(/[\\/]+$/, "").split(/[\\/]/).pop();
+    }
+    const v = inp[k];
+    return (typeof v === "string" || typeof v === "number") ? String(v) : "";
+  }).replace(/\(\s*\)/g, "").replace(/\s+/g, " ").trim();
+  return [hit[0], testo];
+}
+function riassunto(input) {
+  try {
+    const o = JSON.parse(input);
+    for (const k of ["description", "command", "file_path", "pattern", "query", "url", "prompt", "action", "operation"])
+      if (typeof o[k] === "string" && o[k].trim()) return o[k].replace(/\s+/g, " ").slice(0, 140);
+  } catch (e) {}
+  return "";
+}
+
+function aggiungi(v) {
+  if (v.tipo === "utente" || v.tipo === "agente") {
+    const m = el("div", "msg " + v.tipo);
+    m.append(el("span", "ts", (v.tipo === "utente" ? "Tu · " : "Agente · ") + ora(v.ts)), document.createTextNode(v.testo));
+    chat.append(m);
+  } else if (v.tipo === "pensiero") {
+    const d = el("details", "tool pensiero");
+    d.append(el("summary", "", "💭 ragionamento"), el("pre", "", v.testo));
+    chat.append(d);
+  } else if (v.tipo === "strumento") {
+    const d = el("details", "tool");
+    const s = el("summary");
+    const esito = el("span", "esito", "⏳");
+    const et = etichetta(v.nome, v.input);
+    s.append(esito, el("b", "", et ? et[0] + " " + et[1] : nomeStrumento(v.nome)));
+    if (et) s.append(el("span", "tecnico", "  " + nomeStrumento(v.nome)));
+    const r = riassunto(v.input);
+    if (r) s.append(document.createTextNode("  " + r));
+    s.title = ora(v.ts);
+    d.append(s, el("pre", "", v.input));
+    d._esito = esito;
+    strumenti[v.id] = d;
+    chat.append(d);
+  } else if (v.tipo === "risultato") {
+    const d = strumenti[v.rif];
+    const pre = el("pre", v.errore ? "err" : "", v.testo || "(nessun output)");
+    if (d) {
+      d._esito.textContent = v.errore ? "❌" : "✔";
+      if (v.errore) d.classList.add("err");
+      d.append(pre);
+    } else {                     // risultato di uno strumento chiamato prima della parte caricata
+      const o = el("details", "tool" + (v.errore ? " err" : ""));
+      o.append(el("summary", "", (v.errore ? "❌" : "✔") + " risultato"), pre);
+      chat.append(o);
+    }
+  }
+}
+
+function inFondo() {
+  return window.innerHeight + window.scrollY >= document.body.scrollHeight - 80;
+}
+
+let occupato = false;
+async function carica() {
+  if (occupato) return;
+  occupato = true;
+  try { await caricaUnaVolta(); } finally { occupato = false; }
+}
+async function caricaUnaVolta() {
+  const url = "/api/chat?id=" + encodeURIComponent(id) + (offset != null ? "&da=" + offset : "");
+  let res;
+  try {
+    const r = await fetch(url, { cache: "no-store" });
+    res = await r.json();
+    if (!r.ok) throw new Error(res.errore || r.status);
+  } catch (e) {
+    document.getElementById("info").textContent = "errore: " + e.message;
+    return;
+  }
+  const primo = offset == null;
+  const eraInFondo = primo || inFondo();
+  const s = res.sessione;
+  document.getElementById("titolo").textContent = s.titolo || "(senza titolo)";
+  document.title = (s.titolo || "Chat") + " · Ufficio virtuale";
+  document.getElementById("info").textContent = `${s.progetto} · ${s.stato}${s.attivita ? " · " + s.attivita : ""}`;
+  if (primo && res.troncato) chat.append(el("div", "avviso", "Sessione molto lunga: mostro solo l'ultima parte."));
+  if (primo && !res.voci.length) chat.append(el("div", "avviso", "Nessun messaggio ancora."));
+  for (const v of res.voci) aggiungi(v);
+  applicaFiltro();
+  offset = res.offset;
+  if (res.voci.length) {
+    if (eraInFondo) window.scrollTo(0, document.body.scrollHeight);
+    else giu.style.display = "block";
+  }
+}
+giu.onclick = () => { window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); giu.style.display = "none"; };
+window.addEventListener("scroll", () => { if (inFondo()) giu.style.display = "none"; });
+
+async function caricaEtichette() {
+  try { const r = await fetch("/api/etichette"); if (r.ok) ETICHETTE = await r.json(); } catch (e) {}
+}
+if (!id) {
+  document.getElementById("titolo").textContent = "Manca l'id della sessione";
+} else {
+  caricaEtichette().then(carica);
+  setInterval(carica, 2000);      // solo i byte nuovi del file: costo trascurabile
+}
+// se il server si aggiorna, ricarico la pagina con la versione nuova
+let versioneIniziale = null;
+async function controllaVersione() {
+  try {
+    const v = await (await fetch("/api/versione", { cache: "no-store" })).json();
+    const id = v.versione + "/" + (v.git || "");
+    if (versioneIniziale === null) versioneIniziale = id;
+    else if (id !== versioneIniziale) location.reload();
+  } catch (e) {}
+}
+controllaVersione();
+setInterval(controllaVersione, 20000);
+</script>
+</body>
+</html>
