@@ -31,7 +31,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/ufficio3d.js": ("ufficio3d.js", "text/javascript; charset=utf-8"),
           "/lib/three.min.js": ("lib/three.min.js", "text/javascript; charset=utf-8"),
           "/lib/OrbitControls.js": ("lib/OrbitControls.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.21 (dashboard sotto l ufficio)"
+VERSIONE = "task 9.22 (operai dalla porta, chiusura in sequenza)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova

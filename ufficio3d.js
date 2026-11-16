@@ -532,40 +532,38 @@
     for (const [id, g] of gruppoDi) if (g === chiave) momento(id, "brindisi", 7);
     if (chiave !== "r:capo") momento("capo:r:capo", "applauso", 7);
   }
+  // operai: entrano dalla porta, vanno al posto, lavorano (costruiscono o smontano) ed escono di nuovo dalla porta
+  const VEL_OPERAI = 1.6, arrivoFatto = new Set();
+  function squadra(id, posti) {
+    return posti.map(([ox, oz, r], i) => {
+      const o = omino({ id: "operaio" + id + i }, mondo, ox, oz, "operaio");
+      o.userData.posto = [ox, oz, r]; o.visible = false;
+      for (const l of o.userData.sedute) l.visible = false;
+      for (const l of o.userData.gambe) l.visible = true;
+      return o;
+    });
+  }
   function apriCantiere(id, parti, om, x, z, ufficio) {
     const inizio = cantieri.get(id);
     if (inizio == null) return;
-    const fine = inizio + DURATA_CANTIERE;
-    const operai = (ufficio ? [[x - 1.0, z, 0], [x + 1.0, z, 0]] : [[x - 1.25, z, -Math.PI / 2], [x + 1.25, z, Math.PI / 2]]).map(([ox, oz, r], i) => {
-      const o = omino({ id: "operaio" + id + i }, mondo, ox, oz, "operaio");
-      o.rotation.y = r;
-      for (const l of o.userData.sedute) l.visible = false;
-      for (const l of o.userData.gambe) l.visible = true;
-      return o;
-    });
-    const pos = new T.Vector3(x, 2.3, z);
-    const et = etichetta("f3d", "🔨 Lavori in corso", pos);
+    const operai = squadra(id, ufficio ? [[x - 1.0, z, 0], [x + 1.0, z, 0]] : [[x - 1.25, z, -Math.PI / 2], [x + 1.25, z, Math.PI / 2]]);
+    const et = etichetta("f3d", "🔨 Lavori in corso", new T.Vector3(x, 2.3, z));
     marcati.push(et);
     if (om) om.userData.idArrivo = id;
-    lavori.push({ id, parti, om, operai, inizio, fine, et, x, z });
+    lavori.push({ id, parti, om, operai, durata: DURATA_CANTIERE, et, x, z });
   }
-  // thread chiuso: l'omino prende lo scatolone, saluta ed esce, poi due operai smontano la scrivania
-  const DURATA_CHIUSURA = 24, chiusi = new Map(), chiusiFatti = new Set(), ultimeSessioni = new Map();
+  // thread chiuso: l'omino prende lo scatolone, saluta ed esce dalla porta; solo dopo entrano gli operai a smontare
+  const chiusi = new Map(), chiusiFatti = new Set(), ultimeSessioni = new Map();
+  function fineChiusura(id) { if (!chiusi.has(id)) return; chiusi.delete(id); usciti.delete(id); if (ultimiDati) costruisci(...ultimiDati); }
   function chiudi(id, c) {
     chiusi.set(id, { ...c, inizio: performance.now() / 1000 }); chiusiFatti.add(id);
-    setTimeout(() => { chiusi.delete(id); usciti.delete(id); if (ultimiDati) costruisci(...ultimiDati); }, DURATA_CHIUSURA * 1000);
+    setTimeout(() => fineChiusura(id), 240000);                          // sicurezza, se qualcosa si incastra
   }
-  function apriSmontaggio(id, parti, x, z, inizio) {
-    const operai = [[x - 1.25, z, -Math.PI / 2], [x + 1.25, z, Math.PI / 2]].map(([ox, oz, r], i) => {
-      const o = omino({ id: "operaio" + id + i }, mondo, ox, oz, "operaio");
-      o.rotation.y = r; o.visible = false;
-      for (const l of o.userData.sedute) l.visible = false;
-      for (const l of o.userData.gambe) l.visible = true;
-      return o;
-    });
-    const pos = new T.Vector3(x, 2.3, z), et = etichetta("f3d", "🔧 Smontaggio", pos);
+  function apriSmontaggio(id, parti, x, z) {
+    const operai = squadra(id, [[x - 1.25, z, -Math.PI / 2], [x + 1.25, z, Math.PI / 2]]);
+    const et = etichetta("f3d", "🔧 Smontaggio", new T.Vector3(x, 2.3, z));
     et.e.style.visibility = "hidden"; marcati.push(et);
-    lavori.push({ id, parti, om: null, operai, inizio, fine: inizio + 11, et, x, z, smonta: true });
+    lavori.push({ id, parti, om: null, operai, durata: 11, et, x, z, smonta: true });
   }
   function avviaPostino(id) {
     let b = bersagli.get(id);
@@ -708,7 +706,7 @@
           if (s.chiude == null) ultimeSessioni.set(s.id, { s, chiave: gr.chiave, idx: gr.sessioni.indexOf(s) });
           const om = presente ? omino(s, mondo, x, z0 - 0.8, "dip") : null;
           apriCantiere(s.id, [scr, sd], om, x, z0 - 0.3, false);
-          if (s.chiude != null) apriSmontaggio(s.id, [scr, sd], x, z0 - 0.3, s.chiude + 10);
+          if (s.chiude != null) apriSmontaggio(s.id, [scr, sd], x, z0 - 0.3);
           if (om) {
             animati.push(om); camminatori.push(om); om.userData.corridoio = z0 - 1.75;
             om.userData.porta = porte[gr.chiave] || porte["r:capo"] || null;   // i thread senza responsabile vanno dal capo
@@ -782,10 +780,10 @@
     const primaVoltaDati = statiPrima.size === 0;
     let nuovi = false;
     for (const [id, st] of ora) {
-      if (!id || primaVoltaDati || postini.some(p => p.id === id)) continue;
+      if (!id || primaVoltaDati || chiusi.has(id) || postini.some(p => p.id === id)) continue;
       const prima = statiPrima.get(id), attivo = ["lavora", "pensa", "supervisore"].includes(st);
       // risposta di Stefano (aspetta -> lavora), nuovo compito (finito/fermo -> lavora) o thread nuovo che parte
-      if (prima === undefined) { cantieri.set(id, performance.now() / 1000); nuovi = true; continue; }
+      if (prima === undefined) { arrivoFatto.delete(id); cantieri.set(id, performance.now() / 1000); nuovi = true; continue; }
       if (attivo && (prima === "aspetta" || prima === "finito" || prima === "ferma?")) avviaPostino(id);
     }
     if (!primaVoltaDati) for (const id of statiPrima.keys())               // thread sparito dai dati: animazione di chiusura
@@ -936,6 +934,7 @@
       if (u.giro) {
         pos = lungo(u.giro.punti, t - u.giro.inizio, 1.1);
         if (pos.fine) {
+          if (u.giro.trasloco && chiusi.has(s.id) && chiusi.get(s.id).smonta == null) chiusi.get(s.id).smonta = t;   // e' uscito: tocca agli operai
           if (u.giro.uscita) { usciti.add(s.id); a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); u.giro = null; continue; }
           if (u.giro.arrivo) arrivi.delete(u.idArrivo);
           u.giro = null; u.prossimoT = t + 50 + (U.hash(s.id + t) % 40); pos = null;
@@ -1128,35 +1127,63 @@
       porta.rotation.y = portaAperta * 1.45;
     }
     lavori = lavori.filter(l => {
-      const p = Math.min(1, Math.max(0, (t - l.inizio) / (l.fine - l.inizio)));
+      const t0 = l.smonta ? (chiusi.get(l.id) || {}).smonta : cantieri.get(l.id);
+      if (t0 == null) {                                                   // smontaggio: aspettano che l'omino sia uscito
+        for (const o of l.operai) o.visible = false; l.et.e.style.visibility = "hidden";
+        for (const q of l.parti) q.scale.set(1, 1, 1);
+        return true;
+      }
+      const [ix, iz] = ingresso;
+      if (!l.cammino) {                                                   // percorsi dalla porta al posto e ritorno
+        for (const o of l.operai) { const [ox, oz] = o.userData.posto;
+          o.userData.andata = [[ix, iz, 0], [ox, iz, 0], [ox, oz, 0]]; o.userData.ritorno = [[ox, oz, 0], [ox, iz, 0], [ix, iz, 0]]; }
+        l.cammino = Math.max(...l.operai.map(o => durata(o.userData.andata, VEL_OPERAI)));
+      }
+      const tw = t0 + l.cammino, tf = tw + l.durata, tu = tf + l.cammino;
+      const p = Math.min(1, Math.max(0, (t - tw) / l.durata));
       const sy = l.smonta ? Math.max(0.03, 1 - Math.floor(p * 1.15 * 6) / 6)    // smontaggio: cala a scatti
         : Math.max(0.03, Math.min(1, Math.floor(p * 1.15 * 6) / 6));      // cresce a scatti, un pezzo alla volta
-      if (l.smonta) { const via = t >= l.inizio; for (const o of l.operai) o.visible = via; l.et.e.style.visibility = via ? "" : "hidden"; }
       for (const q of l.parti) q.scale.set(1, sy, 1);
+      l.et.e.style.visibility = t < tf ? "" : "hidden";
       if (l.om) {
         l.om.visible = p >= 1;
         const ep = l.om.userData.etichettaPos || (l.om.userData.etichetta && l.om.userData.etichetta.pos);
         const mk = ep && marcati.find(q => q.pos === ep);
         if (mk) mk.e.style.visibility = p >= 1 ? "" : "hidden";           // il pensiero compare quando arriva l'omino
+        if (p >= 1 && !arrivoFatto.has(l.id)) { arrivoFatto.add(l.id); arrivi.set(l.om.userData.idArrivo, t); }   // ora arriva dalla porta
       }
       for (const [i, o] of l.operai.entries()) {
+        const u = o.userData;
+        if (t < tw || t >= tf) {                                          // in cammino, con il martello in spalla
+          const pos = t < tw ? lungo(u.andata, t - t0, VEL_OPERAI) : lungo(u.ritorno, t - tf, VEL_OPERAI);
+          o.visible = !(t >= tf && pos.fine);
+          o.position.set(pos.x, 0, pos.z);
+          if (pos.dir) o.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
+          const w = pos.fermo ? 0 : Math.sin(t * 9 + i);
+          u.gambe[0].rotation.x = w * 0.5; u.gambe[1].rotation.x = -w * 0.5;
+          u.dx.rotation.set(2.6, 0, -0.2); u.sx.rotation.set(-w * 0.5, 0, 0.12);
+          u.corpo.position.y = Math.abs(Math.cos(t * 9 + i)) * 0.03; u.corpo.rotation.x = 0; u.testa.rotation.x = 0;
+          continue;
+        }
+        o.visible = true; o.position.set(u.posto[0], 0, u.posto[1]); o.rotation.y = u.posto[2];
+        u.gambe[0].rotation.x = u.gambe[1].rotation.x = 0;
         const giro = t * 1.4 + i * 0.45, c = giro % 1;                      // martellate esagerate: su piano, giu' di colpo
-        if (Math.floor(giro) !== o.userData.colpi && p < 1 && t >= l.inizio) {               // appena ha colpito: nuvoletta di polvere
-          if (o.userData.colpi != null) polvere(o.position.x + (l.x - o.position.x) * 0.4, 0.85, o.position.z + (l.z - o.position.z) * 0.45 + 0.3);
-          o.userData.colpi = Math.floor(giro);
+        if (Math.floor(giro) !== u.colpi) {                                 // appena ha colpito: nuvoletta di polvere
+          if (u.colpi != null) polvere(o.position.x + (l.x - o.position.x) * 0.4, 0.85, o.position.z + (l.z - o.position.z) * 0.45 + 0.3);
+          u.colpi = Math.floor(giro);
         }
         const su = c < 0.65 ? 1 - Math.pow(1 - c / 0.65, 2) : 1 - Math.pow((c - 0.65) / 0.35, 3);
-        const u = o.userData, colpo = c < 0.1 ? 1 - c / 0.1 : 0;          // appena dopo il colpo: contraccolpo
+        const colpo = c < 0.1 ? 1 - c / 0.1 : 0;                           // appena dopo il colpo: contraccolpo
         u.dx.rotation.set(0.5 + su * 2.7, 0, -0.15);                        // dal davanti fin sopra la testa
         u.sx.rotation.set(0.9 + colpo * 0.25, 0, 0.35);                     // scalpello puntato in avanti
         u.corpo.position.y = su * 0.06 - colpo * 0.05;
         u.corpo.rotation.x = 0.12 - su * 0.18;                              // si inarca caricando, si piega colpendo
         u.testa.rotation.x = colpo * 0.25;
       }
-      if (p >= 1) {
-        if (l.om && !arrivi.has(l.om.userData.idArrivo)) arrivi.set(l.om.userData.idArrivo, t);   // ora arriva dalla porta
+      if (t >= tu) {
         for (const o of l.operai) mondo.remove(o);
-        l.et.e.remove(); cantieri.delete(l.id);
+        l.et.e.remove();
+        if (l.smonta) setTimeout(() => fineChiusura(l.id), 0); else cantieri.delete(l.id);
         return false;
       }
       return true;
@@ -1241,9 +1268,9 @@
       for (const a of lav) a.userData.prossimoT = 0;
     },
     provaChiusura(n) { const ids = [...ultimeSessioni.keys()].filter(id => bersagli.has(id) && !chiusi.has(id)); const id = ids[ids.length - 1 - (n || 0)]; if (!id) return; chiudi(id, ultimeSessioni.get(id)); if (ultimiDati) costruisci(...ultimiDati); },
-    provaCantiere(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); cantieri.set(ids[n || 0], performance.now() / 1000); const uf = [...bersagli.keys()].filter(k => k.startsWith("capo:") && k !== "capo:r:capo"); if (uf.length) cantieri.set(uf[uf.length - 1], performance.now() / 1000); if (ultimiDati) costruisci(...ultimiDati); },
+    provaCantiere(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); arrivoFatto.delete(ids[n || 0]); cantieri.set(ids[n || 0], performance.now() / 1000); const uf = [...bersagli.keys()].filter(k => k.startsWith("capo:") && k !== "capo:r:capo"); if (uf.length) { arrivoFatto.delete(uf[uf.length - 1]); cantieri.set(uf[uf.length - 1], performance.now() / 1000); } if (ultimiDati) costruisci(...ultimiDati); },
     provaPostino(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); avviaPostino(ids[n || 0]); },
-    get effetti() { return effetti.length; }, get postini() { return postini.map(p => [p.id, p.g && p.g.position.x, p.g && p.g.position.z, !!(p.g && p.g.parent)]); },
+    get effetti() { return effetti.length; }, get dati() { return ultimiDati; }, get scrivanie() { return [...bersagli.keys()].filter(k => !k.startsWith("capo:")); }, get postini() { return postini.map(p => [p.id, p.g && p.g.position.x, p.g && p.g.position.z, !!(p.g && p.g.parent)]); },
     caffeSubito() { for (const a of animati) a.userData.prossimoT = 0; },   // per le prove
   };
 })();
