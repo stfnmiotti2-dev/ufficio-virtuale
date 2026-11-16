@@ -380,13 +380,27 @@
     p.pos = new T.Vector3(p.punti[0][0], 2.0, p.punti[0][1]);
     marcati.push(etichetta("f3d", "✉️ Da Stefano", p.pos));
   }
+  let ordini = [], uffici = new Map();
   function avviaPostino(id) {
-    const b = bersagli.get(id);
+    let b = bersagli.get(id);
     if (!b) return;
+    const dip = b.ufficio ? b : null;                                    // e' un dipendente: la busta va al suo capo/responsabile
+    if (dip) { b = bersagli.get("capo:" + dip.ufficio); if (!b) return; }
     const [ix, iz] = ingresso, via = b.via;
     const punti = [[ix, iz, 0], [b.x, via, 0], [b.x, b.z, 1.6, "consegna"], [b.x, via, 0], [ix, iz, 0]];
     const p = { id, punti, inizio: performance.now() / 1000, verso: b.verso };
     postini.push(p); creaPostino(p);
+    if (dip) avviaOrdine(dip, p.inizio + durata(punti.slice(0, 3), 1.6));
+  }
+  // il capo o il responsabile esce dall'ufficio, va accanto alla scrivania dell'omino, gesticola e torna a sedersi
+  function avviaOrdine(dip, inizio) {
+    const uf = uffici.get(dip.ufficio);
+    if (!uf || ordini.some(o => o.chiave === dip.ufficio)) return;
+    const { gx, gz, LW, LD, casa } = uf, porta = LW * 0.32, fuori = LD / 2 + 0.7;
+    const tx = dip.dx - 1.15 - gx, tz = dip.dz - gz, via = dip.via - gz;
+    const andata = [[casa[0], casa[1], 0.7], [porta, casa[1], 0], [porta, fuori, 0], [tx, via, 0], [tx, tz, 3.4, "ordini"]];
+    const punti = andata.concat([[tx, via, 0], [porta, fuori, 0], [porta, casa[1], 0], [casa[0], casa[1], 0.4, "siede"]]);
+    ordini.push({ chiave: dip.ufficio, punti, inizio, fine: inizio + durata(punti, 1.1) });
   }
   let primaVolta = true, centro = new T.Vector3(), larg = 20, prof = 10;
 
@@ -394,7 +408,7 @@
     mondo.clear();
     etichette.replaceChildren();
     animati = []; marcati = []; cliccabili = []; schermi = []; camminatori = [];
-    bersagli = new Map();
+    bersagli = new Map(); uffici = new Map();
     const gruppi = U.prepara(sessioni, extra);
     const capi = gruppi.filter(U.haUfficio);
     const UFF = 3.6, PASSO = 2.6;
@@ -443,6 +457,8 @@
       sedia(0, capo ? -0.75 : -0.65, g, gr.colore, capo);
       const capoOm = omino(s, g, 0, capo ? -0.6 : -0.5, capo ? "capo" : "resp");
       animati.push(capoOm);
+      capoOm.userData.chiave = gr.chiave;
+      uffici.set(gr.chiave, { gx: x, gz: z, LW, LD, casa: [0, capo ? -0.6 : -0.5] });
       if (stato === "aspetta") {                                         // ti sta chiamando: in piedi con la cornetta, avanti e indietro
         const zc = capo ? -1.45 : -1.15, lx = LW / 2 - 0.9;
         capoOm.userData.telefonata = { giro: [[0, zc, 0.6], [-lx, zc, 1.6], [lx, zc, 1.6], [0, zc, 0.4]] };
@@ -487,7 +503,8 @@
           if (om) {
             animati.push(om); camminatori.push(om); om.userData.corridoio = z0 - 1.75;
             om.userData.porta = porte[gr.chiave] || porte["r:capo"] || null;   // i thread senza responsabile vanno dal capo
-            bersagli.set(s.id, { x: x + 1.15, z: z0 - 0.8, via: profMax / 2 + 2.2, verso: Math.PI / 2 });
+            bersagli.set(s.id, { dx: x, dz: z0 - 0.8, via: profMax / 2 + 2.2,
+              ufficio: uffici.has(gr.chiave) ? gr.chiave : uffici.has("r:capo") ? "r:capo" : null });
           }
           schermi.push({ mesh: scr.userData.schermo, s: presente ? s : { stato: "spento" } });
           const apri = () => s.link ? apriLink(s.link) : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
@@ -529,8 +546,12 @@
     ingresso = [bb.min.x - 2, profMax / 2 + 2.2];
     for (const p of postini) creaPostino(p);                               // quelli gia' in cammino continuano
     const ora = new Map(schermi.map(q => [q.s.id, q.s.stato]));
+    const primaVoltaDati = statiPrima.size === 0;
     for (const [id, st] of ora) {
-      if (statiPrima.get(id) === "aspetta" && ["lavora", "pensa", "supervisore"].includes(st) && !postini.some(p => p.id === id)) avviaPostino(id);
+      if (!id || primaVoltaDati || postini.some(p => p.id === id)) continue;
+      const prima = statiPrima.get(id), attivo = ["lavora", "pensa", "supervisore"].includes(st);
+      // risposta di Stefano (aspetta -> lavora), nuovo compito (finito/fermo -> lavora) o thread nuovo che parte
+      if (attivo && (prima === "aspetta" || prima === "finito" || prima === "ferma?" || prima === undefined)) avviaPostino(id);
     }
     statiPrima.clear(); for (const [id, st] of ora) statiPrima.set(id, st);
     if (primaVolta) inquadra();
@@ -607,10 +628,15 @@
         if (u.prossimoT == null) u.prossimoT = t + u.prossimo;
         if (t > u.prossimoT) u.giro = { punti: vaCaffe ? giroCaffe(u) : giroBussa(u), inizio: t };
       }
+      if (u.chiave && !u.giro) {
+        const o = ordini.find(o => o.chiave === u.chiave && t >= o.inizio && t < o.fine);
+        if (o) u.giro = { punti: o.punti, inizio: o.inizio };
+      }
       let pos = null;
       if (u.giro) {
         pos = lungo(u.giro.punti, t - u.giro.inizio, 1.1);
         if (pos.fine) { u.giro = null; u.prossimoT = t + 50 + (U.hash(s.id + t) % 40); pos = null; }
+        else if (u.telefonata && pos) pos.azione = pos.azione || null;
       } else if (u.telefonata) {
         const g = u.telefonata.giro, tot = durata(g, 0.7);
         pos = lungo(g, (t + fase) % tot, 0.7);
@@ -622,6 +648,7 @@
         a.position.x = pos.x; a.position.z = pos.z;
         if (pos.dir) a.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
         else if (["caffe", "bussa", "attende"].includes(pos.azione)) a.rotation.y = 0;      // verso la macchinetta o la porta
+        else if (pos.azione === "ordini") a.rotation.y = -Math.PI / 2;                    // guarda l'omino alla scrivania
         else if (pos.azione === "telefono") a.rotation.y = Math.PI + Math.sin(k) * 0.3;
         else a.rotation.y = Math.PI;
         if (pos.fermo && u.giro && t - u.giro.inizio < 0.7) inPiedi = true;   // si alza
@@ -639,6 +666,10 @@
           u.telefono.visible = true; dx.rotation.set(0.15, 0, 3.0);           // cornetta all'orecchio
           sx.rotation.set(0.5 + Math.sin(k * 3) * 0.4, 0, 0.3);               // gesticola
           testa.rotation.z = Math.sin(k * 2) * 0.1;
+        } else if (pos && pos.azione === "ordini") {                        // gesticola mentre da' istruzioni
+          sx.rotation.set(1.3 + Math.sin(k * 5) * 0.5, 0, 0.35);
+          dx.rotation.set(1.6 + Math.cos(k * 4) * 0.6, 0, -0.35 + Math.sin(k * 3) * 0.2);
+          testa.rotation.x = Math.sin(k * 6) * 0.08;
         } else if (pos && pos.azione === "bussa") {                         // bussa sul vetro
           dx.rotation.set(1.9 + Math.max(0, Math.sin(k * 14)) * 0.35, 0, 0.15);
         } else if (pos && pos.azione === "attende") {
@@ -667,6 +698,7 @@
       if (u.etichettaPos) { u.etichettaPos.x = a.position.x; u.etichettaPos.z = a.position.z; }
       if (u.etichetta) { u.etichetta.pos.x = u.etichetta.base[0] + a.position.x; u.etichetta.pos.z = u.etichetta.base[1] + a.position.z; }
     }
+    ordini = ordini.filter(o => t < o.fine + 1);
     postini = postini.filter(p => {
       const e = t - p.inizio, pos = lungo(p.punti, e, 1.6);
       if (pos.fine) { mondo.remove(p.g); const i = marcati.findIndex(q => q.pos === p.pos); if (i >= 0) { marcati[i].e.remove(); marcati.splice(i, 1); } return false; }
@@ -735,7 +767,7 @@
     attiva(si) { attivo = si; if (si) misura(); },
     inquadra,
     camera, controlli,
-    provaPostino() { const id = [...bersagli.keys()].find(k => !k.startsWith("capo:")); avviaPostino(id); avviaPostino([...bersagli.keys()].find(k => k.startsWith("capo:r:") && k !== "capo:r:capo")); },
+    provaPostino(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); avviaPostino(ids[n || 0]); },
     get postini() { return postini.map(p => [p.id, p.g && p.g.position.x, p.g && p.g.position.z, !!(p.g && p.g.parent)]); },
     caffeSubito() { for (const a of animati) a.userData.prossimoT = 0; },   // per le prove
   };
