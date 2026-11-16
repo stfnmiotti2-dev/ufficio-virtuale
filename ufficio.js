@@ -260,13 +260,14 @@
     }
     return [s.icona || "💬", s.attivita || "Lavora"];
   }
-  function targa(s) {                                 // progetto TIA, versione, esito compilazione
-    if (!s.progetto_tia && !s.tia && !s.compilazione) return "";
+  function targa(s) {                                 // commessa + stazione, poi l'esito della compilazione
+    const st = ((s.progetto_tia || "") + " " + (s.responsabile || "") + " " + (s.titolo || "")).match(/(?:^|[^A-Za-z0-9])(OP\s?\d{2,3})(?!\d)/i);
     const parti = [];
-    if (s.progetto_tia) parti.push("🧩 " + corto(s.progetto_tia, 20));
-    if (s.tia && s.tia.versione) parti.push(s.tia.versione);
+    if (s.commessa) parti.push("📌 " + s.commessa + (st ? " " + st[1].toUpperCase().replace(/\s/, "") : ""));
+    else if (s.progetto_tia) parti.push("🧩 " + corto(s.progetto_tia, 20));
+    else return "";
     const c = s.compilazione;
-    if (c) parti.push(c.errori === 0 ? "✅" : c.errori == null ? "esito ?" : "❌" + (c.errori > 0 ? c.errori : ""));
+    if (c && c.errori !== 0 && c.errori != null) parti.push("❌" + (c.errori > 0 ? c.errori : ""));
     return parti.join(" ");
   }
   function corto(t, n) { return t.length > n ? t.slice(0, n - 1) + "…" : t; }
@@ -300,11 +301,13 @@
     // i responsabili di nomi-isole.json hanno sempre il loro ufficio, anche senza nessuno al lavoro
     const ordine = new Map();
     (extra.responsabili || []).forEach((rsp, i) => {
-      const k = "r:" + rsp.nome.toLowerCase();
+      const k = "r:" + (rsp.chiave || rsp.nome).toLowerCase();
       ordine.set(k, i);
       if (!gruppi.has(k)) gruppi.set(k, { chiave: k, sessioni: [], prima: 1000 + i,
         s0: { responsabile: rsp.nome, thread: rsp.thread, link: rsp.link, chan: extra.chan } });
       gruppi.get(k).link = rsp.link;
+      gruppi.get(k).scheda = rsp.scheda;
+      gruppi.get(k).nome = rsp.nome;
     });
     const lista = [...gruppi.values()];
     for (const gr of lista) gr.sessioni.sort((a, b) => arrivo.get(a.id) - arrivo.get(b.id));
@@ -318,6 +321,7 @@
   function nomeIsola(gr) {
     const s = gr.s0;
     if (gr.chiave === "r:capo") return "👑 Capo";
+    if (gr.nome) return "📌 " + gr.nome.replace(/\s+programma\b/i, "");
     if (s.responsabile) return "📌 " + s.responsabile.replace(/\s+programma\b/i, "");
     if (gr.chiave.startsWith("c:")) return "📌 " + s.commessa;
     if (gr.chiave === "p:ufficio virtuale") return "🏢 Ufficio virtuale (questa pagina)";
@@ -328,7 +332,15 @@
 
   function haUfficio(gr) { return gr.chiave.startsWith("r:"); }
 
+  const STATI_COMMESSA = { "in lavorazione": "In lavorazione", "domande aperte": "Domande aperte",
+                           "aspetta stefano": "Aspetta Stefano", "fatto": "Fatto" };
   function riepilogo(gr) {                            // es. "✋ 1 · ⚙️ 2 · 💤 1"
+    const sc = gr.scheda;
+    if (sc) {                                         // la scheda della dashboard Commesse PLC
+      const n = gr.sessioni.filter(s => ["lavora", "pensa"].includes(s.stato)).length;
+      return (STATI_COMMESSA[sc.stato] || sc.stato) + (n ? " · ⚙️ " + n : "") +
+        (sc.progetto_tia ? "\n🧩 " + corto(sc.progetto_tia, 26) : "");
+    }
     const n = st => gr.sessioni.filter(s => st.includes(s.stato)).length;
     const parti = [];
     if (n(["aspetta"])) parti.push("✋ " + n(["aspetta"]));
@@ -368,6 +380,13 @@
       st.className = "riepilogo";
       st.textContent = riepilogo(gr);
       st.title = "✋ ti aspettano · ⚙️ lavorano · ⏳ fermi da un po' · 💤 hanno finito";
+      if (gr.scheda) {
+        const sc = gr.scheda;
+        st.title = [sc.nome + " · " + (STATI_COMMESSA[sc.stato] || sc.stato), sc.progetto_tia,
+          sc.fatto && "Fatto: " + sc.fatto, sc.in_corso && "In corso: " + sc.in_corso,
+          sc.domande.length && "Domande aperte:\n- " + sc.domande.join("\n- "),
+          sc.aspetta && "Aspetta: " + sc.aspetta, sc.testo].filter(Boolean).join("\n\n");
+      }
       Object.assign(st.style, { left: x * scala + "px", top: (y + ISOLA_H + UFF_H + 1) * scala + "px", width: w * scala + "px" });
       if (gr.sessioni.some(q => q.stato === "aspetta")) st.classList.add("chiama");
       strato.append(st);
@@ -405,7 +424,8 @@
     const RIEP = scala >= 3 ? RIEPILOGO_H : RIEPILOGO_H + 6, ISO = scala >= 3 ? ISOLA_H : ISOLA_H + 12;
     // colore per ogni isola: oro per il capo, poi a giro
     let ci = 0;
-    for (const gr of gruppi) gr.colore = gr.chiave === "r:capo" ? ORO : gr.chiave === "altro" ? "#8b90a3" : COLORI_ISOLE[ci++ % COLORI_ISOLE.length];
+    for (const gr of gruppi) gr.colore = gr.chiave === "r:capo" ? ORO : gr.scheda ? gr.scheda.colore :
+      gr.chiave === "altro" ? "#8b90a3" : COLORI_ISOLE[ci++ % COLORI_ISOLE.length];
     // 1) direzione: uffici a vetri in fila sotto il muro (capo e responsabili)
     const capi = gruppi.filter(haUfficio);
     const perFila = Math.max(1, Math.floor((colonne * SLOT_W + (colonne - 1) * GAP + GAP) / (UFF_W + GAP)));

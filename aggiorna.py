@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 SHA_FILE = HERE / ".versione-git"
 LOG = HERE / "aggiorna.log"
 # file che restano sempre quelli del PC, anche se il repo ne ha una copia
-PERSONALI = {"etichette-mie.json", "links.json", "nomi-isole.json", "stato-thread.json"}
+PERSONALI = {"etichette-mie.json", "links.json", "nomi-isole.json", "stato-thread.json", "commesse.json"}
 UA = {"User-Agent": "ufficio-virtuale-aggiorna"}
 
 

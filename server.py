@@ -28,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 8.0"
+VERSIONE = "task 8.1"
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
 
@@ -189,6 +189,8 @@ def _con_nomi(sessions):
             resp = voce.get("responsabile")
         if voce is not None:
             s["in_nomi"] = True
+        if str(s.get("voce_cloud_resp") or "").startswith("("):   # "(responsabile)": e' lui stesso un responsabile
+            s["voce_cloud_resp"] = None
         if not resp and s.get("voce_cloud_resp"):      # il responsabile scritto in stato-thread.json
             resp = s["voce_cloud_resp"]
         if titolo_thread and not resp:
@@ -207,6 +209,11 @@ def _con_nomi(sessions):
         if resp:
             resp = str(resp).strip()
             s["responsabile"] = canonico.get(resp.lower(), resp)[:60]
+        t = str(s.get("titolo") or "").strip()
+        if not titolo_thread and not s.get("progetto_tia") and (len(t) < 12 or t.startswith("\\")):
+            # titoli presi da un messaggio come "Ora" o "\pc on": non dicono niente
+            s["sottotitolo"] = t or None
+            s["titolo"] = (s.get("responsabile") or s.get("progetto_claude") or "Sessione") + " · sessione sul PC"
         for fonte in (titolo_thread, s.get("responsabile")):
             m = scanner._COMMESSA.search(fonte or "")
             if m:
@@ -224,7 +231,11 @@ _cloud = {"mtime": None, "dati": {}}
 def _iso(ts):
     from datetime import datetime
     try:
-        return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
+        d = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        if d.tzinfo is None:                       # senza fuso: e' UTC (lo dice il nome del campo)
+            from datetime import timezone
+            d = d.replace(tzinfo=timezone.utc)
+        return d.timestamp()
     except (TypeError, ValueError):
         return None
 
@@ -265,7 +276,8 @@ def _sessioni_cloud(locali):
             "attivita": str(t["attesa"])[:120] if stato == "aspetta" and t.get("attesa") else
                         (testo[:1].upper() + testo[1:] if testo else "Lavora nel cloud"),
             "progetto": "cloud", "progetto_claude": "Agente Tia portal", "chan": chan,
-            "link": f"https://claude.ai/code/project/{chan}?thread={t['id']}" if chan else None,
+            "link": t.get("link") if str(t.get("link") or "").startswith("https://claude.ai/") else
+                    (f"https://claude.ai/code/project/{chan}?thread={t['id']}" if chan else None),
             "voce_cloud_resp": t.get("responsabile"),
         })
     return out
@@ -331,19 +343,64 @@ def _tia_con_proprietario(sessions):
     return out
 
 
+# ---------- schede delle commesse (commesse.json, la dashboard "Commesse PLC" di Agente TIA) ----------
+COMMESSE_FILE = HERE / "commesse.json"
+_comm = {"mtime": None, "dati": {}}
+COLORI_COMMESSA = {"in lavorazione": "#3b82f6", "domande aperte": "#a855f7", "aspetta stefano": "#eab308", "fatto": "#22c55e"}
+
+
+def _commesse():
+    try:
+        mt = COMMESSE_FILE.stat().st_mtime
+    except OSError:
+        return {}
+    if mt != _comm["mtime"]:
+        try:
+            dati = json.loads(COMMESSE_FILE.read_text(encoding="utf-8"))
+            _comm.update(mtime=mt, dati=dati if isinstance(dati, dict) else {})
+        except (OSError, ValueError):
+            pass
+    return _comm["dati"]
+
+
+def _schede():
+    """Le commesse ripulite: solo testo, link solo verso claude.ai."""
+    out = []
+    for c in _commesse().get("commesse") or []:
+        if not isinstance(c, dict) or not c.get("nome"):
+            continue
+        stato = str(c.get("stato") or "").strip().lower()
+        txt = lambda k: str(c.get(k) or "").strip()[:600]
+        link = txt("link")
+        out.append({"nome": txt("nome")[:60], "thread": txt("thread"), "stato": stato,
+                    "colore": COLORI_COMMESSA.get(stato, "#8b90a3"), "progetto_tia": txt("progetto_tia")[:120],
+                    "fatto": txt("fatto"), "in_corso": txt("in_corso"), "aspetta": txt("aspetta"), "testo": txt("testo"),
+                    "domande": [str(d)[:300] for d in (c.get("domande") or []) if d][:8],
+                    "link": link if link.startswith("https://claude.ai/") else None})
+    return out
+
+
 def _extra(sessions):
     """Dati dell'ufficio oltre alle sessioni: responsabili da mostrare sempre, TIA aperti, cloud."""
     nomi = _nomi_isole()
     chan = next((s.get("chan") for s in sessions if s.get("in_nomi") and s.get("chan")), None) or \
         next((s.get("chan") for s in sessions if s.get("chan") and s.get("progetto_claude", "").lower().startswith("agente")), None)
+    schede = _schede()
+    if not chan:                                   # il progetto claude.ai si legge anche dai link delle commesse
+        m = next((re.search(r"/project/(chan_[A-Za-z0-9]+)", c["link"]) for c in schede if c["link"]), None)
+        chan = m.group(1) if m else None
+    per_thread = {c["thread"].lower(): c for c in schede if c["thread"]}
     resp = []
     for nome, thread in _responsabili(nomi):
         link = f"https://claude.ai/code/project/{chan}" if chan else None
         if thread and chan:
             link += f"?thread={thread}"
-        resp.append({"nome": nome, "thread": thread, "link": link})
-    cloud = _stato_cloud()
-    return {"responsabili": resp, "chan": chan,
+        scheda = per_thread.get((thread or "").lower())
+        resp.append({"nome": scheda["nome"] if scheda else nome, "chiave": nome, "thread": thread, "link": link,
+                     "scheda": scheda})
+    cloud, comm = _stato_cloud(), _commesse()
+    return {"responsabili": resp, "chan": chan, "commesse": schede,
+            "commesse_aggiornate": _iso(comm.get("aggiornato_utc")) if comm else None,
             "tia": _tia_con_proprietario(sessions) if _tia["ok"] else None,
             "cloud_aggiornato": _iso(cloud.get("aggiornato_utc")) if cloud else None}
 
