@@ -443,6 +443,67 @@
   const cantieri = new Map();                                            // id -> inizio
   let lavori = [];
   function nascondi(pos, si) { const mk = marcati.find(q => q.pos === pos); if (mk) mk.e.style.visibility = si ? "hidden" : ""; }
+  // proiettore: schizzo fisso della dashboard sul muro; cliccandolo si apre quella vera, aggiornata
+  let texSchizzo = null;
+  function schizzoDashboard() {                                          // disegno fisso, non cambia con i dati
+    if (texSchizzo) return texSchizzo;
+    const c = document.createElement("canvas"); c.width = 1024; c.height = 400;
+    const x = c.getContext("2d");
+    x.fillStyle = "#fbfaf6"; x.fillRect(0, 0, 1024, 400);
+    x.fillStyle = "#2a3142"; x.font = "700 34px 'Segoe UI', system-ui, sans-serif"; x.fillText("📋 DASHBOARD", 28, 50);
+    x.fillStyle = "#8a90a0"; x.font = "500 20px 'Segoe UI', system-ui, sans-serif"; x.fillText("clicca per aprirla", 300, 48);
+    const colori = ["#3b82f6", "#a855f7", "#eab308", "#22c55e"], W = (1024 - 40 - 3 * 16) / 4;
+    colori.forEach((col, i) => {
+      const cx = 20 + i * (W + 16), cy = 80, H = 290;
+      x.fillStyle = "#ffffff"; x.strokeStyle = "#c9ccd6"; x.lineWidth = 3;
+      x.beginPath(); x.roundRect ? x.roundRect(cx, cy, W, H, 14) : x.rect(cx, cy, W, H); x.fill(); x.stroke();
+      x.fillStyle = col; x.fillRect(cx, cy, W, 14);
+      x.fillStyle = "#c4c8d2"; x.fillRect(cx + 16, cy + 36, W * 0.6, 16);          // titolo abbozzato
+      x.fillStyle = col; x.fillRect(cx + 16, cy + 64, W * 0.4, 14);                  // etichetta di stato
+      x.strokeStyle = "#dfe2e9"; x.lineWidth = 7;
+      for (let r = 0; r < 6; r++) { x.beginPath(); x.moveTo(cx + 16, cy + 108 + r * 28); x.lineTo(cx + 16 + (W - 32) * (0.95 - (r % 3) * 0.2), cy + 108 + r * 28); x.stroke(); }
+    });
+    texSchizzo = new T.CanvasTexture(c); texSchizzo.encoding = T.sRGBEncoding; texSchizzo.anisotropy = 4;
+    return texSchizzo;
+  }
+  // sala riunioni: colleghi seduti al tavolo che discutono, proiettore sul tavolo che proietta lo schizzo della dashboard;
+  // cliccando lo schizzo (o il proiettore) si aprono le dashboard in alto nella pagina
+  let riunione = [];
+  function salaRiunioni(x, z) {
+    const LW = 5.6, LD = 4.2, HV = 2.2;
+    const g = new T.Group(); g.position.set(x, 0, z); mondo.add(g);
+    tondo(LW, 0.03, LD, "#e7e2f3", 0, 0, 0, g, 0.01);                              // pavimento lilla chiaro
+    const pv = new T.MeshStandardMaterial({ transparent: true, opacity: 0.16, color: lin("#bfe3fb"), roughness: 0.1 });
+    for (const [w, d, px, pz] of [[0.05, LD, -LW / 2, 0], [0.05, LD, LW / 2, 0], [LW * 0.62, 0.05, -LW * 0.19, LD / 2]]) {
+      const v = new T.Mesh(geo, pv); v.scale.set(w, HV, d); v.position.set(px, HV / 2, pz); g.add(v);
+      tondo(w + 0.04, 0.07, d + 0.04, "#ffffff", px, HV, pz, g, 0.025);
+    }
+    tondo(LW, 2.4, 0.12, "#f3f1f8", 0, 0, -LD / 2, g, 0.04);                       // muro di fondo dove si proietta
+    const tela = new T.Mesh(new T.PlaneGeometry(3.4, 3.4 * 400 / 1024), new T.MeshBasicMaterial({ map: schizzoDashboard(), toneMapped: false }));
+    tela.position.set(0, 1.45, -LD / 2 + 0.07); g.add(tela);
+    // tavolo ovale con il proiettore
+    const tav = new T.Mesh(new T.CylinderGeometry(1, 1, 0.08, 32), m("#c08850", { roughness: 0.4 })); tav.scale.set(1.45, 1, 0.7);
+    tav.position.set(0, 0.74, 0.35); tav.castShadow = tav.receiveShadow = true; g.add(tav);
+    tondo(0.16, 0.7, 0.16, "#8a5a2b", 0, 0, 0.35, g, 0.05);
+    const pr = tondo(0.42, 0.18, 0.36, "#e9edf2", 0, 0.78, 0.35, g, 0.05);
+    palla(0.07, "#2b2b33", 0, 0.87, 0.17, g, 1, 1, 0.5, { emissive: "#bfe3ff", emissiveIntensity: 0.9 });
+    const lungh = LD / 2 + 0.17;                                                    // fascio di luce dal proiettore al muro
+    const cono = new T.Mesh(new T.CylinderGeometry(0.04, 1.75, lungh, 4, 1, true),
+      new T.MeshBasicMaterial({ color: lin("#fffbe6"), transparent: true, opacity: 0.1, depthWrite: false, side: T.DoubleSide }));
+    cono.rotation.set(-Math.PI / 2, Math.PI / 4, 0); cono.scale.set(1, 1, 0.42);
+    cono.position.set(0, 1.15, 0.17 - lungh / 2); g.add(cono);
+    // quattro colleghi seduti intorno al tavolo
+    riunione = [];
+    [[-0.75, -0.45, Math.PI], [0.75, -0.45, Math.PI], [-0.75, 1.2, 0], [0.75, 1.2, 0]].forEach(([sx_, sz_, r], i) => {
+      const sd = sedia(sx_, sz_ + (r ? -0.15 : 0.15), g, ["#a283e3", "#4fc1bd", "#f08a5d", "#5c9ee6"][i]);
+      sd.rotation.y = r ? 0 : Math.PI;
+      const o = omino({ id: "riunione" + i }, g, sx_, sz_, i % 2 ? "resp" : "dip");
+      o.rotation.y = r; riunione.push(o);
+    });
+    const apri = () => window.apriDashboard && window.apriDashboard(!document.body.classList.contains("dash"));   // apre o richiude
+    cliccabili.push({ obj: tela, apri }, { obj: pr, apri });
+    marcati.push(etichetta("nome uff", "📽️ Sala riunioni · clicca lo schermo", new T.Vector3(x, HV + 0.55, z - LD / 2)));
+  }
   function brindisi(chiave) {
     momento("capo:" + chiave, "brindisi", 7);
     for (const [id, g] of gruppoDi) if (g === chiave) momento(id, "brindisi", 7);
@@ -564,6 +625,7 @@
     // 2) open space davanti: un'isola per gruppo, scrivanie in fila; ogni fila centrata sotto gli uffici
     const isole = gruppi.map(gr => ({ gr, fuori: gr.sessioni.filter(q => !q.inUfficio) })).filter(q => q.fuori.length);
     const largUffici = Math.max(UFF, xc - 0.6), mezzo = largUffici / 2;
+    salaRiunioni(xc + 2.8, 0);
     const rigaMax = Math.max(4, Math.floor(largUffici / PASSO));
     const file = [[]];
     let usate = 0;
@@ -910,6 +972,21 @@
       if (u.etichetta) { u.etichetta.pos.x = u.etichetta.base[0] + a.position.x; u.etichetta.pos.z = u.etichetta.base[1] + a.position.z; }
     }
     capoInGiro = capoVisto;
+    const parla = Math.floor(t / 3.2) % 4;
+    riunione.forEach((o, i) => {
+      const u = o.userData, k = t + u.fase;
+      for (const oc of u.occhi) oc.scale.y = (k % 4) < 0.12 ? 0.25 : 1.5;
+      u.sorriso.visible = true; u.bocca_o.visible = u.linea.visible = false;
+      if (i === parla) {                                                  // chi parla gesticola
+        u.sx.rotation.set(1.3 + Math.sin(k * 5) * 0.4, 0, 0.3); u.dx.rotation.set(1.5 + Math.cos(k * 4) * 0.5, 0, -0.3);
+        u.testa.rotation.set(Math.sin(k * 6) * 0.06, 0, 0); u.bocca_o.visible = Math.sin(k * 12) > 0; u.sorriso.visible = !u.bocca_o.visible;
+      } else {                                                            // gli altri lo guardano e annuiscono
+        const s = riunione[parla], dx_ = s.position.x - o.position.x, dz_ = s.position.z - o.position.z;
+        const verso = Math.atan2(-dx_, -dz_) - o.rotation.y;
+        u.testa.rotation.set(Math.sin(k * 2) * 0.05, Math.atan2(Math.sin(verso), Math.cos(verso)) * 0.6, 0);
+        u.sx.rotation.set(1.2, 0, 0); u.dx.rotation.set(1.2, 0, 0);
+      }
+    });
     for (const c of chiacchiere) {                                        // due al caffe' insieme: si girano e chiacchierano
       const lati = new Set(c.alCaffe.map(a => a.userData.lato));
       const si = c.alCaffe.length >= 2 && lati.size === 2;

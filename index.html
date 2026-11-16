@@ -120,6 +120,11 @@
   .et3d.f3d.st-allarme { background: #ff2b2b; color: #fff; border-color: #700; }
   #commesse { margin: 14px 20px 0; }
   #commesse[hidden] { display: none; }
+  /* nel 3D le dashboard in alto stanno chiuse: si aprono (al loro solito posto) cliccando il proiettore */
+  body.tre:not(.dash) #commesse { display: none; }
+  #commesse .chiudi { display: none; float: right; background: var(--card); color: var(--text); border: 1px solid var(--line);
+                      border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+  body.tre.dash #commesse .chiudi { display: inline-block; }
   #commesse h2 { margin: 0 0 8px; font-size: 14px; letter-spacing: .06em; color: var(--muted); }
   #commesse-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
   .scheda { background: #23262f; border-radius: 10px; border-top: 5px solid var(--c); padding: 10px 14px 12px; font-size: 13px; }
@@ -166,7 +171,7 @@
   <span class="conta" id="versione" style="font-size:12px">server: versione vecchia</span>
 </header>
 <section id="aspettano" hidden><h2>✋ TI ASPETTANO</h2><div id="aspettano-lista"></div></section>
-<section id="commesse" hidden><h2>📋 COMMESSE</h2><div id="commesse-lista"></div></section>
+<section id="commesse" hidden><button class="chiudi" id="chiudiDash">✕ Chiudi</button><h2>📋 COMMESSE</h2><div id="commesse-lista"></div></section>
 <section id="ufficio"></section>
 <section id="ufficio3d" hidden></section>
 <main id="lista"><div class="vuoto">Carico le sessioni…</div></main>
@@ -389,9 +394,16 @@ function disegnaUfficio() {
   document.getElementById("ufficio3d").hidden = !tre;
   if (window.Ufficio3D) Ufficio3D.attiva(tre);
   document.getElementById("demo3d").hidden = !tre;
+  document.body.classList.toggle("tre", tre);
   if (tre) Ufficio3D.disegna(sessioni, extra);
   else if (window.Ufficio) Ufficio.disegna(sessioni, extra);
 }
+// dashboard sopra la pagina, aperta dal proiettore del 3D
+window.apriDashboard = si => {
+  document.body.classList.toggle("dash", si !== false);
+  if (si !== false) window.scrollTo({ top: 0, behavior: "smooth" });
+};
+document.getElementById("chiudiDash").onclick = () => apriDashboard(false);
 document.getElementById("demo3d").onclick = () => {
   if (!window.Ufficio3D) return;
   Ufficio3D.provaCantiere(1); Ufficio3D.caffeSubito(); Ufficio3D.provaPostino(0);
