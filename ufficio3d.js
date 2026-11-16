@@ -264,18 +264,18 @@
   const JEANS = ["#4a6fa5", "#5a7fb5", "#3d5a8a"];
   function omino(s, padre, x, z, ruolo) {
     const h = U.hash(s.id), capo = ruolo === "capo", resp = ruolo === "resp";
-    const postino = ruolo === "postino", operaio = ruolo === "operaio";
+    const postino = ruolo === "postino", operaio = ruolo === "operaio", ctrl = ruolo === "controllore";
     const donna = !capo && !resp && !postino && !operaio && ((h >>> 12) & 1) === 1;   // i capi commessa sono tutti uomini (come nelle foto)
     // aspetto ispirato alla squadra: capelli scuri o brizzolati, teste rasate, barbe, occhiali; il re ha barba scura e occhiali blu
     const PELLI = ["#f1c7a5", "#e8b896", "#d9a27c", "#c68a62"], CAPI = ["#1c1714", "#2b1d14", "#3b2a1e", "#5a3a22", "#8d8d96", "#b9b9c2"];
     const pelle = PELLI[h % PELLI.length];
     const capelli = capo ? "#1c1714" : donna ? ["#2b1d14", "#a8743c", "#5a3a22", "#1c1714"][(h >>> 4) % 4] : CAPI[(h >>> 4) % CAPI.length];
-    const calvo = !capo && !donna && !postino && !operaio && (h >>> 17) % (resp ? 3 : 4) === 0;
-    const barba = capo ? 3 : donna || postino ? 0 : resp ? [1, 2, 3, 3, 2][(h >>> 19) % 5] : (h >>> 19) % 4;   // 0 niente, 1 accenno, 2 pizzetto, 3 piena
-    const occhiali = capo ? "#1f3a8a" : !postino && !operaio && (h >>> 21) % (resp ? 2 : 3) === 0 ? ["#1c1c22", "#3b2a1e", "#1f3a8a"][(h >>> 23) % 3] : null;
+    const calvo = ctrl || !capo && !donna && !postino && !operaio && (h >>> 17) % (resp ? 3 : 4) === 0;
+    const barba = ctrl ? 1 : capo ? 3 : donna || postino ? 0 : resp ? [1, 2, 3, 3, 2][(h >>> 19) % 5] : (h >>> 19) % 4;   // 0 niente, 1 accenno, 2 pizzetto, 3 piena
+    const occhiali = ctrl ? null : capo ? "#1f3a8a" : !postino && !operaio && (h >>> 21) % (resp ? 2 : 3) === 0 ? ["#1c1c22", "#3b2a1e", "#1f3a8a"][(h >>> 23) % 3] : null;
     const ricci = donna && (h >>> 24) % 2 === 0;
     const divisa = ruolo === "dip" && !donna ? ((h >>> 25) % 5 < 3 ? "polo" : (h >>> 25) % 5 === 3 ? "camicia" : null) : null;
-    const maglia = divisa === "polo" ? "#1f1f24" : divisa === "camicia" ? "#f4f4f2" : operaio ? "#f28c28" : postino ? "#3b6fc4" : capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
+    const maglia = ctrl ? "#f07d1e" : divisa === "polo" ? "#1f1f24" : divisa === "camicia" ? "#f4f4f2" : operaio ? "#f28c28" : postino ? "#3b6fc4" : capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
     const pantaloni = operaio ? "#3d4a5c" : postino ? "#2a3f6b" : capo ? "#7a1426" : resp ? maglia : donna ? pelle : JEANS[(h >>> 9) % JEANS.length];
     const scarpe = capo ? "#e3b23c" : resp ? "#1f1f26" : donna ? ["#ef7f9f", "#2b2b33", "#ffffff"][(h >>> 10) % 3] : "#ffffff";
     const g = new T.Group(); g.position.set(x, 0, z); g.rotation.y = Math.PI; padre.add(g);
@@ -293,6 +293,7 @@
       if (donna) { const cl = new T.Mesh(new T.TorusGeometry(0.09, 0.012, 6, 20, Math.PI), m("#e3b23c", { metalness: 0.5 })); cl.rotation.set(-0.3, 0, Math.PI); cl.position.set(0, 1.02, -0.2); corpo.add(cl); }
       else tondo(0.07, 0.3, 0.03, s.colore || "#c62828", 0, 0.68, -0.23, corpo, 0.015);
       for (const by of [0.72, 0.6]) palla(0.022, "#1f1f26", 0.05, by, -0.215, corpo, 1, 1, 0.5);
+      box(0.1, 0.045, 0.02, "#f28c28", -0.13, 0.9, -0.2, corpo);          // logo arancione sul taschino della giacca
     } else if (operaio) {                                                // gilet con bande riflettenti
       for (const by of [0.66, 0.86]) { const b = new T.Mesh(new T.TorusGeometry(0.235, 0.022, 6, 24), m("#e8eef5", { emissive: "#ffffff", emissiveIntensity: 0.25 })); b.rotation.x = Math.PI / 2; b.position.y = by; b.scale.set(1, 0.78, 1); corpo.add(b); }
     } else if (postino) {                                                // borsa a tracolla
@@ -372,6 +373,18 @@
       tondo(0.12, 0.03, 0.03, cBarba, 0, -0.06, -0.27, testa, 0.012);
       for (const q of [sorriso, bocca_o, linea]) q.position.z -= 0.02;
     } else if (barba === 1) palla(0.24, cBarba, 0, -0.1, -0.05, testa, 1.12, 0.7, 1.06, { transparent: true, opacity: 0.28 });   // barba di qualche giorno
+    if (ctrl) {                                                          // occhiali da vista appoggiati sulla testa
+      const oc = new T.Group(); oc.position.set(0, 0.29, -0.12); oc.rotation.x = 1.0; testa.add(oc);
+      for (const sx of [-0.095, 0.095]) {
+        const l = new T.Mesh(new T.TorusGeometry(0.065, 0.013, 6, 4), m("#2b2b33")); l.rotation.z = Math.PI / 4; l.scale.set(1.25, 0.85, 1);
+        l.position.set(sx, 0, 0); oc.add(l);
+      }
+      box(0.05, 0.015, 0.015, "#2b2b33", 0, 0, 0, oc);
+      for (const sx of [-0.18, 0.18]) box(0.015, 0.015, 0.22, "#2b2b33", sx, 0, 0.1, oc);
+      for (let i = 0; i < 4; i++) {                                      // maglioncino: righe a coste
+        const r = new T.Mesh(new T.TorusGeometry(0.24, 0.012, 5, 22), m("#d96a12")); r.rotation.x = Math.PI / 2; r.scale.set(1, 0.8, 1); r.position.y = 0.62 + i * 0.1; corpo.add(r);
+      }
+    }
     if (occhiali) {                                                      // occhiali rettangolari
       for (const sx of [-0.095, 0.095]) {
         const l = new T.Mesh(new T.TorusGeometry(0.065, 0.013, 6, 4), m(occhiali)); l.rotation.z = Math.PI / 4; l.scale.set(1.25, 0.85, 1);
@@ -433,7 +446,7 @@
   let animati = [], marcati = [], cliccabili = [], schermi = [], camminatori = [];
   // postino: quando un thread passa da "aspetta te" a "lavora" vuol dire che Stefano ha risposto
   const statiPrima = new Map();
-  let porta = null, portaPos = null, portaAperta = 0, orologio = null;
+  let porta = null, portaPos = null, portaAperta = 0, orologio = null, ispettore = null;
   // \pc off / \pc on dalla chat principale di Agente TIA: tutti a casa (restano le lampade) / tutti dentro, il primo accende la luce
   let pc = "on", pcT = -1e9, pcPrimaVolta = true, pcLuce = 1;
   const pcFuori = new Set(), spenti = new Set();
@@ -829,6 +842,27 @@
     box(0.04, 0.08, 0.05, "#c9c3b6", xm + 0.15, 1.22, zp - 1.0);
     ingresso = [xm - 0.3, zp];
     arreda(bb, xm, zp, zb);
+    // il controllore: senza scrivania, fa avanti e indietro per tutto l'ufficio e controlla tutti
+    {
+      const o = omino({ id: "controllore" }, mondo, xm + 1, zp, "controllore");
+      for (const l of o.userData.sedute) l.visible = false;
+      for (const l of o.userData.gambe) l.visible = true;
+      const punti = [[xm + 1, zp, 0]];
+      for (const [, uf] of [...uffici].sort((a, b) => a[1].gx - b[1].gx))    // davanti a ogni ufficio
+        punti.push([uf.gx, zp, 0], [uf.gx, uf.gz + uf.LD / 2 + 0.5, 1.6, "guarda", 0]);
+      const dips = camminatori.map(c => c.userData).filter(u => u.corridoio != null).sort((a, b) => a.corridoio - b.corridoio || a.casa[0] - b.casa[0]);
+      let zc = null;
+      for (const u of dips) {                                             // dietro le sedie di ogni fila
+        const [x] = u.casa, gx = x - PASSO / 2;
+        if (u.corridoio !== zc) { const ul = punti[punti.length - 1]; punti.push([gx, ul[1], 0], [gx, u.corridoio, 0]); zc = u.corridoio; }
+        punti.push([x, u.corridoio, 1.3, "guarda", Math.PI]);
+      }
+      const ul = punti[punti.length - 1];
+      punti.push([ul[0] + PASSO / 2, ul[1], 0], [ul[0] + PASSO / 2, zp, 0]);
+      const ritorno = punti.slice(1, -1).reverse().map(p => [p[0], p[1], 0]);
+      ispettore = { o, punti: [...punti, ...ritorno, [xm + 1, zp, 0]] };
+      ispettore.durata = durata(ispettore.punti, 1.3);
+    }
     for (const p of postini) creaPostino(p);                               // quelli gia' in cammino continuano
     const ora = new Map(schermi.map(q => [q.s.id, q.s.stato]));
     const primaVoltaDati = statiPrima.size === 0;
@@ -1270,6 +1304,22 @@
       return true;
     });
     ordini = ordini.filter(o => t < o.fine + 1);
+    if (ispettore) {                                                       // giro di controllo continuo, mani dietro la schiena
+      const { o, punti } = ispettore, u = o.userData, pos = lungo(punti, t % ispettore.durata, 1.3);
+      o.visible = pcLuce > 0.5;
+      o.position.set(pos.x, 0, pos.z);
+      const fermo = !pos.dir;
+      if (pos.dir) o.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
+      else if (pos.azione === "guarda") { const pt = punti.find(p => p[0] === pos.x && p[1] === pos.z && p[3]); if (pt) o.rotation.y = pt[4]; }
+      const w = fermo ? 0 : Math.sin(t * 8);
+      u.gambe[0].rotation.x = w * 0.45; u.gambe[1].rotation.x = -w * 0.45;
+      u.sx.rotation.set(-0.75, 0, 0.35); u.dx.rotation.set(-0.75, 0, -0.35);
+      u.testa.rotation.set(fermo ? 0.15 : 0, fermo ? Math.sin(t * 1.5) * 0.5 : 0, 0);   // si guarda intorno
+      u.corpo.position.y = fermo ? 0 : Math.abs(Math.cos(t * 8)) * 0.025;
+      if (fermo) u.corpo.rotation.x = 0.08;
+      else u.corpo.rotation.x = 0;
+      for (const oc of u.occhi) oc.scale.y = (t % 3.5) < 0.12 ? 0.25 : 1.5;
+    }
     if (orologio) { const d = new Date(); orologio.userData.lancetta.rotation.z = -(d.getMinutes() / 60) * Math.PI * 2; }   // la lancetta dei minuti gira davvero
     if (porta) {                                                          // la porta si apre quando qualcuno ci passa vicino
       let vicino = false; const w = new T.Vector3();
@@ -1426,7 +1476,7 @@
     provaChiusura(n) { const ids = [...ultimeSessioni.keys()].filter(id => bersagli.has(id) && !chiusi.has(id)); const id = ids[ids.length - 1 - (n || 0)]; if (!id) return; chiudi(id, ultimeSessioni.get(id)); if (ultimiDati) costruisci(...ultimiDati); },
     provaCantiere(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); arrivoFatto.delete(ids[n || 0]); cantieri.set(ids[n || 0], performance.now() / 1000); const uf = [...bersagli.keys()].filter(k => k.startsWith("capo:") && k !== "capo:r:capo"); if (uf.length) { arrivoFatto.delete(uf[uf.length - 1]); cantieri.set(uf[uf.length - 1], performance.now() / 1000); } if (ultimiDati) costruisci(...ultimiDati); },
     provaPostino(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); avviaPostino(ids[n || 0]); },
-    get effetti() { return effetti.length; }, get dati() { return ultimiDati; }, get scrivanie() { return [...bersagli.keys()].filter(k => !k.startsWith("capo:")); }, get postini() { return postini.map(p => [p.id, p.g && p.g.position.x, p.g && p.g.position.z, !!(p.g && p.g.parent)]); },
+    get effetti() { return effetti.length; }, get ispettore() { return ispettore && ispettore.o.position; }, get dati() { return ultimiDati; }, get scrivanie() { return [...bersagli.keys()].filter(k => !k.startsWith("capo:")); }, get postini() { return postini.map(p => [p.id, p.g && p.g.position.x, p.g && p.g.position.z, !!(p.g && p.g.parent)]); },
     caffeSubito() { for (const a of animati) a.userData.prossimoT = 0; },   // per le prove
   };
 })();
