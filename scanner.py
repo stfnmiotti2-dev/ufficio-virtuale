@@ -228,7 +228,7 @@ def _cwd_of(raw):
 
 
 _VERSIONE_TIA = re.compile(r"\.ap(\d{2})\b", re.I)
-_ERRORI = re.compile(r"(\d+)\s*(?:errori|errors?|error\(s\))\b|\"?errors?\"?\s*[:=]\s*(\d+)", re.I)
+_ERRORI = re.compile(r"(\d+)\s*(?:errori|errors?|error\(s\))\b|\"?(?:error_?count|errors?|errori)\"?\s*[:=]\s*(\d+)", re.I)
 _AVVISI = re.compile(r"(\d+)\s*(?:avvisi|warnings?)\b|\"?warnings?\"?\s*[:=]\s*(\d+)", re.I)
 
 
@@ -250,10 +250,12 @@ def _esito_compilazione(testo):
         return {"errori": int(next(g for g in m.groups() if g)), "avvisi": avvisi}
     if re.search(r"\b(error|errore|failed|fallit)", testo, re.I):
         return {"errori": -1, "avvisi": avvisi}
-    return {"errori": 0, "avvisi": avvisi}
+    if re.search(r"\b(success|riuscit|completat|ok\b|nessun errore|no errors)", testo, re.I):
+        return {"errori": 0, "avvisi": avvisi}
+    return {"errori": None, "avvisi": avvisi}       # esito non riconosciuto: meglio "?" che un falso verde
 
 
-ASPETTA_ORE = 12            # oltre, una domanda senza risposta non conta piu'
+ASPETTA_ORE = 0.5           # oltre 30 min una domanda senza risposta non conta piu' (la sessione e' ferma)
 _URL = re.compile(r"https?://\S+|\(#[^)]*\)|\(/[^)]*\)")
 _DOMANDE_STRUMENTI = {"askuserquestion", "request_decision"}
 _MESSAGGI_STRUMENTI = {"post_message"}   # send_message va a un'altra sessione, non alla persona
@@ -440,6 +442,12 @@ def analyze(path):
         info["stato"] = "aspetta"
         info["icona"] = "✋"
         info["attivita"] = _short(decisione or domanda, 90)
+    elif decisione or domanda:                 # domanda vecchia: non ti aspetta piu', e' ferma
+        info["stato"] = "finito"
+        info["icona"] = "⏸️"
+        ore = age_min / 60
+        info["attivita"] = "Ferma da " + (f"{ore:.0f} h" if ore >= 1 else f"{age_min:.0f} min") + \
+            " · domanda: " + _short(decisione or domanda, 60)
     else:
         info["stato"] = "finito"
         info["icona"] = "☕"

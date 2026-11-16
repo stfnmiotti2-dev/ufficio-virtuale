@@ -18,6 +18,7 @@
   const sfondo = document.createElement("canvas");     // stanza ferma, disegnata una volta sola
   const FPS = 8;                                       // pochi fotogrammi: stile pixel art e CPU quasi a zero
   let ultime = [];
+  let extra = {};                                      // responsabili da mostrare sempre, TIA aperti, cloud
   let posti = [];                                      // [{x, y, s, h}] da animare
   let W = 0, H = 0, finestre = [];
   let t = 0;                                           // fotogramma corrente
@@ -137,6 +138,10 @@
     r(x + 52, y + 26, 1, 2, "#bbb");
     r(x + 38, y + 27, 8, 2, "#f4f4f0"); r(x + 39, y + 26, 7, 1, "#e6e6df");
     if (s.commessa) r(x + 27, y + 36, 12, 4, "#f2c66d");   // targhetta della commessa
+    if (s.cloud) {                                    // lavora nel cloud: nuvoletta sopra il monitor
+      const dy = Math.floor((t + h) / (FPS * 2)) % 2;
+      r(x + 11, y + 6 + dy, 10, 3, "#eef4fb"); r(x + 13, y + 4 + dy, 5, 2, "#eef4fb"); r(x + 11, y + 9 + dy, 10, 1, "#b8c6d8");
+    }
     if (s.plcsim) {                                   // scatolina PLCSIM con il led che lampeggia
       r(x + 1, y + 23, 6, 6, "#2d6b8c"); r(x + 2, y + 24, 4, 2, "#9fd2f0");
       r(x + 2, y + 27, 1, 1, (t + h) % 4 < 2 ? "#5cff7a" : "#1d5a2a");
@@ -261,7 +266,7 @@
     if (s.progetto_tia) parti.push("🧩 " + corto(s.progetto_tia, 20));
     if (s.tia && s.tia.versione) parti.push(s.tia.versione);
     const c = s.compilazione;
-    if (c) parti.push(c.errori === 0 ? "✅" : "❌" + (c.errori > 0 ? c.errori : ""));
+    if (c) parti.push(c.errori === 0 ? "✅" : c.errori == null ? "esito ?" : "❌" + (c.errori > 0 ? c.errori : ""));
     return parti.join(" ");
   }
   function corto(t, n) { return t.length > n ? t.slice(0, n - 1) + "…" : t; }
@@ -292,19 +297,30 @@
       if (!gruppi.has(k)) gruppi.set(k, { chiave: k, sessioni: [], prima: i, s0: s });
       gruppi.get(k).sessioni.push(s);
     });
+    // i responsabili di nomi-isole.json hanno sempre il loro ufficio, anche senza nessuno al lavoro
+    const ordine = new Map();
+    (extra.responsabili || []).forEach((rsp, i) => {
+      const k = "r:" + rsp.nome.toLowerCase();
+      ordine.set(k, i);
+      if (!gruppi.has(k)) gruppi.set(k, { chiave: k, sessioni: [], prima: 1000 + i,
+        s0: { responsabile: rsp.nome, thread: rsp.thread, link: rsp.link, chan: extra.chan } });
+      gruppi.get(k).link = rsp.link;
+    });
     const lista = [...gruppi.values()];
     for (const gr of lista) gr.sessioni.sort((a, b) => arrivo.get(a.id) - arrivo.get(b.id));
-    const peso = gr => gr.chiave === "r:capo" ? 0 : gr.chiave === "altro" ? 3 :
-      gr.sessioni.some(s => s.stato === "aspetta") ? 1 : 2;
-    lista.sort((a, b) => peso(a) - peso(b) || a.prima - b.prima);
+    const peso = gr => gr.chiave === "r:capo" ? 0 : gr.chiave === "p:ufficio virtuale" ? 5 : gr.chiave === "altro" ? 4 :
+      gr.sessioni.some(s => s.stato === "aspetta") ? 1 : gr.chiave.startsWith("r:") ? 2 : 3;
+    lista.sort((a, b) => peso(a) - peso(b) ||
+      (ordine.has(a.chiave) && ordine.has(b.chiave) ? ordine.get(a.chiave) - ordine.get(b.chiave) : a.prima - b.prima));
     return lista;
   }
 
   function nomeIsola(gr) {
     const s = gr.s0;
     if (gr.chiave === "r:capo") return "👑 Capo";
-    if (s.responsabile) return "📌 " + s.responsabile;
+    if (s.responsabile) return "📌 " + s.responsabile.replace(/\s+programma\b/i, "");
     if (gr.chiave.startsWith("c:")) return "📌 " + s.commessa;
+    if (gr.chiave === "p:ufficio virtuale") return "🏢 Ufficio virtuale (questa pagina)";
     if (gr.chiave.startsWith("p:")) return "🗂️ " + s.progetto_claude;
     if (s.thread) return "🧵 da assegnare";
     return "🗂️ Sessioni aperte sul PC";
@@ -320,7 +336,7 @@
     if (n(["ferma?"])) parti.push("⏳ " + n(["ferma?"]));
     if (n(["finito", "inattiva", "vuota"])) parti.push("💤 " + n(["finito", "inattiva", "vuota"]));
     const ultimo = gr.sessioni.filter(s => s.progetto_tia).sort((a, b) => b.modificato - a.modificato)[0];
-    return parti.join(" · ") + (ultimo ? "\n🧩 " + corto(ultimo.progetto_tia, 26) : "");
+    return (parti.join(" · ") || "nessuno al lavoro") + (ultimo ? "\n🧩 " + corto(ultimo.progetto_tia, 26) : "");
   }
 
   function cartello(gr, x, y, w, scala, ufficio) {
@@ -337,7 +353,7 @@
       strato.append(c);
       return;
     }
-    const link = gr.chiave === "r:capo" && s.chan ? "https://claude.ai/code/project/" + s.chan :
+    const link = gr.link ? gr.link : gr.chiave === "r:capo" && s.chan ? "https://claude.ai/code/project/" + s.chan :
       gr.chiave.startsWith("p:") && s.chan ? "https://claude.ai/code/project/" + s.chan :
       (s.thread && (gr.chiave.startsWith("t:") || gr.chiave.startsWith("r:")) ? s.link : null);
     if (link) {
@@ -372,27 +388,35 @@
     strato.append(c);
   }
 
-  function disegna(sessioni) {
+  function disegna(sessioni, nuovoExtra) {
     ultime = sessioni;
+    if (nuovoExtra) extra = nuovoExtra;
     const gruppi = isole(sessioni);
     const disp = (wrap.clientWidth || 1000) - 40;   // tolgo il padding laterale
-    const scala = Math.max(2, Math.min(3, Math.floor(disp / (4 * SLOT_W + 2 * MARGINE))));
-    const colonne = Math.max(2, Math.min(6, Math.floor((disp / scala - 2 * MARGINE + 8) / (SLOT_W + 8))));
+    // scala: la piu' grande che tiene gli uffici a vetri su due file al massimo
+    const nUffici = gruppi.filter(haUfficio).length;
+    const GAP = 8;
+    const colonnePer = sc => Math.max(2, Math.min(8, Math.floor((disp / sc - 2 * MARGINE + GAP) / (SLOT_W + GAP))));
+    const filePer = sc => Math.ceil(nUffici / Math.max(1, Math.floor((colonnePer(sc) * (SLOT_W + GAP)) / (UFF_W + GAP))));
+    let scala = Math.max(2, Math.min(3, Math.floor(disp / (4 * SLOT_W + 2 * MARGINE))));
+    while (scala > 2 && filePer(scala) > 2) scala--;
+    const colonne = colonnePer(scala);
+    // a scala 2 fumetti e scritte (in pixel veri) occupano piu' spazio: allargo le fasce dei testi
+    const RIEP = scala >= 3 ? RIEPILOGO_H : RIEPILOGO_H + 6, ISO = scala >= 3 ? ISOLA_H : ISOLA_H + 12;
     // colore per ogni isola: oro per il capo, poi a giro
     let ci = 0;
     for (const gr of gruppi) gr.colore = gr.chiave === "r:capo" ? ORO : gr.chiave === "altro" ? "#8b90a3" : COLORI_ISOLE[ci++ % COLORI_ISOLE.length];
     // 1) direzione: uffici a vetri in fila sotto il muro (capo e responsabili)
-    const GAP = 8;
     const capi = gruppi.filter(haUfficio);
     const perFila = Math.max(1, Math.floor((colonne * SLOT_W + (colonne - 1) * GAP + GAP) / (UFF_W + GAP)));
     uffici = [];
     let y = MURO + 14;
     capi.forEach((gr, i) => {
-      const ux = MARGINE + (i % perFila) * (UFF_W + GAP), uy = y + Math.floor(i / perFila) * (UFF_H + ISOLA_H + RIEPILOGO_H);
+      const ux = MARGINE + (i % perFila) * (UFF_W + GAP), uy = y + Math.floor(i / perFila) * (UFF_H + ISOLA_H + RIEP);
       uffici.push({ gr, x: ux, y: uy, colore: gr.colore,
                     s: { id: "capo:" + gr.chiave, stato: "supervisore", colore: gr.colore, capo: gr.chiave === "r:capo" } });
     });
-    if (capi.length) y += Math.ceil(capi.length / perFila) * (UFF_H + ISOLA_H + RIEPILOGO_H);
+    if (capi.length) y += Math.ceil(capi.length / perFila) * (UFF_H + ISOLA_H + RIEP);
     const corridoio = y;
     y += 10;
     // 2) open space: le scrivanie delle sessioni, raggruppate per responsabile
@@ -400,13 +424,14 @@
     let x = MARGINE, hRiga = 0;
     const largMax = colonne * SLOT_W + (colonne - 1) * GAP;
     for (const gr of gruppi) {
+      if (!gr.sessioni.length) continue;             // ufficio senza nessuno al lavoro: niente isola
       const perRiga = Math.min(colonne, gr.sessioni.length);
       const righe = Math.ceil(gr.sessioni.length / perRiga);
-      const w = perRiga * SLOT_W, h = ISOLA_H + righe * SLOT_H;
+      const w = perRiga * SLOT_W, h = ISO + righe * SLOT_H;
       if (x > MARGINE && x + w > MARGINE + largMax) { x = MARGINE; y += hRiga + 4; hRiga = 0; }
       aree.push({ gr, x, y, w, h });
       gr.sessioni.forEach((s, i) => pos.set(s.id, {
-        x: x + (i % perRiga) * SLOT_W, y: y + ISOLA_H + Math.floor(i / perRiga) * SLOT_H }));
+        x: x + (i % perRiga) * SLOT_W, y: y + ISO + Math.floor(i / perRiga) * SLOT_H }));
       x += w + GAP; hRiga = Math.max(hRiga, h);
     }
     y += hRiga + 4;
@@ -434,7 +459,7 @@
     for (const u of uffici) {
       cartello(u.gr, u.x, u.y + 2, UFF_W, scala, true);
       const s0 = u.gr.s0;
-      const link = u.gr.chiave === "r:capo" && s0.chan ? "https://claude.ai/code/project/" + s0.chan : s0.link;
+      const link = u.gr.link || (u.gr.chiave === "r:capo" && s0.chan ? "https://claude.ai/code/project/" + s0.chan : s0.link);
       const porta = document.createElement("div");
       porta.className = "posto cartello-click";
       Object.assign(porta.style, { left: u.x * scala + "px", top: (u.y + ISOLA_H) * scala + "px",
@@ -457,7 +482,8 @@
         zona = document.createElement("div");
         zona.append(document.createElement("div"), document.createElement("div"));
         zona.lastChild.className = "targa";
-        zona.onclick = () => window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
+        zona.onclick = () => s.cloud ? (s.link && window.open(s.link, "_blank", "noopener"))
+          : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
         zone.set(s.id, zona);
         strato.append(zona);
       }
@@ -465,7 +491,8 @@
       zona.className = "posto " + (presente ? "presente" : "assente");
       Object.assign(zona.style, { left: x * scala + "px", top: y * scala + "px",
                                   width: SLOT_W * scala + "px", height: SLOT_H * scala + "px" });
-      zona.title = (s.titolo || "(senza titolo)") + "\nClic: apri la chat";
+      zona.title = (s.cloud ? "☁️ Thread nel cloud: " : "") + (s.titolo || "(senza titolo)") +
+        (s.sottotitolo ? "\n" + s.sottotitolo : "") + (s.cloud ? (s.link ? "\nClic: apri su claude.ai" : "") : "\nClic: apri la chat");
       const f = zona.firstChild;
       const [ic, testo] = presente ? testoFumetto(s) : ["", ""];
       const nuovo = presente ? ic + " " + corto(testo, s.stato === "aspetta" ? 52 : 34) : "";
@@ -476,7 +503,7 @@
         f.style.display = presente ? "" : "none";
         if (presente) { f.classList.remove("pop"); void f.offsetWidth; f.classList.add("pop"); }
       }
-      zona.lastChild.textContent = targa(s) || corto((s.progetto_tia ? "🧩 " + s.progetto_tia : (s.titolo || s.progetto || "")), 30)
+      zona.lastChild.textContent = (s.cloud ? "☁️ " : "") + (targa(s) || corto((s.progetto_tia ? "🧩 " + s.progetto_tia : (s.titolo || s.progetto || "")), 30))
         + (s.sotto_agenti ? " 👥" + s.sotto_agenti : "");
     }
     for (const [id, zona] of zone) if (!visti.has(id)) { zona.remove(); zone.delete(id); }

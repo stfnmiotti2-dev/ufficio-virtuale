@@ -28,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 7.7"
+VERSIONE = "task 7.8"
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
 
@@ -96,35 +96,117 @@ def _nomi_isole():
     return _nomi["dati"]
 
 
+_STAZIONE = re.compile(r"(?<![A-Za-z0-9])OP\s?(\d{2,3})(?!\d)", re.I)
+_voci_cache = {}
+
+
+def _distanza(a, b, limite=2):
+    """Distanza di edit (Levenshtein), ma si ferma appena supera il limite."""
+    if abs(len(a) - len(b)) > limite:
+        return limite + 1
+    prec = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prec[j] + 1, cur[j - 1] + 1, prec[j - 1] + (ca != cb)))
+        if min(cur) > limite:
+            return limite + 1
+        prec = cur
+    return prec[-1]
+
+
+def _trova_voce(nomi, thread):
+    """La voce di nomi-isole.json per un thread, tollerando piccoli errori di battitura nel codice
+    (maiuscole/minuscole, una o due lettere): il file lo scrive a mano Agente TIA."""
+    if not thread:
+        return None
+    if thread in nomi:
+        return nomi[thread]
+    chiave = (thread, _nomi["mtime"])
+    if chiave not in _voci_cache:
+        tl = thread.lower()
+        voce = next((v for k, v in nomi.items() if k.lower() == tl), None)
+        if voce is None:
+            vicini = [v for k, v in nomi.items() if _distanza(k.lower(), tl) <= 2]
+            voce = vicini[0] if len(vicini) == 1 else None
+        _voci_cache[chiave] = voce
+    return _voci_cache[chiave]
+
+
+def _responsabili(nomi):
+    """[(nome, thread)] dei responsabili: le voci stringa di nomi-isole.json, piu' il Capo."""
+    out = [("Capo", None)]
+    for k, v in nomi.items():
+        if isinstance(v, str) and v.strip() and v.strip().lower() != "capo":
+            out.append((v.strip(), k))
+    return out
+
+
+def _stazione(*testi):
+    for t in testi:
+        m = _STAZIONE.search(t or "")
+        if m:
+            return "OP" + m.group(1)
+    return None
+
+
+def _per_stazione(s, nomi_resp):
+    """Responsabile dedotto da commessa + stazione (es. 24_247 + OP20 dal progetto TIA)."""
+    c = s.get("commessa")
+    if not c:
+        return None
+    cand = [n for n in nomi_resp if c in n]
+    st = _stazione(s.get("progetto_tia"), s.get("titolo"))
+    if st:
+        cand = [n for n in cand if _stazione(n) == st or re.search(r"(?i)OP\s?" + st[2:] + r"(?!\d)", n)]
+    return cand[0] if len(cand) == 1 else None
+
+
 def _con_nomi(sessions):
     """Titoli dei thread e responsabili da nomi-isole.json. Il file lo scrive la pagina
     (matita) oppure la chat principale di claude.ai, con una di queste forme:
       "cmsg_...": "24_247 op20"                                   (il thread e' un responsabile)
       "cmsg_...": {"titolo": "Correggi MSG_104", "responsabile": "24_247 op20"}"""
     nomi = _nomi_isole()
+    nomi_resp = [n for n, _ in _responsabili(nomi)]
+    canonico = {n.lower(): n for n in nomi_resp}
     # titolo del thread -> titolo del suo responsabile (anche per le sessioni con la riga "Thread:")
     per_titolo = {"capo": "Capo"}
     for v in nomi.values():
         if isinstance(v, str):
-            per_titolo[v.strip().lower()] = v
+            per_titolo[v.strip().lower()] = v.strip()
         elif isinstance(v, dict) and v.get("titolo"):
             per_titolo[str(v["titolo"]).strip().lower()] = v.get("responsabile") or v["titolo"]
     out = []
     for s in sessions:
         s = dict(s)
         titolo_thread, resp = s.get("thread_titolo"), None
-        voce = nomi.get(s.get("thread"))
+        voce = _trova_voce(nomi, s.get("thread"))
         if isinstance(voce, str):                       # il thread e' un responsabile
             titolo_thread, resp = titolo_thread or voce, voce
         elif isinstance(voce, dict):
             titolo_thread = voce.get("titolo") or titolo_thread
             resp = voce.get("responsabile")
+        if voce is not None:
+            s["in_nomi"] = True
+        if not resp and s.get("voce_cloud_resp"):      # il responsabile scritto in stato-thread.json
+            resp = s["voce_cloud_resp"]
         if titolo_thread and not resp:
-            resp = per_titolo.get(titolo_thread.strip().lower(), titolo_thread)
+            resp = per_titolo.get(titolo_thread.strip().lower())
+            if resp is None and not s.get("cloud"):
+                resp = titolo_thread
         if titolo_thread and titolo_thread.strip().lower() != "capo":
             s["titolo"] = str(titolo_thread)[:90]       # il titolo vero della chat
+        elif not titolo_thread and s.get("progetto_tia"):
+            # niente titolo del thread: commessa · stazione · progetto TIA, l'ultimo messaggio sotto
+            parti = [s.get("commessa"), _stazione(s.get("progetto_tia")), s["progetto_tia"]]
+            s["sottotitolo"] = s.get("titolo")
+            s["titolo"] = " · ".join(p for p in parti if p)
+        if not resp:
+            resp = _per_stazione(s, nomi_resp)
         if resp:
-            s["responsabile"] = "Capo" if str(resp).strip().lower() == "capo" else str(resp)[:60]
+            resp = str(resp).strip()
+            s["responsabile"] = canonico.get(resp.lower(), resp)[:60]
         for fonte in (titolo_thread, s.get("responsabile")):
             m = scanner._COMMESSA.search(fonte or "")
             if m:
@@ -132,6 +214,137 @@ def _con_nomi(sessions):
                 break
         out.append(s)
     return out
+
+
+# ---------- thread che lavorano nel cloud (stato-thread.json, scritto da Agente TIA) ----------
+CLOUD_FILE = HERE / "stato-thread.json"
+_cloud = {"mtime": None, "dati": {}}
+
+
+def _iso(ts):
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def _stato_cloud():
+    try:
+        mt = CLOUD_FILE.stat().st_mtime
+    except OSError:
+        return {}
+    if mt != _cloud["mtime"]:
+        try:
+            dati = json.loads(CLOUD_FILE.read_text(encoding="utf-8"))
+            _cloud.update(mtime=mt, dati=dati if isinstance(dati, dict) else {})
+        except (OSError, ValueError):
+            pass
+    return _cloud["dati"]
+
+
+def _sessioni_cloud(locali):
+    """Una figura per ogni thread del cloud, se sul PC non c'e' gia' una sua sessione al lavoro."""
+    dati = _stato_cloud()
+    al_pc = {(s.get("thread") or "").lower() for s in locali
+             if s.get("stato") in ("aspetta", "lavora", "pensa", "ferma?")}
+    chan = next((s.get("chan") for s in locali if s.get("chan") and s.get("progetto_claude", "").lower().startswith("agente")), None)
+    out = []
+    for t in dati.get("thread") or []:
+        if not isinstance(t, dict) or not t.get("id") or str(t["id"]).lower() in al_pc:
+            continue
+        testo = str(t.get("stato") or "").strip()
+        st = testo.lower()
+        stato = "aspetta" if st.startswith("aspetta") else "finito" if st.startswith(("finit", "fatto")) else "lavora"
+        ts = _iso(t.get("ultima_attivita_utc")) or _iso(dati.get("aggiornato_utc")) or time.time()
+        out.append({
+            "id": "cloud:" + str(t["id"]), "cloud": True, "thread": str(t["id"]),
+            "thread_titolo": t.get("titolo"), "titolo": t.get("titolo") or "(thread nel cloud)",
+            "responsabile": None, "stato": stato, "modificato": ts,
+            "icona": "✋" if stato == "aspetta" else "☁️",
+            "attivita": testo[:1].upper() + testo[1:] if testo else "Lavora nel cloud",
+            "progetto": "cloud", "progetto_claude": "Agente Tia portal", "chan": chan,
+            "link": f"https://claude.ai/code/project/{chan}?thread={t['id']}" if chan else None,
+            "voce_cloud_resp": t.get("responsabile"),
+        })
+    return out
+
+
+# ---------- istanze di TIA Portal aperte sul PC (processi veri, non stime) ----------
+_tia = {"lista": [], "ok": False}
+
+
+def _leggi_processi_tia():
+    if sys.platform != "win32":
+        return None
+    cmd = ("Get-Process Siemens.Automation.Portal -ErrorAction SilentlyContinue | "
+           "ForEach-Object { [pscustomobject]@{titolo=$_.MainWindowTitle; percorso=$_.Path} } | "
+           "ConvertTo-Json -Compress")
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd],
+                           capture_output=True, text=True, errors="replace", timeout=20,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return None
+    testo = (r.stdout or "").strip()
+    if not testo:
+        return []
+    try:
+        dati = json.loads(testo)
+    except ValueError:
+        return None
+    return dati if isinstance(dati, list) else [dati]
+
+
+def _tia_processi():
+    while True:
+        lista = _leggi_processi_tia()
+        if lista is not None:
+            out = []
+            for p in lista:
+                titolo, percorso = p.get("titolo") or "", p.get("percorso") or ""
+                m = re.search(r"\.ap(\d{2})\b", titolo, re.I) or re.search(r"Portal V(\d{2})", percorso, re.I) \
+                    or re.search(r"\bV(\d{2})\b", titolo)
+                prog = re.search(r"([^\\/]+)\.ap\d{2}\b", titolo, re.I)
+                out.append({"versione": "V" + m.group(1) if m else "?",
+                            "progetto": prog.group(1) if prog else "", "finestra": bool(titolo.strip())})
+            _tia.update(lista=out, ok=True)
+        time.sleep(30)
+
+
+def _tia_con_proprietario(sessions):
+    """Chi usa ogni TIA: la sessione recente con lo stesso progetto, altrimenti Stefano
+    (finestra visibile) o un agente (TIA senza finestra, aperto via Openness)."""
+    ora = time.time()
+    recenti = [s for s in sessions if s.get("progetto_tia") and ora - s.get("modificato", 0) < 4 * 3600]
+    out = []
+    for p in _tia["lista"]:
+        di = None
+        if p["progetto"]:
+            base = p["progetto"].lower()
+            s = next((s for s in recenti if s["progetto_tia"].lower().startswith(base[:24])
+                      or base.startswith(s["progetto_tia"].lower()[:24])), None)
+            if s:
+                di = s.get("responsabile") or s.get("commessa") or "agente"
+        out.append(dict(p, di=di or ("Stefano" if p["finestra"] else "agente")))
+    return out
+
+
+def _extra(sessions):
+    """Dati dell'ufficio oltre alle sessioni: responsabili da mostrare sempre, TIA aperti, cloud."""
+    nomi = _nomi_isole()
+    chan = next((s.get("chan") for s in sessions if s.get("in_nomi") and s.get("chan")), None) or \
+        next((s.get("chan") for s in sessions if s.get("chan") and s.get("progetto_claude", "").lower().startswith("agente")), None)
+    resp = []
+    for nome, thread in _responsabili(nomi):
+        link = f"https://claude.ai/code/project/{chan}" if chan else None
+        if thread and chan:
+            link += f"?thread={thread}"
+        resp.append({"nome": nome, "thread": thread, "link": link})
+    cloud = _stato_cloud()
+    return {"responsabili": resp, "chan": chan,
+            "tia": _tia_con_proprietario(sessions) if _tia["ok"] else None,
+            "cloud_aggiornato": _iso(cloud.get("aggiornato_utc")) if cloud else None}
 
 
 def _diagnosi(sessions):
@@ -149,11 +362,13 @@ def _diagnosi(sessions):
 def _watcher(hours):
     while True:
         try:
-            sessions = _con_nomi(_scan(hours))
+            locali = _scan(hours)
+            sessions = _con_nomi(locali + _sessioni_cloud(locali))
             data = json.dumps(sessions, ensure_ascii=False).encode("utf-8")
+            extra = json.dumps(_extra(sessions), ensure_ascii=False).encode("utf-8")
             with _cond:
-                if data != _snapshot["json"]:
-                    _snapshot.update(versione=_snapshot["versione"] + 1, sessioni=sessions, json=data)
+                if data != _snapshot["json"] or extra != _snapshot.get("extra"):
+                    _snapshot.update(versione=_snapshot["versione"] + 1, sessioni=sessions, json=data, extra=extra)
                     _diagnosi(sessions)
                     _cond.notify_all()
         except Exception as exc:  # non deve mai fermarsi
@@ -253,9 +468,9 @@ class Handler(BaseHTTPRequestHandler):
                 with _cond:
                     if _snapshot["versione"] == seen:
                         _cond.wait(timeout=15)
-                    version, data = _snapshot["versione"], _snapshot["json"]
+                    version, data, extra = _snapshot["versione"], _snapshot["json"], _snapshot.get("extra") or b"{}"
                 if version != seen:
-                    self.wfile.write(b"event: sessioni\ndata: " + data + b"\n\n")
+                    self.wfile.write(b"event: ufficio\ndata: " + extra + b"\n\nevent: sessioni\ndata: " + data + b"\n\n")
                     seen = version
                 else:
                     self.wfile.write(b": ping\n\n")  # tiene viva la connessione
@@ -319,6 +534,7 @@ def main():
     global _SERVER
     _SERVER = server
     threading.Thread(target=_watcher, args=(args.ore,), daemon=True).start()
+    threading.Thread(target=_tia_processi, daemon=True).start()
     if not args.senza_aggiornamenti:
         threading.Thread(target=_aggiornatore, args=(server,), daemon=True).start()
     print(f"Ufficio virtuale ({VERSIONE}, {aggiorna.local_sha()[:7] or 'locale'}) su "

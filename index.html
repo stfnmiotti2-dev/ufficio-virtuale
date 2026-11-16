@@ -33,6 +33,9 @@
   @keyframes pulse { 50% { opacity: .25; } }
   .quando { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
   .titolo { font-weight: 600; overflow-wrap: anywhere; }
+  .sottotitolo { color: var(--muted); font-size: 12px; margin-top: -2px; overflow-wrap: anywhere; }
+  .resp { font-size: 12px; color: var(--muted); }
+  .grigio { color: var(--muted); }
   .attivita { color: var(--text); font-size: 14px; display: flex; gap: 8px; align-items: baseline;
               overflow-wrap: anywhere; }
   .icona { font-size: 16px; }
@@ -120,6 +123,7 @@ const STATI = {
   "vuota": ["vuota", "vuota"],
 };
 let sessioni = [];
+let extra = {};
 const lista = document.getElementById("lista");
 const soloAttive = document.getElementById("soloAttive");
 try { soloAttive.checked = localStorage.getItem("soloAttive") === "1"; } catch (e) {}
@@ -148,14 +152,29 @@ function render() {
   // chi aspetta te viene sempre per primo
   sessioni = [...sessioni].sort((a, b) => (b.stato === "aspetta") - (a.stato === "aspetta"));
   const nAspetta = sessioni.filter(s => s.stato === "aspetta").length;
-  // TIA aperti (stima): sessioni delle ultime 2 ore con un TIA aperto e non chiuso
-  const recenti = sessioni.filter(s => s.tia && Date.now() / 1000 - s.modificato < 7200);
-  const perVer = {};
-  for (const s of recenti) perVer[s.tia.versione || "?"] = (perVer[s.tia.versione || "?"] || 0) + 1;
+  // TIA aperti: processi veri del PC (dal server); se non disponibili, stima dalle sessioni
   const tiaEl = document.getElementById("tia");
-  tiaEl.textContent = "TIA aperti: " + recenti.length + "/3" +
-    Object.entries(perVer).sort().map(([v, n]) => " · " + v + ": " + n).join("");
-  tiaEl.classList.toggle("troppi", recenti.length > 3 || Object.values(perVer).some(n => n > 2));
+  const perVer = {};
+  let nTia;
+  if (Array.isArray(extra.tia)) {
+    nTia = extra.tia.length;
+    for (const p of extra.tia) (perVer[p.versione] = perVer[p.versione] || []).push(p.di);
+    tiaEl.textContent = "TIA aperti: " + nTia + "/3" + Object.entries(perVer).sort().map(([v, chi]) => {
+      const conta = {};
+      for (const c of chi) conta[c] = (conta[c] || 0) + 1;
+      return " · " + v + ": " + chi.length + " (" + Object.entries(conta).map(([c, n]) => (n > 1 ? n + " " : "") + c).join(", ") + ")";
+    }).join("");
+    tiaEl.title = extra.tia.map(p => p.versione + " · " + (p.progetto || "senza progetto") + " · di " + p.di).join("\n") || "Nessun TIA Portal aperto";
+  } else {
+    const recenti = sessioni.filter(s => s.tia && Date.now() / 1000 - s.modificato < 7200);
+    nTia = recenti.length;
+    for (const s of recenti) (perVer[s.tia.versione || "?"] = perVer[s.tia.versione || "?"] || []).push(s);
+    tiaEl.textContent = "TIA aperti (stima): " + nTia + "/3" +
+      Object.entries(perVer).sort().map(([v, l]) => " · " + v + ": " + l.length).join("");
+  }
+  tiaEl.classList.toggle("troppi", nTia > 3 || Object.values(perVer).some(l => l.length > 2));
+  if (extra.cloud_aggiornato) tiaEl.textContent += " · ☁️ thread cloud aggiornati " +
+    new Date(extra.cloud_aggiornato * 1000).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
   document.title = (nAspetta ? `(${nAspetta}) ✋ ` : "") + "Ufficio virtuale";
   const vis = soloAttive.checked ? sessioni.filter(s => attive.includes(s.stato)) : sessioni;
   const nAttive = sessioni.filter(s => attive.includes(s.stato)).length;
@@ -170,17 +189,21 @@ function render() {
     const [cls, etichetta] = STATI[s.stato] || ["sconosciuto", s.stato];
     const card = el("article", "card " + cls);
     card.title = "Apri la chat completa";
-    card.onclick = () => window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
+    card.onclick = () => s.cloud ? (s.link && window.open(s.link, "_blank", "noopener"))
+      : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
     const top = el("div", "top");
     top.append(el("span", "stato", etichetta));
     const q = el("span", "quando", fa(s.modificato));
     q.dataset.ts = s.modificato;
     top.append(q);
-    card.append(top, el("div", "titolo", s.titolo || "(senza titolo)"));
+    card.append(top, el("div", "titolo", (s.cloud ? "☁️ " : "") + (s.titolo || "(senza titolo)")));
+    if (s.sottotitolo) card.append(el("div", "sottotitolo", s.sottotitolo));
+    if (s.responsabile) top.insertBefore(el("span", "resp", "👤 " + s.responsabile), q);
     const lavoro = el("div", "lavoro");
     if (s.commessa) lavoro.append(el("span", "commessa", "📌 " + s.commessa));
     if (s.progetto_tia) lavoro.append(el("span", "", "🧩 " + s.progetto_tia + (s.tia && s.tia.versione ? " · " + s.tia.versione : "")));
-    if (s.compilazione) lavoro.append(el("span", "", s.compilazione.errori === 0 ? "✅ compila"
+    if (s.compilazione) lavoro.append(el("span", s.compilazione.errori == null ? "grigio" : "",
+      s.compilazione.errori === 0 ? "✅ compila" : s.compilazione.errori == null ? "esito compilazione ?"
       : "❌ " + (s.compilazione.errori > 0 ? s.compilazione.errori + " errori" : "errori")));
     if (s.plcsim) lavoro.append(el("span", "", "🧪 PLCSIM attivo"));
     if (s.download) lavoro.append(el("span", "commessa", "🚨 download sul PLC!"));
@@ -204,7 +227,7 @@ function render() {
     if (s.ultimo_strumento && s.stato !== "lavora")
       meta.append(el("span", "", "ultima azione: " + s.ultimo_strumento));
     if (s.sotto_agenti) meta.append(el("span", "", "👥 " + s.sotto_agenti + " sotto-agenti"));
-    meta.append(el("span", "", s.id.slice(0, 8)));
+    meta.append(el("span", "", s.cloud ? "nel cloud" : s.id.slice(0, 8)));
     card.append(meta);
     lista.append(card);
   }
@@ -218,10 +241,11 @@ setInterval(() => {
 function collega() {
   const live = document.getElementById("live");
   const es = new EventSource("/api/stream");
+  es.addEventListener("ufficio", ev => { extra = JSON.parse(ev.data); });
   es.addEventListener("sessioni", ev => {
     sessioni = JSON.parse(ev.data);
     render();
-    if (window.Ufficio) Ufficio.disegna(sessioni);
+    if (window.Ufficio) Ufficio.disegna(sessioni, extra);
   });
   es.onopen = () => { live.textContent = "live"; live.classList.add("on"); };
   es.onerror = () => { live.textContent = "server non raggiungibile, riprovo…"; live.classList.remove("on"); };
