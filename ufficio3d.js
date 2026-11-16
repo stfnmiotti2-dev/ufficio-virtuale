@@ -282,7 +282,7 @@
     animati = []; marcati = []; cliccabili = []; schermi = [];
     const gruppi = U.prepara(sessioni, extra);
     const capi = gruppi.filter(U.haUfficio);
-    const UFF = 3.6, PASSO = 2.2;
+    const UFF = 3.6, PASSO = 2.6;
     // 1) uffici a vetri in fila in fondo; quello del capo e' piu' grande, con tappeto persiano e finiture d'oro
     const dim = gr => gr.chiave === "r:capo" ? [5.6, 4.6] : [UFF, UFF];
     const pulito = s => (s || "").replace(/^\S*[^\w\s]\S*\s+/u, "").replace(/\s*\(.*\)$/, "");   // toglie l'emoji iniziale
@@ -342,7 +342,7 @@
       if (usate && usate + q.fuori.length > rigaMax) { file.push([]); usate = 0; }
       file[file.length - 1].push(q); usate += q.fuori.length;
     }
-    let z0 = profMax / 2 + 4.6;
+    let z0 = profMax / 2 + 6.4;
     for (const fila of file) {
       if (!fila.length) continue;
       const w = fila.reduce((n, q) => n + q.fuori.length * PASSO, 0) + (fila.length - 1) * 0.8;
@@ -364,7 +364,7 @@
           if (presente) {
             const [ic, testo] = U.testoFumetto(s);
             marcati.push(etichetta("f3d st-" + (s.download ? "allarme" : s.stato.replace("?", "")),
-              ic + " " + U.corto(testo, s.stato === "aspetta" ? 52 : 34), new T.Vector3(x, 1.95, z0 - 0.8), s.titolo));
+              ic + " " + U.corto(testo, s.stato === "aspetta" ? 40 : 30), new T.Vector3(x, 1.95, z0 - 0.8), s.titolo));
           }
           const tg = U.targa(s) || U.corto((s.titolo || "").replace(/^.*?›\s*/, ""), 18);
           if (tg) marcati.push(etichetta("tg3d", (s.cloud ? "☁️ " : "") + tg, new T.Vector3(x, 0.05, z0 + 1.5), s.titolo));
