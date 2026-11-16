@@ -393,7 +393,7 @@
   let animati = [], marcati = [], cliccabili = [], schermi = [], camminatori = [];
   // postino: quando un thread passa da "aspetta te" a "lavora" vuol dire che Stefano ha risposto
   const statiPrima = new Map();
-  let porta = null, portaPos = null, portaAperta = 0;
+  let porta = null, portaPos = null, portaAperta = 0, orologio = null;
   // \pc off / \pc on dalla chat principale di Agente TIA: tutti a casa (restano le lampade) / tutti dentro, il primo accende la luce
   let pc = "on", pcT = -1e9, pcPrimaVolta = true, pcLuce = 1;
   const pcFuori = new Set(), spenti = new Set();
@@ -541,7 +541,7 @@
     if (chiave !== "r:capo") momento("capo:r:capo", "applauso", 7);
   }
   // operai: entrano dalla porta, vanno al posto, lavorano (costruiscono o smontano) ed escono di nuovo dalla porta
-  const VEL_OPERAI = 1.6, arrivoFatto = new Set();
+  const VEL_OPERAI = 2.8, FILA = 0.9, arrivoFatto = new Set();
   function squadra(id, posti) {
     return posti.map(([ox, oz, r], i) => {
       const o = omino({ id: "operaio" + id + i }, mondo, ox, oz, "operaio");
@@ -788,6 +788,7 @@
     box(0.05, 0.22, 0.14, "#f4f1ea", xm + 0.12, 1.15, zp - 1.0);          // interruttore della luce
     box(0.04, 0.08, 0.05, "#c9c3b6", xm + 0.15, 1.22, zp - 1.0);
     ingresso = [xm - 0.3, zp];
+    arreda(bb, xm, zp, zb);
     for (const p of postini) creaPostino(p);                               // quelli gia' in cammino continuano
     const ora = new Map(schermi.map(q => [q.s.id, q.s.stato]));
     const primaVoltaDati = statiPrima.size === 0;
@@ -860,6 +861,75 @@
     const [x, z] = u.casa, c = u.corridoio, [px, pz] = u.porta;
     return [[x, z, 0.7], [x, c, 0], [px, c, 0], [px, pz, 0], [px, pz, 2.4, "bussa"], [px, pz, 1.6, "attende"],
             [px, c, 0], [x, c, 0], [x, z, 0.4, "siede"]];
+  }
+  // arredo: corridoi con le guide, armadi, libreria, stampante, boccione d'acqua, quadri, bacheca, orologio, appendiabiti, piante
+  function arreda(bb, xm, zp, zb) {
+    const xr = bb.max.x + 2.2, x1 = xm + 0.3, x2 = bb.max.x + 2.9;
+    const guida = (xa, xb, z, w) => {                                    // passatoia del corridoio, con il bordo
+      tondo(xb - xa, 0.012, w + 0.16, "#7d8a9c", (xa + xb) / 2, 0, z, mondo, 0.02);
+      const g = tondo(xb - xa - 0.1, 0.02, w, "#a9b8c9", (xa + xb) / 2, 0, z, mondo, 0.02);
+      g.castShadow = false;
+    };
+    guida(x1, x2, zb + 1.55, 1.1);                                       // corridoio dietro gli uffici
+    guida(x1, x2, zp, 1.3);                                              // corridoio davanti, dalla porta
+    // lungo la parete di fondo: librerie e armadi, quadri e bacheca sopra
+    const libri = ["#d9534f", "#5c9ee6", "#f0ad4e", "#5cb85c", "#a283e3", "#4fc1bd", "#e8dcc4"];
+    const zw = zb + 0.45;
+    for (let x = bb.min.x + 6, i = 0; x < bb.max.x; x += 6, i++) {
+      if (i % 2 === 0) {                                                 // libreria
+        tondo(1.7, 1.25, 0.42, "#8a5a2b", x, 0, zw, mondo, 0.03);
+        for (let r = 0; r < 2; r++) for (let j = 0; j < 7; j++) {
+          const h = 0.32 + ((i + j * 3 + r) % 3) * 0.05;
+          box(0.16, h, 0.3, libri[(i + j + r * 2) % libri.length], x - 0.6 + j * 0.2, 0.12 + r * 0.56, zw + 0.08);
+        }
+      } else {                                                           // armadi a cassetti
+        for (let j = 0; j < 3; j++) {
+          tondo(0.55, 1.15, 0.5, "#9aa3b0", x - 0.6 + j * 0.6, 0, zw + 0.02, mondo, 0.03, { metalness: 0.3 });
+          for (let c = 0; c < 3; c++) box(0.2, 0.05, 0.04, "#596273", x - 0.6 + j * 0.6, 0.25 + c * 0.33, zw + 0.28);
+        }
+      }
+      const q = new T.Group(); q.position.set(x, 1.95, zb + 0.12); mondo.add(q);   // quadro
+      tondo(1.3, 0.85, 0.06, "#6b3d22", 0, -0.42, 0, q, 0.02);
+      const tela = box(1.12, 0.67, 0.02, "#ffffff", 0, -0.335, 0.04, q);
+      tela.material = new T.MeshBasicMaterial({ color: lin(["#f2c14e", "#7cc0ea", "#e57a8a", "#8fd19e"][i % 4]) });
+      palla(0.18, ["#e8603c", "#2f6fb0", "#ffffff", "#3b7d4f"][i % 4], -0.2 + (i % 3) * 0.2, 0, 0.06, q, 1, 1, 0.2);
+    }
+    const bach = new T.Group(); bach.position.set(xm + 1.9, 1.35, zb + 0.12); mondo.add(bach);   // bacheca con i foglietti
+    tondo(1.5, 1.0, 0.05, "#b88a5a", 0, 0, 0, bach, 0.02);
+    ["#fff27a", "#ffb3c1", "#a7e3ff", "#ffffff", "#c8f7a6", "#fff27a"].forEach((c, j) =>
+      box(0.32, 0.28, 0.02, c, -0.48 + (j % 3) * 0.48, 0.14 + Math.floor(j / 3) * 0.42, 0.04, bach));
+    const or = new T.Group(); or.position.set(xm + 1.9, 2.75, zb + 0.13); mondo.add(or);   // orologio
+    const qd = new T.Mesh(new T.CylinderGeometry(0.28, 0.28, 0.05, 24), m("#ffffff")); qd.rotation.x = Math.PI / 2; or.add(qd);
+    const bordo = new T.Mesh(new T.TorusGeometry(0.28, 0.035, 8, 24), m("#2b2b33")); or.add(bordo);
+    box(0.03, 0.17, 0.02, "#2b2b33", 0, 0, 0.04, or); const lancetta = box(0.025, 0.22, 0.02, "#d9534f", 0, 0, 0.05, or);
+    lancetta.geometry = lancetta.geometry; or.userData.lancetta = lancetta; orologio = or;
+    // vicino alla porta: appendiabiti con cappotti e portaombrelli
+    const ax = xm + 0.55, az = zp + 1.5;
+    tondo(0.06, 1.85, 0.06, "#5b3a22", ax, 0, az, mondo, 0.02);
+    palla(0.2, "#3b3b3b", ax, 0.02, az, mondo, 1, 0.15, 1);
+    for (const [dx, dz, c] of [[0.12, 0, "#7a4b8a"], [-0.1, 0.06, "#c0763b"], [0, -0.12, "#3d5a80"]]) {
+      palla(0.035, "#5b3a22", ax + dx, 1.8, az + dz, mondo);
+      palla(0.17, c, ax + dx * 1.5, 1.45, az + dz * 1.5, mondo, 1, 2.1, 0.8);
+    }
+    tondo(0.3, 0.45, 0.3, "#2f6fb0", ax + 0.5, 0, az + 0.2, mondo, 0.06);
+    tondo(0.03, 0.75, 0.03, "#e0303a", ax + 0.47, 0.3, az + 0.18, mondo, 0.01);
+    // angolo a destra: stampante, boccione dell'acqua, armadio alto
+    tondo(1.1, 0.75, 0.6, "#c9b28d", xr, 0, 1.0, mondo, 0.03);
+    tondo(0.7, 0.32, 0.5, "#e9edf2", xr, 0.75, 1.0, mondo, 0.05);
+    box(0.5, 0.03, 0.34, "#ffffff", xr, 1.07, 1.05);
+    palla(0.03, "#2fbf6d", xr + 0.26, 0.98, 1.27, mondo, 1, 1, 1, { emissive: "#2fbf6d", emissiveIntensity: 1 });
+    tondo(0.42, 0.95, 0.42, "#f3f0ea", xr, 0, 3.0, mondo, 0.05);
+    const acqua = new T.Mesh(new T.CylinderGeometry(0.19, 0.19, 0.5, 16), new T.MeshStandardMaterial({ color: lin("#8fd3ff"), transparent: true, opacity: 0.6, roughness: 0.1 }));
+    acqua.position.set(xr, 1.2, 3.0); mondo.add(acqua);
+    tondo(0.8, 2.0, 0.55, "#9aa3b0", xr, 0, -1.2, mondo, 0.04, { metalness: 0.3 });
+    box(0.02, 1.8, 0.02, "#596273", xr - 0.02, 0.1, -0.93);
+    // piante grandi negli angoli
+    for (const [px, pz] of [[x1 + 0.4, zb + 0.6], [x2 - 0.4, zb + 0.6], [x2 - 0.4, bb.max.z + 2.4], [x1 + 0.4, bb.max.z + 2.4], [xr, 6]]) {
+      tondo(0.5, 0.5, 0.5, "#c0763b", px, 0, pz, mondo, 0.12);
+      palla(0.38, "#5fae6e", px, 0.9, pz, mondo, 1, 1.3, 1);
+      palla(0.26, "#7cc98a", px + 0.15, 1.3, pz - 0.05, mondo);
+      palla(0.22, "#93d6a0", px - 0.12, 1.15, pz + 0.12, mondo);
+    }
   }
   function versoCasa(u, conLuce) {                                   // dalla porta alla propria sedia (coordinate del suo gruppo)
     const [ix, iz] = ingresso, uf = u.chiave && uffici.get(u.chiave);
@@ -966,7 +1036,7 @@
       }
       let pos = null;
       if (u.giro) {
-        pos = lungo(u.giro.punti, t - u.giro.inizio, 1.1);
+        pos = lungo(u.giro.punti, t - u.giro.inizio, u.giro.uscita || u.giro.arrivo || u.giro.pc ? 2.8 : 1.1);
         if (pos.fine) {
           if (u.giro.pc && u.giro.uscita) { pcFuori.add(s.id); a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); u.giro = null; continue; }
           if (u.giro.pc && u.giro.entra) spenti.delete(s.id);              // seduto: riaccende il computer
@@ -1160,6 +1230,7 @@
       return true;
     });
     ordini = ordini.filter(o => t < o.fine + 1);
+    if (orologio) { const d = new Date(); orologio.userData.lancetta.rotation.z = -(d.getMinutes() / 60) * Math.PI * 2; }   // la lancetta dei minuti gira davvero
     if (porta) {                                                          // la porta si apre quando qualcuno ci passa vicino
       let vicino = false; const w = new T.Vector3();
       for (const a of animati) { if (!a.visible || !a.userData.giro) continue; a.getWorldPosition(w); if (Math.hypot(w.x - portaPos.x, w.z - portaPos.z) < 2.2) { vicino = true; break; } }
@@ -1178,7 +1249,7 @@
       if (!l.cammino) {                                                   // percorsi dalla porta al posto e ritorno
         for (const o of l.operai) { const [ox, oz] = o.userData.posto;
           o.userData.andata = [[ix, iz, 0], [ox, iz, 0], [ox, oz, 0]]; o.userData.ritorno = [[ox, oz, 0], [ox, iz, 0], [ix, iz, 0]]; }
-        l.cammino = Math.max(...l.operai.map(o => durata(o.userData.andata, VEL_OPERAI)));
+        l.cammino = Math.max(...l.operai.map((o, i) => durata(o.userData.andata, VEL_OPERAI) + i * FILA));
       }
       const tw = t0 + l.cammino, tf = tw + l.durata, tu = tf + l.cammino;
       const p = Math.min(1, Math.max(0, (t - tw) / l.durata));
@@ -1196,8 +1267,10 @@
       for (const [i, o] of l.operai.entries()) {
         const u = o.userData;
         if (t < tw || t >= tf) {                                          // in cammino, con il martello in spalla
-          const pos = t < tw ? lungo(u.andata, t - t0, VEL_OPERAI) : lungo(u.ritorno, t - tf, VEL_OPERAI);
-          o.visible = !(t >= tf && pos.fine);
+          const e = (t < tw ? t - t0 : t - tf) - i * FILA;                 // in fila: uno dietro l'altro
+          const pos = e < 0 ? (t < tw ? { x: ix, z: iz, fermo: true, fuori: true } : lungo(u.ritorno, 0, VEL_OPERAI))
+            : t < tw ? lungo(u.andata, e, VEL_OPERAI) : lungo(u.ritorno, e, VEL_OPERAI);
+          o.visible = !pos.fuori && !(t >= tf && pos.fine);
           o.position.set(pos.x, 0, pos.z);
           if (pos.dir) o.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
           const w = pos.fermo ? 0 : Math.sin(t * 9 + i);
