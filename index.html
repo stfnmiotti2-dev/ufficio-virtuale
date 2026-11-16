@@ -89,6 +89,21 @@
   .fumetto.st-allarme { background: #ff2b2b; color: #fff; border-color: #700; animation: chiama .6s infinite; }
   .tia { font-size: 12.5px; padding: 2px 8px; border-radius: 10px; background: #2b2f3b; color: var(--text); }
   .tia.troppi { background: #5a1f1f; color: #ffb3b3; }
+  .spia { font-size: 12.5px; padding: 2px 10px; border-radius: 10px; font-weight: 600; cursor: default; }
+  .spia.verde { background: #1f4a33; color: #b8f5d0; }
+  .spia.rossa { background: #5a1f1f; color: #ffb3b3; }
+  #aspettano { margin: 14px 20px 0; border: 2px solid #c62828; border-radius: 10px; background: #2a1618; padding: 10px 14px; }
+  #aspettano[hidden] { display: none; }
+  header h1, header label, .spia, .tia, .live { white-space: nowrap; }
+  #aspettano h2 { margin: 0 0 6px; font-size: 14px; letter-spacing: .06em; color: #ff8a8a; }
+  .attesa-riga { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto auto; gap: 12px; align-items: baseline;
+                 padding: 5px 0; border-top: 1px solid #4a2a2c; font-size: 13.5px; }
+  .attesa-riga:first-of-type { border-top: 0; }
+  .attesa-riga .t { font-weight: 600; overflow-wrap: anywhere; }
+  .attesa-riga .cosa { color: #ffd6d6; overflow-wrap: anywhere; }
+  .attesa-riga .da { color: var(--muted); white-space: nowrap; font-size: 12px; }
+  .attesa-riga a { color: #fff; background: #c62828; border-radius: 6px; padding: 2px 10px; text-decoration: none; font-weight: 600; white-space: nowrap; }
+  @media (max-width: 700px) { .attesa-riga { grid-template-columns: 1fr auto; } .attesa-riga .cosa { grid-column: 1 / -1; } }
   .riepilogo { white-space: pre-line; position: absolute; text-align: center; z-index: 4; pointer-events: auto;
                font: 700 11.5px/1.2 "Segoe UI", system-ui, sans-serif; color: #fff; text-shadow: 0 1px 2px #000; }
   .riepilogo.chiama { color: #ffb3b3; }
@@ -104,10 +119,12 @@
   <h1>Ufficio virtuale</h1>
   <span class="conta" id="conta"></span>
   <span class="tia" id="tia" title="Stima dalle sessioni delle ultime 2 ore: TIA aperti e non ancora chiusi. Regola: massimo 2 per versione e 3 in totale."></span>
+  <span class="spia" id="spia"></span>
   <label><input type="checkbox" id="soloAttive"> solo attive</label>
   <span class="live" id="live">non collegato</span>
   <span class="conta" id="versione" style="font-size:12px">server: versione vecchia</span>
 </header>
+<section id="aspettano" hidden><h2>✋ TI ASPETTANO</h2><div id="aspettano-lista"></div></section>
 <section id="ufficio"></section>
 <main id="lista"><div class="vuoto">Carico le sessioni…</div></main>
 
@@ -173,8 +190,10 @@ function render() {
       Object.entries(perVer).sort().map(([v, l]) => " · " + v + ": " + l.length).join("");
   }
   tiaEl.classList.toggle("troppi", nTia > 3 || Object.values(perVer).some(l => l.length > 2));
-  if (extra.cloud_aggiornato) tiaEl.textContent += " · ☁️ thread cloud aggiornati " +
-    new Date(extra.cloud_aggiornato * 1000).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  document.querySelector("#aspettano h2").textContent = "✋ TI ASPETTANO" + (extra.cloud_aggiornato ?
+    "  ·  ☁️ thread cloud aggiornati alle " + new Date(extra.cloud_aggiornato * 1000).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) : "");
+  aspettano();
+  spia();
   document.title = (nAspetta ? `(${nAspetta}) ✋ ` : "") + "Ufficio virtuale";
   const vis = soloAttive.checked ? sessioni.filter(s => attive.includes(s.stato)) : sessioni;
   const nAttive = sessioni.filter(s => attive.includes(s.stato)).length;
@@ -231,6 +250,41 @@ function render() {
     card.append(meta);
     lista.append(card);
   }
+}
+
+// striscia in cima: chi ti aspetta, per cosa, da quanto, e dove cliccare
+function aspettano() {
+  const chi = sessioni.filter(s => s.stato === "aspetta").sort((a, b) => a.modificato - b.modificato);
+  const box = document.getElementById("aspettano"), lista = document.getElementById("aspettano-lista");
+  box.hidden = !chi.length;
+  lista.replaceChildren();
+  for (const s of chi) {
+    const riga = el("div", "attesa-riga");
+    riga.append(el("span", "t", (s.cloud ? "☁️ " : "") + (s.titolo || s.responsabile || "(senza titolo)")),
+                el("span", "cosa", s.attivita || "ti aspetta"));
+    const q = el("span", "da quando", fa(s.modificato));
+    q.dataset.ts = s.modificato;
+    riga.append(q);
+    const a = el("a", "", "Rispondi ↗");
+    a.target = "_blank"; a.rel = "noopener";
+    a.href = s.link || "/chat?id=" + encodeURIComponent(s.id);
+    a.title = s.link ? "Apre il thread su claude.ai" : "Apre la chat della sessione";
+    riga.append(a);
+    lista.append(riga);
+  }
+}
+
+// spia "posso spegnere il PC?": verde se nessun agente sta usando il PC
+function spia() {
+  const e = document.getElementById("spia");
+  const usano = [];
+  for (const s of sessioni)
+    if (!s.cloud && ["lavora", "pensa", "ferma?"].includes(s.stato)) usano.push((s.titolo || s.progetto || "sessione") + " (" + s.stato + ")");
+  if (Array.isArray(extra.tia))
+    for (const p of extra.tia) if (p.di !== "Stefano") usano.push("TIA " + p.versione + (p.progetto ? " " + p.progetto : "") + " di " + p.di);
+  e.className = "spia " + (usano.length ? "rossa" : "verde");
+  e.textContent = usano.length ? "🔴 PC in uso (" + usano.length + ")" : "🟢 puoi spegnere il PC";
+  e.title = usano.length ? "Stanno usando il PC:\n" + usano.join("\n") : "Nessun agente al lavoro sul PC e nessun TIA aperto da un agente";
 }
 
 // aggiorna i "x min fa" senza ridisegnare tutto

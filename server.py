@@ -28,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 7.9"
+VERSIONE = "task 8.0"
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
 
@@ -262,7 +262,8 @@ def _sessioni_cloud(locali):
             "thread_titolo": t.get("titolo"), "titolo": t.get("titolo") or "(thread nel cloud)",
             "responsabile": None, "stato": stato, "modificato": ts,
             "icona": "✋" if stato == "aspetta" else "☁️",
-            "attivita": testo[:1].upper() + testo[1:] if testo else "Lavora nel cloud",
+            "attivita": str(t["attesa"])[:120] if stato == "aspetta" and t.get("attesa") else
+                        (testo[:1].upper() + testo[1:] if testo else "Lavora nel cloud"),
             "progetto": "cloud", "progetto_claude": "Agente Tia portal", "chan": chan,
             "link": f"https://claude.ai/code/project/{chan}?thread={t['id']}" if chan else None,
             "voce_cloud_resp": t.get("responsabile"),
