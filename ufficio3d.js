@@ -269,11 +269,19 @@
     // aspetto ispirato alla squadra: capelli scuri o brizzolati, teste rasate, barbe, occhiali; il re ha barba scura e occhiali blu
     const PELLI = ["#f1c7a5", "#e8b896", "#d9a27c", "#c68a62"], CAPI = ["#1c1714", "#2b1d14", "#3b2a1e", "#5a3a22", "#8d8d96", "#b9b9c2"];
     const pelle = PELLI[h % PELLI.length];
-    const capelli = capo ? "#1c1714" : donna ? ["#2b1d14", "#a8743c", "#5a3a22", "#1c1714"][(h >>> 4) % 4] : CAPI[(h >>> 4) % CAPI.length];
-    const calvo = ctrl || !capo && !donna && !postino && !operaio && (h >>> 17) % (resp ? 3 : 4) === 0;
-    const barba = ctrl ? 1 : capo ? 3 : donna || postino ? 0 : resp ? [1, 2, 3, 3, 2][(h >>> 19) % 5] : (h >>> 19) % 4;   // 0 niente, 1 accenno, 2 pizzetto, 3 piena
-    const occhiali = ctrl ? null : capo ? "#1f3a8a" : !postino && !operaio && (h >>> 21) % (resp ? 2 : 3) === 0 ? ["#1c1c22", "#3b2a1e", "#1f3a8a"][(h >>> 23) % 3] : null;
+    let capelli = capo ? "#1c1714" : donna ? ["#2b1d14", "#a8743c", "#5a3a22", "#1c1714"][(h >>> 4) % 4] : CAPI[(h >>> 4) % CAPI.length];
+    let calvo = ctrl || !capo && !donna && !postino && !operaio && (h >>> 17) % (resp ? 3 : 4) === 0;
+    let barba = ctrl ? 1 : capo ? 3 : donna || postino ? 0 : resp ? [1, 2, 3, 3, 2][(h >>> 19) % 5] : (h >>> 19) % 4;   // 0 niente, 1 accenno, 2 pizzetto, 3 piena
+    let occhiali = ctrl ? null : capo ? "#1f3a8a" : !postino && !operaio && (h >>> 21) % (resp ? 2 : 3) === 0 ? ["#1c1c22", "#3b2a1e", "#1f3a8a"][(h >>> 23) % 3] : null;
     const ricci = donna && (h >>> 24) % 2 === 0;
+    // i primi cinque capi commessa hanno l'aspetto scelto da Stefano, gli altri vengono dopo, a caso
+    let rasatoCorto = false, orecchino = false, ciuffoFisso = null, coloreBarba = null;
+    const modello = resp && s.modello != null ? s.modello : -1;
+    if (modello === 0) { calvo = false; rasatoCorto = true; capelli = "#5a3a22"; barba = 4; coloreBarba = "#a8743c"; occhiali = null; }
+    if (modello === 1) { calvo = false; capelli = "#8d8d96"; barba = 3; occhiali = "#111114"; ciuffoFisso = 1; }
+    if (modello === 2) { calvo = false; capelli = "#1c1714"; barba = 5; occhiali = null; orecchino = true; ciuffoFisso = 2; }
+    if (modello === 3) { calvo = false; capelli = "#2b1d14"; barba = 4; occhiali = null; ciuffoFisso = 0; }
+    if (modello === 4) { calvo = true; barba = 2; capelli = "#1c1714"; occhiali = null; }
     const divisa = ruolo === "dip" && !donna ? ((h >>> 25) % 5 < 3 ? "polo" : (h >>> 25) % 5 === 3 ? "camicia" : null) : null;
     const maglia = ctrl ? "#f07d1e" : divisa === "polo" ? "#1f1f24" : divisa === "camicia" ? "#f4f4f2" : operaio ? "#f28c28" : postino ? "#3b6fc4" : capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
     const pantaloni = operaio ? "#3d4a5c" : postino ? "#2a3f6b" : capo ? "#7a1426" : resp ? maglia : donna ? pelle : JEANS[(h >>> 9) % JEANS.length];
@@ -349,7 +357,8 @@
       tondo(0.3, 0.025, 0.16, "#1c2f5c", 0, 0.14, -0.27, testa, 0.01);
       palla(0.035, "#f2b443", 0, 0.22, -0.28, testa, 1, 1, 0.4, { metalness: 0.5 });
     }
-    const ciuffo = postino || operaio || calvo ? -1 : h % 3;
+    if (rasatoCorto) cal.scale.set(0.97, 0.9, 0.97);
+    const ciuffo = postino || operaio || calvo || rasatoCorto ? -1 : ciuffoFisso != null ? ciuffoFisso : h % 3;
     if (ciuffo === 0) palla(0.11, capelli, -0.1, 0.2, -0.17, testa, 1.3, 0.7, 0.8);
     if (ciuffo === 1) { palla(0.09, capelli, -0.24, 0.0, 0.02, testa, 0.6, 1.4, 1); palla(0.09, capelli, 0.24, 0.0, 0.02, testa, 0.6, 1.4, 1); }
     if (ciuffo === 2) palla(0.14, capelli, 0, 0.26, 0.05, testa, 1, 0.6, 1);
@@ -363,8 +372,15 @@
     sorriso.position.set(0, -0.08, -0.255); sorriso.rotation.set(0, 0, Math.PI); testa.add(sorriso);
     const bocca_o = palla(0.03, "#8a3b3b", 0, -0.1, -0.25, testa, 1, 1.2, 0.5);
     const linea = tondo(0.07, 0.014, 0.02, "#8a3b3b", 0, -0.11, -0.255, testa, 0.006);
-    const cBarba = capelli === "#b9b9c2" || capelli === "#8d8d96" ? "#6d6d75" : capelli;
-    if (barba === 3) {                                                   // barba piena e baffi; la bocca resta davanti
+    const cBarba = coloreBarba || (capelli === "#b9b9c2" || capelli === "#8d8d96" ? "#6d6d75" : capelli);
+    if (barba === 5) {                                                   // barba lunga e piena
+      palla(0.24, cBarba, 0, -0.2, -0.1, testa, 1.15, 0.95, 1);
+      tondo(0.16, 0.035, 0.04, cBarba, 0, -0.055, -0.285, testa, 0.015);
+      for (const q of [sorriso, bocca_o, linea]) q.position.z -= 0.07;
+    } else if (barba === 4) {                                            // barba corta curata
+      palla(0.235, cBarba, 0, -0.12, -0.06, testa, 1.12, 0.66, 1.05);
+      for (const q of [sorriso, bocca_o, linea]) q.position.z -= 0.04;
+    } else if (barba === 3) {                                                   // barba piena e baffi; la bocca resta davanti
       palla(0.22, cBarba, 0, -0.15, -0.08, testa, 1.15, 0.72, 1);
       tondo(0.16, 0.035, 0.04, cBarba, 0, -0.055, -0.285, testa, 0.015);
       for (const q of [sorriso, bocca_o, linea]) q.position.z -= 0.06;
@@ -373,6 +389,9 @@
       tondo(0.12, 0.03, 0.03, cBarba, 0, -0.06, -0.27, testa, 0.012);
       for (const q of [sorriso, bocca_o, linea]) q.position.z -= 0.02;
     } else if (barba === 1) palla(0.24, cBarba, 0, -0.1, -0.05, testa, 1.12, 0.7, 1.06, { transparent: true, opacity: 0.28 });   // barba di qualche giorno
+    if (orecchino) for (const sx of [-0.27, 0.27]) {                       // dilatatore all'orecchio
+      const o = new T.Mesh(new T.TorusGeometry(0.035, 0.012, 6, 14), m("#1c1c22")); o.rotation.y = Math.PI / 2; o.position.set(sx, -0.08, 0.02); testa.add(o);
+    }
     if (ctrl) {                                                          // occhiali da vista appoggiati sulla testa
       const oc = new T.Group(); oc.position.set(0, 0.29, -0.12); oc.rotation.x = 1.0; testa.add(oc);
       for (const sx of [-0.095, 0.095]) {
@@ -673,6 +692,7 @@
     let xc = 0, profMax = UFF;
     const porte = {};
     const schedePrimaOra = new Map();
+    let nResp = 0;                                                       // ordine dei capi commessa: i primi cinque hanno l'aspetto scelto
     capi.forEach((gr, i) => {
       const [LW, LD] = dim(gr), capo = gr.chiave === "r:capo";
       profMax = Math.max(profMax, LD);
@@ -707,7 +727,7 @@
       }
       const nelVetro = gr.sessioni.filter(q => q.inUfficio);
       const stato = nelVetro.some(q => q.stato === "aspetta") ? "aspetta" : "supervisore";
-      const s = { id: "capo:" + gr.chiave, stato, colore: gr.colore };
+      const s = { id: "capo:" + gr.chiave, stato, colore: gr.colore, modello: capo ? null : nResp++ };
       const nome = capo ? "CAPO" : pulito(U.nomeIsola(gr));
       const scr = scrivania(0, capo ? 0.35 : 0.3, g, s, capo ? "capo" : "resp", nome);
       sedia(0, capo ? -0.75 : -0.65, g, gr.colore, capo);
