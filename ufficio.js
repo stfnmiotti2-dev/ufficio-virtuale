@@ -23,7 +23,11 @@
   let t = 0;                                           // fotogramma corrente
   const arrivo = new Map();                            // id sessione -> ordine di arrivo (posto stabile nell'isola)
   let nArrivi = 0;
-  const ISOLA_H = 14;                                  // spazio per il cartello sopra ogni isola
+  const ISOLA_H = 14;
+  const UFF_W = SLOT_W + 8, UFF_H = SLOT_H + 8;      // ufficio a vetri di capo e responsabili
+  const COLORI_ISOLE = ["#5aa9f0", "#4cc38a", "#d65a9a", "#e0913a", "#8e5bd0", "#2fa7a0", "#c9c24a"];
+  const ORO = "#e0b040";
+  let uffici = [];                                     // [{x, y, colore, s}] da animare                                  // spazio per il cartello sopra ogni isola
   const zone = new Map();                              // id sessione -> div cliccabile con fumetto
 
   function hash(s) {
@@ -98,13 +102,17 @@
 
   // ---------- un posto di lavoro ----------
   function posto(x, y, s) {
-    const presente = PRESENTI.includes(s.stato);
+    const presente = PRESENTI.includes(s.stato) || s.stato === "supervisore";
     const h = hash(s.id);
     // tappetino sotto la sedia
     r(x + 16, y + 40, 32, 10, "rgba(0,0,0,.12)");
     // schienale della sedia
     r(x + 24, y + 13, 16, 17, "#2b2f3b"); r(x + 25, y + 14, 14, 15, "#3a3f4e");
     if (presente) omino(x + 26, y + 9, h, s.stato);
+    if (s.capo) {                                     // cravatta e corona del capo
+      r(x + 31, y + 23, 2, 4, "#b8322a");
+      r(x + 28, y + 6, 8, 2, ORO); r(x + 28, y + 4, 2, 2, ORO); r(x + 31, y + 3, 2, 3, ORO); r(x + 34, y + 4, 2, 2, ORO);
+    }
     // scrivania
     r(x + 6, y + 29, 52, 4, "#c99a62");
     r(x + 6, y + 33, 52, 11, "#a87c4b");
@@ -118,7 +126,7 @@
     r(x + 16, y + 26, 4, 3, "#1d2029");
     r(x + 13, y + 28, 10, 1, "#1d2029");
     if (acceso) {                                     // luce dello schermo sul bordo
-      const c = COLORI_STATO[s.stato];
+      const c = s.colore || COLORI_STATO[s.stato];
       ctx.globalAlpha = s.stato === "lavora" ? 0.75 + 0.25 * ((t + h) % 3 === 0) : 0.6 + 0.4 * Math.abs(Math.sin(t / FPS));
       r(x + 8, y + 12, 18, 1, c); r(x + 8, y + 12, 1, 14, c); r(x + 25, y + 12, 1, 14, c);
       ctx.globalAlpha = 1;
@@ -156,6 +164,9 @@
     } else if (stato === "pensa") {                   // mano sotto il mento
       r(x0 - 3, y0 + 15, 3, 6, maglia); r(x0 - 3, y0 + 20, 3, 1, pelle);
       r(x0 + 12, y0 + 14, 3, 5, maglia); r(x0 + 9, y + 12, 4, 2, pelle);
+    } else if (stato === "supervisore") {             // mani sulla scrivania, controlla
+      r(x0 - 3, y0 + 15, 3, 6, maglia); r(x0 - 3, y0 + 20, 3, 1, pelle);
+      r(x0 + 12, y0 + 15, 3, 6, maglia); r(x0 + 12, y0 + 20, 3, 1, pelle);
     } else if (stato === "ferma?") {                  // tamburella con le dita
       const tic = Math.floor((t + fase) / 3) % 2;
       r(x0 - 3, y0 + 15, 3, 6, maglia); r(x0 - 3, y0 + 20, 3, 1, pelle);
@@ -173,7 +184,8 @@
     // occhi
     const ammicca = (t + fase * 3) % (FPS * 4) === 0;          // una volta ogni 4 secondi
     let ox = 0;
-    if (stato === "ferma?") ox = [0, 0, -1, -1, 0, 0, 1, 1][Math.floor((t + fase) / 5) % 8];   // si guarda intorno
+    if (stato === "ferma?" || stato === "supervisore")
+      ox = [0, 0, -1, -1, 0, 0, 1, 1][Math.floor((t + fase) / (stato === "supervisore" ? 9 : 5)) % 8];   // si guarda intorno
     if (stato === "pensa") ox = 1;                             // occhi in alto a destra
     if (dorme || ammicca) { r(x + 3, y + 8, 2, 1, "#2a2a2a"); r(x + 7, y + 8, 2, 1, "#2a2a2a"); }
     else {
@@ -193,6 +205,34 @@
       r(zx, zy, 3, 1, "#e8ecf4"); r(zx + 1, zy + 1, 1, 1, "#e8ecf4"); r(zx, zy + 2, 3, 1, "#e8ecf4");
     }
     ctx.globalAlpha = 1;
+  }
+
+  // ---------- uffici a vetri ----------
+  function pavimentoUfficio(x, y, colore) {          // nello sfondo: moquette e parete di fondo
+    r(x, y, UFF_W, UFF_H, "#4a5168");
+    for (let yy = y + 12; yy < y + UFF_H; yy += 4) r(x, yy, UFF_W, 1, "#454c62");
+    r(x, y, UFF_W, 10, "#5a6380");                    // parete di fondo
+    r(x + 4, y + 2, 14, 6, "#2f3442"); r(x + 5, y + 3, 12, 4, colore);   // quadro col colore dell'isola
+    r(x + UFF_W - 10, y + 12, 6, 6, "#b85c38"); r(x + UFF_W - 9, y + 5, 2, 7, "#2f7a3a");
+    r(x + UFF_W - 12, y + 5, 4, 3, "#3f9a4a"); r(x + UFF_W - 7, y + 3, 4, 3, "#4caf55");  // pianta
+  }
+  function vetrate(x, y, colore) {                   // davanti all'omino, a ogni fotogramma
+    const vetro = "rgba(170,215,245,.22)", telaio = "#8a93a8";
+    r(x, y, 2, UFF_H, vetro); r(x + UFF_W - 2, y, 2, UFF_H, vetro);           // pareti laterali
+    r(x, y, 1, UFF_H, telaio); r(x + UFF_W - 1, y, 1, UFF_H, telaio);
+    r(x, y, UFF_W, 1, telaio);
+    const porta = x + UFF_W - 22;                                             // porta aperta a destra
+    r(x, y + UFF_H - 12, porta - x, 12, vetro);                               // vetrata davanti
+    r(x, y + UFF_H - 12, porta - x, 1, telaio); r(x, y + UFF_H - 1, UFF_W, 1, telaio);
+    r(porta, y + UFF_H - 12, 1, 12, telaio); r(porta + 14, y + UFF_H - 12, 1, 12, telaio);
+    r(porta + 14, y + UFF_H - 12, UFF_W - 14 - (porta - x), 12, vetro);
+    // riflessi che scorrono piano sul vetro
+    const k = Math.floor(t / 3) % (UFF_W + 20);
+    for (const d of [0, 5]) {
+      const rx = x + ((k + d) % (porta - x + 6));
+      if (rx < porta - 2) { ctx.globalAlpha = .35; r(rx, y + UFF_H - 11, 1, 10, "#ffffff"); r(rx + 2, y + UFF_H - 11, 1, 10, "#ffffff"); ctx.globalAlpha = 1; }
+    }
+    r(x + 1, y + 1, UFF_W - 2, 1, colore);            // fascia colorata in alto
   }
 
   // ---------- fumetti ed etichette ----------
@@ -240,9 +280,12 @@
     return "🗂️ Altre sessioni";
   }
 
-  function cartello(gr, x, y, w, scala) {
+  function cartello(gr, x, y, w, scala, ufficio) {
     const c = document.createElement("div");
-    c.className = "cartello";
+    c.className = "cartello" + (ufficio ? " ufficio" : "");
+    const pallino = document.createElement("span");
+    pallino.className = "pallino"; pallino.style.background = gr.colore;
+    c.append(pallino);
     Object.assign(c.style, { left: x * scala + "px", top: y * scala + "px", width: w * scala + "px" });
     c.append(document.createTextNode(nomeIsola(gr)));
     const s = gr.s0;
@@ -276,10 +319,26 @@
     const disp = (wrap.clientWidth || 1000) - 40;   // tolgo il padding laterale
     const scala = Math.max(2, Math.min(3, Math.floor(disp / (4 * SLOT_W + 2 * MARGINE))));
     const colonne = Math.max(2, Math.min(6, Math.floor((disp / scala - 2 * MARGINE + 8) / (SLOT_W + 8))));
-    // posizioni: le isole si affiancano finche' c'e' posto, poi vanno a capo
+    // colore per ogni isola: oro per il capo, poi a giro
+    let ci = 0;
+    for (const gr of gruppi) gr.colore = gr.chiave === "r:capo" ? ORO : gr.chiave === "altro" ? "#8b90a3" : COLORI_ISOLE[ci++ % COLORI_ISOLE.length];
+    // 1) direzione: uffici a vetri in fila sotto il muro (capo e responsabili)
     const GAP = 8;
+    const capi = gruppi.filter(gr => gr.chiave !== "altro");
+    const perFila = Math.max(1, Math.floor((colonne * SLOT_W + (colonne - 1) * GAP + GAP) / (UFF_W + GAP)));
+    uffici = [];
+    let y = MURO + 14;
+    capi.forEach((gr, i) => {
+      const ux = MARGINE + (i % perFila) * (UFF_W + GAP), uy = y + Math.floor(i / perFila) * (UFF_H + ISOLA_H);
+      uffici.push({ gr, x: ux, y: uy, colore: gr.colore,
+                    s: { id: "capo:" + gr.chiave, stato: "supervisore", colore: gr.colore, capo: gr.chiave === "r:capo" } });
+    });
+    if (capi.length) y += Math.ceil(capi.length / perFila) * (UFF_H + ISOLA_H);
+    const corridoio = y;
+    y += 10;
+    // 2) open space: le scrivanie delle sessioni, raggruppate per responsabile
     const pos = new Map(), aree = [];
-    let y = MURO + 8, x = MARGINE, hRiga = 0;
+    let x = MARGINE, hRiga = 0;
     const largMax = colonne * SLOT_W + (colonne - 1) * GAP;
     for (const gr of gruppi) {
       const perRiga = Math.min(colonne, gr.sessioni.length);
@@ -302,14 +361,30 @@
     sfondo.width = W; sfondo.height = H;
     ctx = sfondo.getContext("2d");
     stanza(W, H);
-    for (const a of aree) {                         // tappeto colorato sotto ogni isola
-      const capo = a.gr.chiave === "r:capo";
-      r(a.x - 2, a.y + 2, a.w + 4, a.h - 2, capo ? "rgba(214,170,60,.28)" : "rgba(60,90,140,.22)");
-      r(a.x - 2, a.y + 2, a.w + 4, 1, capo ? "rgba(255,215,110,.5)" : "rgba(140,170,220,.35)");
+    if (capi.length) {                              // corridoio tra direzione e open space
+      r(0, corridoio + 2, W, 5, "#6d5a46"); r(0, corridoio + 2, W, 1, "#5c4a39");
+      for (let cx = 6; cx < W; cx += 14) r(cx, corridoio + 4, 6, 1, "#8a7660");
+    }
+    for (const u of uffici) pavimentoUfficio(u.x, u.y + ISOLA_H, u.colore);
+    for (const a of aree) {                         // tappeto col colore del responsabile
+      ctx.globalAlpha = .22; r(a.x - 2, a.y + 2, a.w + 4, a.h - 2, a.gr.colore);
+      ctx.globalAlpha = .6; r(a.x - 2, a.y + 2, a.w + 4, 1, a.gr.colore); ctx.globalAlpha = 1;
     }
     ctx = g;
-    for (const c of strato.querySelectorAll(".cartello")) c.remove();
-    for (const a of aree) cartello(a.gr, a.x, a.y + 3, a.w, scala);
+    for (const c of strato.querySelectorAll(".cartello, .cartello-click")) c.remove();
+    for (const u of uffici) {
+      cartello(u.gr, u.x, u.y + 2, UFF_W, scala, true);
+      const s0 = u.gr.s0;
+      const link = u.gr.chiave === "r:capo" && s0.chan ? "https://claude.ai/code/project/" + s0.chan : s0.link;
+      const porta = document.createElement("div");
+      porta.className = "posto cartello-click";
+      Object.assign(porta.style, { left: u.x * scala + "px", top: (u.y + ISOLA_H) * scala + "px",
+                                   width: UFF_W * scala + "px", height: UFF_H * scala + "px" });
+      porta.title = link ? "Apri la chat di " + (u.gr.chiave === "r:capo" ? "Capo" : (s0.responsabile || "questo responsabile")) + " su claude.ai" : "";
+      if (link) porta.onclick = () => window.open(link, "_blank", "noopener");
+      strato.append(porta);
+    }
+    for (const a of aree) cartello(a.gr, a.x, a.y + 3, a.w, scala, false);
     const scelte = gruppi.flatMap(gr => gr.sessioni);
 
     posti = [];
@@ -361,6 +436,10 @@
     g.imageSmoothingEnabled = false;
     g.drawImage(sfondo, 0, 0);
     nuvoleEOrologio();
+    for (const u of uffici) {
+      posto(u.x + 4, u.y + ISOLA_H + 6, u.s);
+      vetrate(u.x, u.y + ISOLA_H, u.colore);
+    }
     for (const p of posti) posto(p.x, p.y, p.s);
   }
 
