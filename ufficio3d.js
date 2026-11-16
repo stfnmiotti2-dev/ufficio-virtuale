@@ -827,7 +827,7 @@
     attiva(si) { attivo = si; if (si) misura(); },
     inquadra,
     camera, controlli,
-    provaCantiere(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); cantieri.set(ids[n || 0], performance.now() / 1000); cantieri.set("capo:r:24_247 op21", performance.now() / 1000); if (ultimiDati) costruisci(...ultimiDati); },
+    provaCantiere(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); cantieri.set(ids[n || 0], performance.now() / 1000); const uf = [...bersagli.keys()].filter(k => k.startsWith("capo:") && k !== "capo:r:capo"); if (uf.length) cantieri.set(uf[uf.length - 1], performance.now() / 1000); if (ultimiDati) costruisci(...ultimiDati); },
     provaPostino(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); avviaPostino(ids[n || 0]); },
     get postini() { return postini.map(p => [p.id, p.g && p.g.position.x, p.g && p.g.position.z, !!(p.g && p.g.parent)]); },
     caffeSubito() { for (const a of animati) a.userData.prossimoT = 0; },   // per le prove
