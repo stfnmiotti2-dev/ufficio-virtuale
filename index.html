@@ -83,7 +83,10 @@
   .cartello a:hover { text-decoration: underline; }
   .cartello button { background: none; border: 0; cursor: pointer; font-size: 12px; padding: 0; opacity: .7; }
   .cartello button:hover { opacity: 1; }
-  .riepilogo { position: absolute; text-align: center; z-index: 4; pointer-events: auto;
+  .fumetto.st-allarme { background: #ff2b2b; color: #fff; border-color: #700; animation: chiama .6s infinite; }
+  .tia { font-size: 12.5px; padding: 2px 8px; border-radius: 10px; background: #2b2f3b; color: var(--text); }
+  .tia.troppi { background: #5a1f1f; color: #ffb3b3; }
+  .riepilogo { white-space: pre-line; position: absolute; text-align: center; z-index: 4; pointer-events: auto;
                font: 700 11.5px/1.2 "Segoe UI", system-ui, sans-serif; color: #fff; text-shadow: 0 1px 2px #000; }
   .riepilogo.chiama { color: #ffb3b3; }
   .targa { position: absolute; left: 0; right: 0; bottom: 2px; text-align: center; color: #fff;
@@ -97,6 +100,7 @@
 <header>
   <h1>Ufficio virtuale</h1>
   <span class="conta" id="conta"></span>
+  <span class="tia" id="tia" title="Stima dalle sessioni delle ultime 2 ore: TIA aperti e non ancora chiusi. Regola: massimo 2 per versione e 3 in totale."></span>
   <label><input type="checkbox" id="soloAttive"> solo attive</label>
   <span class="live" id="live">non collegato</span>
   <span class="conta" id="versione" style="font-size:12px">server: versione vecchia</span>
@@ -144,6 +148,14 @@ function render() {
   // chi aspetta te viene sempre per primo
   sessioni = [...sessioni].sort((a, b) => (b.stato === "aspetta") - (a.stato === "aspetta"));
   const nAspetta = sessioni.filter(s => s.stato === "aspetta").length;
+  // TIA aperti (stima): sessioni delle ultime 2 ore con un TIA aperto e non chiuso
+  const recenti = sessioni.filter(s => s.tia && Date.now() / 1000 - s.modificato < 7200);
+  const perVer = {};
+  for (const s of recenti) perVer[s.tia.versione || "?"] = (perVer[s.tia.versione || "?"] || 0) + 1;
+  const tiaEl = document.getElementById("tia");
+  tiaEl.textContent = "TIA aperti: " + recenti.length + "/3" +
+    Object.entries(perVer).sort().map(([v, n]) => " · " + v + ": " + n).join("");
+  tiaEl.classList.toggle("troppi", recenti.length > 3 || Object.values(perVer).some(n => n > 2));
   document.title = (nAspetta ? `(${nAspetta}) ✋ ` : "") + "Ufficio virtuale";
   const vis = soloAttive.checked ? sessioni.filter(s => attive.includes(s.stato)) : sessioni;
   const nAttive = sessioni.filter(s => attive.includes(s.stato)).length;
@@ -167,7 +179,11 @@ function render() {
     card.append(top, el("div", "titolo", s.titolo || "(senza titolo)"));
     const lavoro = el("div", "lavoro");
     if (s.commessa) lavoro.append(el("span", "commessa", "📌 " + s.commessa));
-    if (s.progetto_tia) lavoro.append(el("span", "", "🧩 " + s.progetto_tia));
+    if (s.progetto_tia) lavoro.append(el("span", "", "🧩 " + s.progetto_tia + (s.tia && s.tia.versione ? " · " + s.tia.versione : "")));
+    if (s.compilazione) lavoro.append(el("span", "", s.compilazione.errori === 0 ? "✅ compila"
+      : "❌ " + (s.compilazione.errori > 0 ? s.compilazione.errori + " errori" : "errori")));
+    if (s.plcsim) lavoro.append(el("span", "", "🧪 PLCSIM attivo"));
+    if (s.download) lavoro.append(el("span", "commessa", "🚨 download sul PLC!"));
     if (s.progetto_claude) lavoro.append(el("span", "", "🗂️ " + s.progetto_claude));
     if (s.link) {
       const a = el("a", "link", "apri su claude.ai ↗");

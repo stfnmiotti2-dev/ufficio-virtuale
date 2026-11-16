@@ -28,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 7.5"
+VERSIONE = "task 7.6"
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
 
@@ -102,21 +102,34 @@ def _con_nomi(sessions):
       "cmsg_...": "24_247 op20"                                   (il thread e' un responsabile)
       "cmsg_...": {"titolo": "Correggi MSG_104", "responsabile": "24_247 op20"}"""
     nomi = _nomi_isole()
+    # titolo del thread -> titolo del suo responsabile (anche per le sessioni con la riga "Thread:")
+    per_titolo = {"capo": "Capo"}
+    for v in nomi.values():
+        if isinstance(v, str):
+            per_titolo[v.strip().lower()] = v
+        elif isinstance(v, dict) and v.get("titolo"):
+            per_titolo[str(v["titolo"]).strip().lower()] = v.get("responsabile") or v["titolo"]
     out = []
     for s in sessions:
         s = dict(s)
+        titolo_thread, resp = s.get("thread_titolo"), None
         voce = nomi.get(s.get("thread"))
-        if isinstance(voce, str):
-            voce = {"responsabile": voce}
-        if isinstance(voce, dict):
-            if voce.get("titolo"):
-                s["titolo"] = str(voce["titolo"])[:90]       # il titolo vero della chat
-            resp = voce.get("responsabile") or voce.get("titolo")
-            if resp and not s.get("responsabile"):
-                s["responsabile"] = str(resp)[:60]
-        m = scanner._COMMESSA.search(s.get("responsabile") or "")
-        if m:
-            s["commessa"] = m.group(1)
+        if isinstance(voce, str):                       # il thread e' un responsabile
+            titolo_thread, resp = titolo_thread or voce, voce
+        elif isinstance(voce, dict):
+            titolo_thread = voce.get("titolo") or titolo_thread
+            resp = voce.get("responsabile")
+        if titolo_thread and not resp:
+            resp = per_titolo.get(titolo_thread.strip().lower(), titolo_thread)
+        if titolo_thread and titolo_thread.strip().lower() != "capo":
+            s["titolo"] = str(titolo_thread)[:90]       # il titolo vero della chat
+        if resp:
+            s["responsabile"] = "Capo" if str(resp).strip().lower() == "capo" else str(resp)[:60]
+        for fonte in (titolo_thread, s.get("responsabile")):
+            m = scanner._COMMESSA.search(fonte or "")
+            if m:
+                s["commessa"] = m.group(1)
+                break
         out.append(s)
     return out
 

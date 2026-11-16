@@ -149,7 +149,7 @@ def session_meta(path, max_bytes=32 * 1024 * 1024):
     - commessa: il primo codice tipo 24_247 nei messaggi della persona.
     Legge riga per riga: le righe possono essere enormi (screenshot in base64)."""
     meta = {"cwd": None, "titolo": None, "progetto_claude": None, "chan": None,
-            "thread": None, "commessa": None, "responsabile": None, "remoto": False}
+            "thread": None, "commessa": None, "thread_titolo": None, "remoto": False}
     first, title, thread_title, read = None, None, None, 0
     with open(path, "rb") as f:
         for raw in f:
@@ -178,7 +178,7 @@ def session_meta(path, max_bytes=32 * 1024 * 1024):
                 if m:
                     meta["thread"] = m.group(1).decode()
             done = (thread_title or title) and meta["chan"] and meta["thread"] and meta["commessa"] \
-                and meta["responsabile"]
+                and meta["thread_titolo"]
             if done:
                 break
             if b'"type":"user"' not in raw and b'"type": "user"' not in raw and meta["cwd"] is not None:
@@ -199,8 +199,8 @@ def session_meta(path, max_bytes=32 * 1024 * 1024):
             # riga "Thread: 24_247 op20" messa dal thread che ha aperto la sessione
             m = _RESPONSABILE.search(t)
             if m:
-                if meta["responsabile"] is None:
-                    meta["responsabile"] = _short(m.group(1), 60)
+                if meta["thread_titolo"] is None:
+                    meta["thread_titolo"] = _short(m.group(1), 90)
                 t = _RESPONSABILE.sub("", t).strip()
                 if not t:
                     continue
@@ -225,6 +225,32 @@ def _cwd_of(raw):
         return json.loads(raw).get("cwd")
     except ValueError:
         return None
+
+
+_VERSIONE_TIA = re.compile(r"\.ap(\d{2})\b", re.I)
+_ERRORI = re.compile(r"(\d+)\s*(?:errori|errors?|error\(s\))\b|\"?errors?\"?\s*[:=]\s*(\d+)", re.I)
+_AVVISI = re.compile(r"(\d+)\s*(?:avvisi|warnings?)\b|\"?warnings?\"?\s*[:=]\s*(\d+)", re.I)
+
+
+def _versione_tia(inp):
+    v = str(inp.get("version") or inp.get("versione") or "")
+    m = re.search(r"(\d{2})", v)
+    if m:
+        return "V" + m.group(1)
+    m = _VERSIONE_TIA.search(str(inp.get("path") or inp.get("name") or inp.get("file_path") or ""))
+    return "V" + m.group(1) if m else None
+
+
+def _esito_compilazione(testo):
+    """{"errori": n, "avvisi": n} da un risultato di compilazione; errori -1 = falliti, numero ignoto."""
+    m = _ERRORI.search(testo)
+    a = _AVVISI.search(testo)
+    avvisi = int(next(g for g in a.groups() if g)) if a else 0
+    if m:
+        return {"errori": int(next(g for g in m.groups() if g)), "avvisi": avvisi}
+    if re.search(r"\b(error|errore|failed|fallit)", testo, re.I):
+        return {"errori": -1, "avvisi": avvisi}
+    return {"errori": 0, "avvisi": avvisi}
 
 
 ASPETTA_ORE = 12            # oltre, una domanda senza risposta non conta piu'
@@ -286,10 +312,11 @@ def analyze(path):
     info["commessa"] = meta["commessa"]
     info["link"] = meta.get("link")
     info["thread"], info["chan"] = meta["thread"], meta["chan"]
-    info["responsabile"] = meta["responsabile"]
+    info["thread_titolo"] = meta["thread_titolo"]    # dalla riga "Thread: ..." (il responsabile lo trova il server)
+    info["responsabile"] = None
     info["remoto"] = meta["remoto"]
-    m = _COMMESSA.search(meta["responsabile"] or "")
-    if m:                                   # la commessa del responsabile vince
+    m = _COMMESSA.search(meta["thread_titolo"] or "")
+    if m:                                   # la commessa del titolo del thread vince
         info["commessa"] = m.group(1)
     # titoli espliciti (rinomina della sessione o riassunto), se presenti
     for rec in head + tail:
@@ -309,6 +336,11 @@ def analyze(path):
     domanda = None              # domanda nell'ultimo messaggio dell'agente alla persona
     decisione = None            # decisione chiesta dopo l'ultimo messaggio della persona
     usa_messaggi = False        # l'agente parla con uno strumento (post_message): il testo libero non si vede
+    tia = None                  # {"versione": "V18"} se l'ultimo evento TIA e' un'apertura
+    plcsim = False
+    compilazioni = {}           # id tool_use -> True
+    info["compilazione"] = None
+    info["download"] = None
     for rec in tail:
         if rec.get("isSidechain") or rec.get("type") not in ("user", "assistant"):
             continue
@@ -340,6 +372,22 @@ def analyze(path):
                         info["progetto_tia"] = re.sub(r"\.(ap|zap)\d+$", "", p_tia, flags=re.I)
                     icon, text = etichette.label(b.get("name", "?"), b.get("input"))
                     info["ultimo_strumento"] = f"{icon} {text}"
+                    corto_nome = etichette.short_name(b.get("name", "")).lower()
+                    azione = str(inp.get("action") or "").lower()
+                    if corto_nome == "tia_session" and azione in ("launch", "connect", "start", "open"):
+                        tia = {"versione": _versione_tia(inp) or (tia or {}).get("versione")}
+                    elif corto_nome in ("tia_project", "open_project") and azione in ("open", "retrieve", "create", ""):
+                        if corto_nome == "open_project" or azione:
+                            tia = {"versione": _versione_tia(inp) or (tia or {}).get("versione")}
+                    elif (corto_nome == "tia_session" and azione in ("close", "exit", "quit", "kill", "disconnect", "stop")) \
+                            or corto_nome == "close_project" or (corto_nome == "tia_project" and azione == "close"):
+                        tia = None
+                    if corto_nome == "tia_sim" and azione in ("start", "stop"):
+                        plcsim = azione == "start"
+                    if corto_nome == "tia_online" and azione == "download":
+                        info["download"] = ts or time.time()
+                    if (corto_nome == "tia_plc" and azione in ("compile", "write_source")) or corto_nome == "compile_check":
+                        compilazioni[b.get("id")] = True
                     if not commessa_strumenti:          # es. D:\\Commesse\\24_247\\progetto.ap18
                         percorsi = " ".join(str(v) for k, v in inp.items()
                                             if isinstance(v, str) and ("path" in k.lower() or k in ("name", "project")))
@@ -350,6 +398,10 @@ def analyze(path):
             for b in content:
                 if isinstance(b, dict) and b.get("type") == "tool_result":
                     pending.pop(b.get("tool_use_id"), None)
+                    if compilazioni.pop(b.get("tool_use_id"), None):
+                        c = b.get("content")
+                        testo = c if isinstance(c, str) else json.dumps(c, ensure_ascii=False)
+                        info["compilazione"] = dict(_esito_compilazione(testo), ts=ts)
         if rec["type"] == "assistant" or _is_real_prompt(rec) or isinstance(content, list):
             last = rec
 
@@ -361,6 +413,8 @@ def analyze(path):
             if m:
                 info["commessa"] = m.group(1)
 
+    info["tia"] = tia
+    info["plcsim"] = plcsim
     mtime = path.stat().st_mtime
     age_min = (time.time() - mtime) / 60
     if last is None:

@@ -24,6 +24,7 @@
   const arrivo = new Map();                            // id sessione -> ordine di arrivo (posto stabile nell'isola)
   let nArrivi = 0;
   const ISOLA_H = 14;
+  const RIEPILOGO_H = 12;                              // due righe di riepilogo sotto ogni ufficio
   const UFF_W = SLOT_W + 8, UFF_H = SLOT_H + 8;      // ufficio a vetri di capo e responsabili
   const COLORI_ISOLE = ["#5aa9f0", "#4cc38a", "#d65a9a", "#e0913a", "#8e5bd0", "#2fa7a0", "#c9c24a"];
   const ORO = "#e0b040";
@@ -136,6 +137,13 @@
     r(x + 52, y + 26, 1, 2, "#bbb");
     r(x + 38, y + 27, 8, 2, "#f4f4f0"); r(x + 39, y + 26, 7, 1, "#e6e6df");
     if (s.commessa) r(x + 27, y + 36, 12, 4, "#f2c66d");   // targhetta della commessa
+    if (s.plcsim) {                                   // scatolina PLCSIM con il led che lampeggia
+      r(x + 1, y + 23, 6, 6, "#2d6b8c"); r(x + 2, y + 24, 4, 2, "#9fd2f0");
+      r(x + 2, y + 27, 1, 1, (t + h) % 4 < 2 ? "#5cff7a" : "#1d5a2a");
+    }
+    if (s.download && Math.floor(t / 2) % 2) {        // lampeggiante rosso: download sul PLC
+      r(x + 29, y + 1, 6, 3, "#ff2b2b"); r(x + 30, y, 4, 1, "#ff8080");
+    }
   }
 
   function omino(x0, y0, h, stato) {
@@ -240,8 +248,21 @@
     if (s.stato === "aspetta") return ["✋", s.attivita || "Aspetta te"];
     if (s.stato === "pensa") return ["💭", "Sta pensando…"];
     if (s.stato === "finito") return ["✅", "Ha finito"];
-    if (s.stato === "ferma?") return ["⏳", s.attivita ? "Fermo su: " + s.attivita : "Fermo da un po'"];
+    if (s.download) return ["🚨", "DOWNLOAD SUL PLC: anomalia!"];
+    if (s.stato === "ferma?") {
+      const min = Math.max(1, Math.round((Date.now() / 1000 - s.modificato) / 60));
+      return ["⏳", "Fermo da " + min + " min" + (s.attivita ? " · " + s.attivita : "")];
+    }
     return [s.icona || "💬", s.attivita || "Lavora"];
+  }
+  function targa(s) {                                 // progetto TIA, versione, esito compilazione
+    if (!s.progetto_tia && !s.tia && !s.compilazione) return "";
+    const parti = [];
+    if (s.progetto_tia) parti.push("🧩 " + corto(s.progetto_tia, 20));
+    if (s.tia && s.tia.versione) parti.push(s.tia.versione);
+    const c = s.compilazione;
+    if (c) parti.push(c.errori === 0 ? "✅" : "❌" + (c.errori > 0 ? c.errori : ""));
+    return parti.join(" ");
   }
   function corto(t, n) { return t.length > n ? t.slice(0, n - 1) + "…" : t; }
 
@@ -298,7 +319,8 @@
     if (n(["lavora", "pensa"])) parti.push("⚙️ " + n(["lavora", "pensa"]));
     if (n(["ferma?"])) parti.push("⏳ " + n(["ferma?"]));
     if (n(["finito", "inattiva", "vuota"])) parti.push("💤 " + n(["finito", "inattiva", "vuota"]));
-    return parti.join(" · ");
+    const ultimo = gr.sessioni.filter(s => s.progetto_tia).sort((a, b) => b.modificato - a.modificato)[0];
+    return parti.join(" · ") + (ultimo ? "\n🧩 " + corto(ultimo.progetto_tia, 26) : "");
   }
 
   function cartello(gr, x, y, w, scala, ufficio) {
@@ -330,11 +352,11 @@
       st.className = "riepilogo";
       st.textContent = riepilogo(gr);
       st.title = "✋ ti aspettano · ⚙️ lavorano · ⏳ fermi da un po' · 💤 hanno finito";
-      Object.assign(st.style, { left: x * scala + "px", top: (y + ISOLA_H + UFF_H - 4) * scala + "px", width: w * scala + "px" });
+      Object.assign(st.style, { left: x * scala + "px", top: (y + ISOLA_H + UFF_H + 1) * scala + "px", width: w * scala + "px" });
       if (gr.sessioni.some(q => q.stato === "aspetta")) st.classList.add("chiama");
       strato.append(st);
     }
-    if (s.thread && gr.chiave !== "r:capo" && gr.sessioni.length === 1) {   // il nome vale per un thread
+    if (s.thread && !gr.chiave.startsWith("r:") && gr.sessioni.length === 1) {   // il nome vale per un thread
       const b = document.createElement("button");
       b.textContent = "✏️";
       b.title = "Dai un nome a questo responsabile (es. 24_247 op20)";
@@ -366,11 +388,11 @@
     uffici = [];
     let y = MURO + 14;
     capi.forEach((gr, i) => {
-      const ux = MARGINE + (i % perFila) * (UFF_W + GAP), uy = y + Math.floor(i / perFila) * (UFF_H + ISOLA_H);
+      const ux = MARGINE + (i % perFila) * (UFF_W + GAP), uy = y + Math.floor(i / perFila) * (UFF_H + ISOLA_H + RIEPILOGO_H);
       uffici.push({ gr, x: ux, y: uy, colore: gr.colore,
                     s: { id: "capo:" + gr.chiave, stato: "supervisore", colore: gr.colore, capo: gr.chiave === "r:capo" } });
     });
-    if (capi.length) y += Math.ceil(capi.length / perFila) * (UFF_H + ISOLA_H);
+    if (capi.length) y += Math.ceil(capi.length / perFila) * (UFF_H + ISOLA_H + RIEPILOGO_H);
     const corridoio = y;
     y += 10;
     // 2) open space: le scrivanie delle sessioni, raggruppate per responsabile
@@ -450,11 +472,11 @@
       if (f.dataset.testo !== nuovo) {                // il fumetto "salta fuori" solo quando cambia
         f.dataset.testo = nuovo;
         f.textContent = nuovo;
-        f.className = presente ? "fumetto st-" + s.stato.replace("?", "") : "";
+        f.className = presente ? "fumetto st-" + (s.download ? "allarme" : s.stato.replace("?", "")) : "";
         f.style.display = presente ? "" : "none";
         if (presente) { f.classList.remove("pop"); void f.offsetWidth; f.classList.add("pop"); }
       }
-      zona.lastChild.textContent = corto((s.progetto_tia ? "🧩 " + s.progetto_tia : (s.titolo || s.progetto || "")), 30)
+      zona.lastChild.textContent = targa(s) || corto((s.progetto_tia ? "🧩 " + s.progetto_tia : (s.titolo || s.progetto || "")), 30)
         + (s.sotto_agenti ? " 👥" + s.sotto_agenti : "");
     }
     for (const [id, zona] of zone) if (!visti.has(id)) { zona.remove(); zone.delete(id); }
