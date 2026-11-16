@@ -28,7 +28,8 @@ HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 8.1"
+VERSIONE = "task 8.2"
+FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
 
@@ -422,7 +423,9 @@ def _watcher(hours):
     while True:
         try:
             locali = _scan(hours)
-            sessions = _con_nomi(locali + _sessioni_cloud(locali))
+            # regola di Stefano: chi e' fermo da 48 ore o piu' non si mostra (i responsabili restano, dagli uffici)
+            limite = time.time() - FERMI_ORE * 3600
+            sessions = [s for s in _con_nomi(locali + _sessioni_cloud(locali)) if s.get("modificato", 0) >= limite]
             data = json.dumps(sessions, ensure_ascii=False).encode("utf-8")
             extra = json.dumps(_extra(sessions), ensure_ascii=False).encode("utf-8")
             with _cond:
