@@ -166,6 +166,7 @@
   <span class="spia" id="spia"></span>
   <label title="Prova della versione 3D: trascina per girare, rotella per lo zoom"><input type="checkbox" id="vista3d"> 3D</label>
   <button id="demo3d" hidden title="Fa partire subito pausa caffè, bussate, postino con ordini e cantiere, per vederli senza aspettare">🎬 Prova animazioni</button>
+  <button id="visuale3d" hidden title="Riporta la visuale 3D a quella iniziale (anche: doppio clic sull'ufficio)">🎯 Visuale iniziale</button>
   <label><input type="checkbox" id="soloAttive"> solo attive</label>
   <label title="Di base i link aprono l'app Claude per PC. Spunta se preferisci il browser."><input type="checkbox" id="linkBrowser"> link nel browser</label>
   <span class="live" id="live">non collegato</span>
@@ -396,6 +397,7 @@ function disegnaUfficio() {
   document.getElementById("ufficio3d").hidden = !tre;
   if (window.Ufficio3D) Ufficio3D.attiva(tre);
   document.getElementById("demo3d").hidden = !tre;
+  document.getElementById("visuale3d").hidden = !tre;
   document.body.classList.toggle("tre", tre);
   const dash = document.getElementById("commesse");                      // in 3D la dashboard sta sotto l'ufficio, al posto delle schede
   if (tre) document.getElementById("ufficio3d").after(dash); else document.getElementById("ufficio").before(dash);
@@ -419,6 +421,7 @@ document.addEventListener("fullscreenchange", () => {
   btnIntero.textContent = si ? "🗗" : "⛶";
   btnIntero.title = si ? "Torna alla finestra (Esc)" : "Schermo intero (F11): ricliccalo, o premi Esc, per tornare alla finestra";
 });
+document.getElementById("visuale3d").onclick = () => { if (window.Ufficio3D) Ufficio3D.inquadra(); };
 document.getElementById("demo3d").onclick = () => {
   if (!window.Ufficio3D) return;
   Ufficio3D.provaCantiere(1); Ufficio3D.provaChiusura(0); Ufficio3D.caffeSubito(); Ufficio3D.provaPostino(0);

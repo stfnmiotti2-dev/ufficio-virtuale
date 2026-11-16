@@ -24,6 +24,7 @@
   scena.fog = new T.Fog(new T.Color("#cfe6f5").convertSRGBToLinear(), 60, 140);
   const camera = new T.PerspectiveCamera(35, 2, 0.1, 400);
   const controlli = new T.OrbitControls(camera, renderer.domElement);
+  renderer.domElement.addEventListener("dblclick", () => inquadra());
   controlli.enableDamping = true;
   controlli.maxPolarAngle = Math.PI * 0.44;          // mai sotto il pavimento
   controlli.minDistance = 6; controlli.maxDistance = 80;
