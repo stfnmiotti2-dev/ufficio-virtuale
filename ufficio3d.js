@@ -190,6 +190,11 @@
     tondo(0.8, 0.5, 0.07, capo ? "#2b2b33" : "#f5f6f8", 0, ym + 0.22, 0.2, g, 0.035);
     const schermo = new T.Mesh(geoTondo(0.7, 0.4, 0.012, 0.005), new T.MeshBasicMaterial({ color: new T.Color("#2a2e3a").convertSRGBToLinear() }));
     schermo.position.set(0, ym + 0.47, 0.163); g.add(schermo);
+    // retro del monitor (quello che si vede dalla telecamera): bordo e bollino dello stesso colore dello schermo
+    const mr = new T.MeshStandardMaterial({ color: new T.Color("#2a2e3a").convertSRGBToLinear(), roughness: 0.4, emissive: new T.Color("#000000"), emissiveIntensity: 0.35 });
+    const bordo = new T.Mesh(geoTondo(0.9, 0.6, 0.05, 0.05), mr); bordo.position.set(0, ym + 0.47, 0.2); g.add(bordo);
+    const bollino = new T.Mesh(new T.CircleGeometry(0.07, 20), mr); bollino.position.set(0, ym + 0.49, 0.238); g.add(bollino);
+    schermo.userData.retro = mr;
     tondo(0.52, 0.03, 0.18, "#ffffff", 0, ym + 0.01, -0.15, g, 0.012);        // tastiera
     g.userData.schermo = schermo;
     return g;
@@ -241,8 +246,9 @@
       palla(0.2, maglia, 0, 1.0, 0.16, corpo, 1.1, 0.6, 0.7);
       for (const dx of [-0.06, 0.06]) tondo(0.015, 0.16, 0.015, "#ffffff", dx, 0.86, -0.22, corpo, 0.006);
     }
+    let gonna = null;
     if (donna) {                                                         // gonna a campana
-      const gonna = new T.Mesh(new T.CylinderGeometry(0.22, 0.32, 0.3, 20), m(resp ? maglia : PASTELLI[(h >>> 14) % PASTELLI.length]));
+      gonna = new T.Mesh(new T.CylinderGeometry(0.22, 0.32, 0.3, 20), m(resp ? maglia : PASTELLI[(h >>> 14) % PASTELLI.length]));
       gonna.position.y = 0.46; gonna.castShadow = true; corpo.add(gonna);
     }
     const sedute = [palla(0.11, pantaloni, -0.12, 0.47, -0.2, corpo, 1, 0.9, 1.9),   // gambe sotto la scrivania (seduto)
@@ -298,7 +304,7 @@
     const telefono = tondo(0.07, 0.24, 0.06, "#2b2b33", 0, -0.52, -0.04, dx, 0.025); telefono.visible = false;   // cornetta in mano
     const tazza = tondo(0.1, 0.12, 0.1, "#ffffff", 0, -0.55, -0.06, dx, 0.04); tazza.visible = false;           // tazza del caffe'
     g.userData = { corpo, testa, sx, dx, s, fase: (h % 97) / 10, occhi, sorriso, bocca_o, linea, stato: null, salto: 0,
-      sedute, gambe, telefono, tazza, casa: [x, z], giro: null, prossimo: 8 + (h % 40) };
+      sedute, gambe, telefono, tazza, gonna, casa: [x, z], giro: null, prossimo: 8 + (h % 40) };
     return g;
   }
   function etichetta(cls, testo, pos, titolo) {
@@ -501,7 +507,7 @@
       u.sorriso.visible = ["lavora", "supervisore"].includes(s.stato);
       u.bocca_o.visible = s.stato === "aspetta";
       u.linea.visible = !u.sorriso.visible && !u.bocca_o.visible;
-      testa.rotation.set(0, 0, 0); corpo.rotation.set(0, 0, 0); sx.rotation.set(1.2, 0, 0); dx.rotation.set(1.2, 0, 0);
+      testa.rotation.set(0, 0, 0); corpo.rotation.set(0, 0, 0); corpo.position.z = 0; if (u.gonna) u.gonna.rotation.x = 0; sx.rotation.set(1.2, 0, 0); dx.rotation.set(1.2, 0, 0);
       let inPiedi = false, cammina = false;
       u.telefono.visible = u.tazza.visible = false;
       // passeggiata al caffe' per chi lavora (ogni minuto circa); la finisce anche se nel frattempo cambia stato
@@ -551,9 +557,13 @@
       else if (s.stato === "aspetta") { dx.rotation.set(-2.9, 0, 0.25 + Math.sin(k * 6) * 0.35); }
       else if (s.stato === "ferma?") { testa.rotation.y = Math.sin(k * 0.8) * 0.6; }
       else if (s.stato === "finito") {                                   // dorme sdraiato sulla scrivania, con il respiro
-        corpo.rotation.x = -0.62 - Math.sin(k * 1.3) * 0.02; corpo.position.y = 0;
-        testa.rotation.set(-0.5, 0, 0.45);
-        sx.rotation.set(2.0, 0, -0.5); dx.rotation.set(2.0, 0, 0.5);
+        // piegato in avanti dall'anca, sedia un po' indietro: testa sulle braccia incrociate, lontano dallo schermo
+        const th = -0.9 - Math.sin(k * 1.3) * 0.02, yh = 0.55;
+        a.position.z = u.casa[1] - 0.28;
+        corpo.rotation.x = th; corpo.position.y = yh - yh * Math.cos(th); corpo.position.z = -yh * Math.sin(th);
+        testa.rotation.set(0.35, 0, 0.5);
+        sx.rotation.set(2.2, 0, -1.0); dx.rotation.set(2.2, 0, 1.0);     // braccia incrociate sotto la testa
+        if (u.gonna) u.gonna.rotation.x = -th;                             // la gonna resta giu', non ruota col busto
       }
       else if (s.stato === "supervisore") { testa.rotation.y = Math.sin(k * 0.5) * 0.3; }
       if (u.etichettaPos) { u.etichettaPos.x = a.position.x; u.etichettaPos.z = a.position.z; }
@@ -562,6 +572,8 @@
     for (const { mesh, s } of schermi) {
       const c = s.stato === "aspetta" && Math.floor(t * 2) % 2 ? "#ff5d5d" : (s.colore && s.stato === "supervisore" ? s.colore : COL[s.stato] || "#2a2e3a");
       mesh.material.color.set(c).convertSRGBToLinear();
+      const r = mesh.userData.retro;
+      if (r) { r.color.copy(mesh.material.color); r.emissive.copy(mesh.material.color); }
     }
     controlli.update();
     renderer.render(scena, camera);
