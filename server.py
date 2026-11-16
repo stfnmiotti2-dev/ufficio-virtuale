@@ -31,7 +31,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/ufficio3d.js": ("ufficio3d.js", "text/javascript; charset=utf-8"),
           "/lib/three.min.js": ("lib/three.min.js", "text/javascript; charset=utf-8"),
           "/lib/OrbitControls.js": ("lib/OrbitControls.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.22 (operai dalla porta, chiusura in sequenza)"
+VERSIONE = "task 9.23 (pc off e pc on)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
@@ -426,7 +426,8 @@ def _extra(sessions):
     return {"responsabili": resp, "chan": chan, "commesse": schede,
             "commesse_aggiornate": _iso(comm.get("aggiornato_utc")) if comm else None,
             "tia": _tia_con_proprietario(sessions) if _tia["ok"] else None,
-            "cloud_aggiornato": _iso(cloud.get("aggiornato_utc")) if cloud else None}
+            "cloud_aggiornato": _iso(cloud.get("aggiornato_utc")) if cloud else None,
+            "pc": (cloud.get("pc") or "on") if cloud else "on"}           # "\\pc off" / "\\pc on" scritti da Agente TIA
 
 
 def _diagnosi(sessions, extra=None):

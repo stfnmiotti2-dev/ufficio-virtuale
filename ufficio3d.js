@@ -394,6 +394,14 @@
   // postino: quando un thread passa da "aspetta te" a "lavora" vuol dire che Stefano ha risposto
   const statiPrima = new Map();
   let porta = null, portaPos = null, portaAperta = 0;
+  // \pc off / \pc on dalla chat principale di Agente TIA: tutti a casa (restano le lampade) / tutti dentro, il primo accende la luce
+  let pc = "on", pcT = -1e9, pcPrimaVolta = true, pcLuce = 1;
+  const pcFuori = new Set(), spenti = new Set();
+  function impostaPc(stato, subito) {
+    stato = String(stato || "on").toLowerCase() === "off" ? "off" : "on";
+    if (stato === pc && !pcPrimaVolta) return;
+    pc = stato; pcT = subito ? -1e9 : performance.now() / 1000; pcPrimaVolta = false;
+  }
   const arrivi = new Map();                                              // id -> quando entra dalla porta (dopo il cantiere)
   let postini = [], bersagli = new Map(), ingresso = [-2.5, 6], ultimiDati = null;
   function creaPostino(p) {
@@ -595,6 +603,7 @@
     bersagli = new Map(); uffici = new Map(); lavori = []; lampadine = []; lampadari = []; chiacchiere = []; gruppoDi = new Map();
     for (const e of effetti) e.o.parent && e.o.parent.remove(e.o); effetti = [];
     const gruppi = U.prepara(sessioni, extra);
+    impostaPc(extra.pc, pcPrimaVolta);                                   // all'apertura niente animazione: si parte gia' cosi'
     for (const [id, c] of chiusi) {                                       // i thread appena chiusi restano finche' non e' finito il trasloco
       const gr = gruppi.find(g => g.chiave === c.chiave); if (!gr) continue;
       const i = gr.sessioni.findIndex(q => q.id === id);
@@ -774,6 +783,8 @@
     tondo(0.1, 0.9, LP - 0.4, "#b07a45", 0.02, 0.9, (LP - 0.08) / 2, porta, 0.03);   // pannello
     palla(0.06, "#e3b23c", 0.08, 1.05, LP - 0.25, porta, 1, 1, 1, { metalness: 0.7 });
     portaPos = new T.Vector3(xm, 0, zp);
+    box(0.05, 0.22, 0.14, "#f4f1ea", xm + 0.12, 1.15, zp - 1.0);          // interruttore della luce
+    box(0.04, 0.08, 0.05, "#c9c3b6", xm + 0.15, 1.22, zp - 1.0);
     ingresso = [xm - 0.3, zp];
     for (const p of postini) creaPostino(p);                               // quelli gia' in cammino continuano
     const ora = new Map(schermi.map(q => [q.s.id, q.s.stato]));
@@ -848,6 +859,20 @@
     return [[x, z, 0.7], [x, c, 0], [px, c, 0], [px, pz, 0], [px, pz, 2.4, "bussa"], [px, pz, 1.6, "attende"],
             [px, c, 0], [x, c, 0], [x, z, 0.4, "siede"]];
   }
+  function versoCasa(u, conLuce) {                                   // dalla porta alla propria sedia (coordinate del suo gruppo)
+    const [ix, iz] = ingresso, uf = u.chiave && uffici.get(u.chiave);
+    const ox = uf ? uf.gx : 0, oz = uf ? uf.gz : 0, L = (x, z, p, a) => [x - ox, z - oz, p, a];
+    const pt = [L(ix, iz, 0)];
+    if (conLuce && portaPos) pt.push(L(portaPos.x + 0.5, portaPos.z - 1.0, 1.8, "luce"));   // il primo accende la luce
+    if (uf) { const { LW, LD, casa } = uf, px = LW * 0.32, fuori = LD / 2 + 0.7;
+      return [...pt, [px, fuori, 0], [px, casa[1], 0], [casa[0], casa[1], 0.6, "siede"]]; }
+    const [x, z] = u.casa;
+    return [...pt, [x, u.via, 0], [x, u.corridoio, 0], [x, z, 0.6, "siede"]];
+  }
+  function versoPorta(u) {
+    const r = versoCasa(u, false).reverse().map(p => [p[0], p[1], 0]);
+    r[0][2] = 1.4; r[0][3] = "saluta"; return r;
+  }
   function giroUscita(u) {                                           // la sera: cappotto, saluta e va all'ingresso
     const [x, z] = u.casa, c = u.corridoio, [ix, iz] = ingresso;
     return [[x, z, 1.8, "saluta"], [x, c, 0], [x, u.via, 0], [ix, iz, 0]];
@@ -872,10 +897,13 @@
     const inizioFrame = performance.now();
     const dt = Math.min(0.1, t - tPrec || 0.04); tPrec = t;
     const eSera = sera(), eVen = venerdi();
-    cielo.intensity = eSera ? 0.3 : 0.55; sole.intensity = eSera ? 0.5 : 1.35;
-    scena.background.set(eSera ? "#4f5f86" : "#cfe6f5").convertSRGBToLinear();
-    for (const l of lampadine) l.material.emissiveIntensity = eSera ? 1.8 : 0.2;
-    for (const l of lampadari) l.material.emissiveIntensity = eSera ? 2.2 : 0.05;
+    // luce della stanza: con \pc off si spegne subito; con \pc on si riaccende quando il primo arriva all'interruttore
+    const pcL = pc === "off" ? 1 - Math.min(1, Math.max(0, (t - pcT - 1.2) / 1.2)) : Math.min(1, Math.max(0, (t - pcT - 3.2) / 0.4));
+    pcLuce = pcL; const buio = 1 - pcL;
+    cielo.intensity = (eSera ? 0.3 : 0.55) * pcL + 0.12 * buio; sole.intensity = (eSera ? 0.5 : 1.35) * pcL + 0.06 * buio;
+    scena.background.set(buio > 0.5 ? "#1a2034" : eSera ? "#4f5f86" : "#cfe6f5").convertSRGBToLinear();
+    for (const l of lampadine) l.material.emissiveIntensity = eSera || buio > 0.5 ? 1.8 : 0.2;   // le lampade delle scrivanie restano accese
+    for (const l of lampadari) l.material.emissiveIntensity = eSera || buio > 0.5 ? 2.2 : 0.05;
     for (const c of chiacchiere) c.alCaffe = [];
     let capoVisto = false;
     for (const a of animati) {
@@ -895,6 +923,18 @@
       u.telefono.visible = u.tazza.visible = false; u.giacca.visible = false;
       // passeggiata al caffe' per chi lavora (ogni minuto circa); la finisce anche se nel frattempo cambia stato
       // chi aspetta una risposta va a bussare dal suo responsabile (circa ogni minuto)
+      const iPc = u.iPc = animati.indexOf(a), lontano = t - pcT > 900;
+      if (pc === "off") {                                                 // tutti a casa: si alzano col cappotto, salutano, escono dalla porta
+        if (lontano && !pcFuori.has(s.id)) { pcFuori.add(s.id); spenti.add(s.id); }
+        if (pcFuori.has(s.id)) { a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); continue; }
+        if (t > pcT + 0.6 + iPc * 0.15) spenti.add(s.id);                  // per primo spengono il computer
+        if (!(u.giro && u.giro.pc) && t > pcT + 2.5 + iPc * 0.8) u.giro = { punti: versoPorta(u), inizio: t, uscita: true, pc: true };
+      } else if (pcFuori.has(s.id)) {                                     // si rientra: uno alla volta dalla porta
+        const parte = pcT + (iPc === 0 ? 0 : 4 + iPc * 0.9);
+        if (t < parte) { a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); continue; }
+        pcFuori.delete(s.id); a.visible = true; if (u.etichettaPos) nascondi(u.etichettaPos, false);
+        u.giro = { punti: versoCasa(u, iPc === 0), inizio: parte, pc: true, entra: true };
+      }
       if (s.chiude != null) {                                             // chiuso: esce con lo scatolone e non torna
         if (usciti.has(s.id)) { a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); continue; }
         if (!(u.giro && u.giro.trasloco) && t > s.chiude + 0.8) u.giro = { punti: giroUscita(u), inizio: t, uscita: true, trasloco: true };
@@ -905,12 +945,7 @@
         if (t > u.prossimoT) u.giro = { punti: vaCaffe ? giroCaffe(u) : giroBussa(u), inizio: t };
       }
       if (!u.giro && arrivi.has(u.idArrivo)) {                          // nuovo arrivato: entra dalla porta con la 24 ore
-        const [ix, iz] = ingresso, uf = u.chiave && uffici.get(u.chiave);
-        let punti;
-        if (uf) { const { gx, gz, LW, LD, casa } = uf, pt = LW * 0.32, fuori = LD / 2 + 0.7;
-          punti = [[ix - gx, iz - gz, 0], [pt, fuori, 0], [pt, casa[1], 0], [casa[0], casa[1], 0.6, "siede"]]; }
-        else { const [x, z] = u.casa; punti = [[ix, iz, 0], [x, u.via, 0], [x, u.corridoio, 0], [x, z, 0.6, "siede"]]; }
-        u.giro = { punti, inizio: arrivi.get(u.idArrivo), arrivo: true };
+        u.giro = { punti: versoCasa(u, false), inizio: arrivi.get(u.idArrivo), arrivo: true };
       }
       if (u.chiave && !u.giro) {
         const o = ordini.find(o => o.chiave === u.chiave && t >= o.inizio && t < o.fine);
@@ -934,6 +969,8 @@
       if (u.giro) {
         pos = lungo(u.giro.punti, t - u.giro.inizio, 1.1);
         if (pos.fine) {
+          if (u.giro.pc && u.giro.uscita) { pcFuori.add(s.id); a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); u.giro = null; continue; }
+          if (u.giro.pc && u.giro.entra) spenti.delete(s.id);              // seduto: riaccende il computer
           if (u.giro.trasloco && chiusi.has(s.id) && chiusi.get(s.id).smonta == null) chiusi.get(s.id).smonta = t;   // e' uscito: tocca agli operai
           if (u.giro.uscita) { usciti.add(s.id); a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); u.giro = null; continue; }
           if (u.giro.arrivo) arrivi.delete(u.idArrivo);
@@ -986,6 +1023,7 @@
         if (u.giro && u.giro.uscita && !u.giro.trasloco) {
           u.giacca.visible = true;
         }
+        if (pos && pos.azione === "luce") { dx.rotation.set(2.4, 0, 0.5); a.rotation.y = Math.PI / 2; }   // mano all'interruttore
         if (u.giro && u.giro.uscita && pos && pos.azione === "saluta") dx.rotation.set(0, 0, 2.5 + Math.sin(k * 9) * 0.35);   // ciao ciao
         if (pos && pos.azione === "caffe" && u.chiacchiera) u.chiacchiera.alCaffe.push(a);
         if (u.nuvolaOrdini && !(pos && pos.azione === "ordini")) u.nuvolaOrdini.e.style.visibility = "hidden";
@@ -1078,6 +1116,8 @@
     capoInGiro = capoVisto;
     const parla = Math.floor(t / 3.2) % 4;
     if (fascio) { const f = 0.9 + Math.sin(t * 7) * 0.05 + Math.sin(t * 13.3) * 0.05; fascio.opacity = 0.35 * f; raggi.opacity = 0.9 * f; }
+    const salaPiena = pc === "on" ? t > pcT + 6 : t < pcT + 3;
+    for (const o of riunione) o.visible = salaPiena;
     riunione.forEach((o, i) => {
       const u = o.userData, k = t + u.fase;
       for (const oc of u.occhi) oc.scale.y = (k % 4) < 0.12 ? 0.25 : 1.5;
@@ -1205,7 +1245,8 @@
       return true;
     });
     for (const tx of texCodice) tx.offset.y = (tx.offset.y - 0.004) % 1;     // il codice scorre
-    for (const { mesh, s } of schermi) {
+    for (const { mesh, s: s0 } of schermi) {
+      const s = spenti.has(s0.id) ? { ...s0, stato: "spento" } : s0;     // computer spento da chi va a casa
       const c = s.stato === "aspetta" && Math.floor(t * 2) % 2 ? "#ff5d5d" : (s.colore && s.stato === "supervisore" ? s.colore : COL[s.stato] || "#2a2e3a");
       const r = mesh.userData.retro;
       if (r) { r.color.set(c).convertSRGBToLinear(); r.emissive.copy(r.color); }     // il retro tiene la legenda dei colori
@@ -1267,6 +1308,7 @@
       setTimeout(() => { forzaSera = t + 60; }, 12000);
       for (const a of lav) a.userData.prossimoT = 0;
     },
+    provaPc(stato) { impostaPc(stato, false); },
     provaChiusura(n) { const ids = [...ultimeSessioni.keys()].filter(id => bersagli.has(id) && !chiusi.has(id)); const id = ids[ids.length - 1 - (n || 0)]; if (!id) return; chiudi(id, ultimeSessioni.get(id)); if (ultimiDati) costruisci(...ultimiDati); },
     provaCantiere(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); arrivoFatto.delete(ids[n || 0]); cantieri.set(ids[n || 0], performance.now() / 1000); const uf = [...bersagli.keys()].filter(k => k.startsWith("capo:") && k !== "capo:r:capo"); if (uf.length) { arrivoFatto.delete(uf[uf.length - 1]); cantieri.set(uf[uf.length - 1], performance.now() / 1000); } if (ultimiDati) costruisci(...ultimiDati); },
     provaPostino(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); avviaPostino(ids[n || 0]); },
