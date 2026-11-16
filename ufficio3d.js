@@ -362,7 +362,15 @@
       tondo(0.2, 0.08, 0.08, "#5b6270", 0, -0.48, -0.02, dx, 0.02, { metalness: 0.6 });
       tondo(0.03, 0.26, 0.03, "#9aa3b0", 0, -0.58, -0.02, sx, 0.01, { metalness: 0.6 });
     }
-    const telefono = tondo(0.07, 0.24, 0.06, "#2b2b33", 0, -0.52, -0.04, dx, 0.025); telefono.visible = false;   // cornetta in mano
+    // cornetta da telefono classico, grande e rossa, con il filo a spirale (si vede bene anche da lontano)
+    const telefono = new T.Group(); dx.add(telefono); telefono.visible = false;
+    tondo(0.09, 0.42, 0.09, "#e0303a", 0, -0.5, -0.1, telefono, 0.04);           // impugnatura
+    palla(0.13, "#e0303a", 0, -0.48, -0.17, telefono, 1, 0.75, 0.6);               // auricolare, all'orecchio
+    palla(0.13, "#e0303a", 0, -0.1, -0.17, telefono, 1, 0.75, 0.6);               // microfono, verso la bocca
+    for (let i = 0; i < 7; i++) {                                                  // filo a spirale che pende
+      const sp = new T.Mesh(new T.TorusGeometry(0.035, 0.009, 5, 12), m("#1f1f26"));
+      sp.position.set(0, -0.02 + i * 0.05, -0.12); sp.rotation.x = Math.PI / 2; telefono.add(sp);
+    }
     const tazza = tondo(0.1, 0.12, 0.1, "#ffffff", 0, -0.55, -0.06, dx, 0.04); tazza.visible = false;           // tazza del caffe'
     g.userData = { corpo, testa, sx, dx, s, fase: (h % 97) / 10, occhi, sorriso, bocca_o, linea, stato: null, salto: 0,
       sedute, gambe, telefono, tazza, gonna, casa: [x, z], giro: null, prossimo: 8 + (h % 40) };
