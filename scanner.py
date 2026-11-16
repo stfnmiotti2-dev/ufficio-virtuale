@@ -207,6 +207,38 @@ def _cwd_of(raw):
         return None
 
 
+ASPETTA_ORE = 12            # oltre, una domanda senza risposta non conta piu'
+_URL = re.compile(r"https?://\S+|\(#[^)]*\)|\(/[^)]*\)")
+_DOMANDE_STRUMENTI = {"askuserquestion", "request_decision"}
+_MESSAGGI_STRUMENTI = {"post_message", "send_message"}
+
+
+def _domanda(testo):
+    """L'ultima frase con il punto interrogativo, se c'e' (link e markdown tolti)."""
+    t = _URL.sub("", testo or "")
+    t = re.sub(r"[*_`#>\[\]]", "", t)
+    frasi = [f.strip(" -•\t") for f in re.split(r"(?<=[?.!:])\s+|\n+", t)]
+    domande = [f for f in frasi if f.endswith("?") and len(f) > 3]
+    return domande[-1] if domande else None
+
+
+def _domanda_da_strumento(b):
+    """("decisione", testo) per le domande con le scelte, ("messaggio", domanda o None)
+    per i messaggi alla persona, (None, None) per gli altri strumenti."""
+    nome = etichette.short_name(b.get("name", "")).lower()
+    inp = b.get("input") if isinstance(b.get("input"), dict) else {}
+    if nome in _DOMANDE_STRUMENTI:
+        qs = inp.get("questions")
+        if inp.get("question"):
+            return "decisione", str(inp["question"])
+        if isinstance(qs, list) and qs and isinstance(qs[0], dict) and qs[0].get("question"):
+            return "decisione", str(qs[0]["question"])
+        return "decisione", "Aspetta una tua decisione"
+    if nome in _MESSAGGI_STRUMENTI:
+        return "messaggio", _domanda(str(inp.get("text") or inp.get("message") or ""))
+    return None, None
+
+
 def analyze(path):
     """Riassume una sessione leggendo solo l'inizio e la fine del file."""
     size = path.stat().st_size
@@ -248,6 +280,9 @@ def analyze(path):
     pending = {}           # tool_use senza risposta
     last = None
     commessa_strumenti = None   # codice commessa trovato nei percorsi usati dagli strumenti
+    domanda = None              # domanda nell'ultimo messaggio dell'agente alla persona
+    decisione = None            # decisione chiesta dopo l'ultimo messaggio della persona
+    usa_messaggi = False        # l'agente parla con uno strumento (post_message): il testo libero non si vede
     for rec in tail:
         if rec.get("isSidechain") or rec.get("type") not in ("user", "assistant"):
             continue
@@ -255,8 +290,21 @@ def analyze(path):
         if ts:
             info["ultimo_evento"] = ts
         content = rec.get("message", {}).get("content")
+        if _is_real_prompt(rec) or (rec["type"] == "user" and _text_of(content).lstrip().startswith("<")):
+            domanda = decisione = None                     # la persona (o un nuovo messaggio) ha risposto
         if rec["type"] == "assistant" and isinstance(content, list):
             for b in content:
+                # nelle sessioni avviate da claude.ai la persona vede solo i messaggi
+                # mandati con lo strumento, non il testo libero dell'agente
+                if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip() \
+                        and not usa_messaggi:
+                    domanda = _domanda(b["text"])
+                if isinstance(b, dict) and b.get("type") == "tool_use":
+                    tipo, testo = _domanda_da_strumento(b)
+                    if tipo == "decisione":
+                        decisione = testo
+                    elif tipo == "messaggio":
+                        domanda, usa_messaggi = testo, True
                 if isinstance(b, dict) and b.get("type") == "tool_use":
                     pending[b.get("id")] = b
                     inp = b.get("input") if isinstance(b.get("input"), dict) else {}
@@ -308,6 +356,10 @@ def analyze(path):
         info["stato"] = "pensa"
         info["icona"] = "💭"
         info["attivita"] = "Ragiona sulla risposta"
+    elif (decisione or domanda) and age_min < ASPETTA_ORE * 60:
+        info["stato"] = "aspetta"
+        info["icona"] = "✋"
+        info["attivita"] = _short(decisione or domanda, 90)
     else:
         info["stato"] = "finito"
         info["icona"] = "☕"

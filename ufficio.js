@@ -3,8 +3,8 @@
 // nessuna immagine esterna, nessuna licenza. Fumetti ed etichette sono HTML sopra il canvas.
 (function () {
   const SLOT_W = 64, SLOT_H = 54, MURO = 44, MARGINE = 8, MAX_POSTI = 15;
-  const PRESENTI = ["lavora", "pensa", "ferma?", "finito"];
-  const COLORI_STATO = { "lavora": "#4cc38a", "pensa": "#5aa9f0", "ferma?": "#f2b14a", "finito": "#8b90a3" };
+  const PRESENTI = ["aspetta", "lavora", "pensa", "ferma?", "finito"];
+  const COLORI_STATO = { "aspetta": "#ff5d5d", "lavora": "#4cc38a", "pensa": "#5aa9f0", "ferma?": "#f2b14a", "finito": "#8b90a3" };
   const PELLE = ["#f1c7a5", "#e0ac84", "#c68a62", "#8d5a3c", "#f5d6bd"];
   const CAPELLI = ["#2b1d14", "#5a3a22", "#a8743c", "#d9b45a", "#1c1c22", "#7a2e1e", "#9a9aa6"];
   const MAGLIE = ["#d9534f", "#4a7fd6", "#3fae6a", "#e0913a", "#8e5bd0", "#2fa7a0", "#d65a9a", "#5c6b80"];
@@ -142,7 +142,12 @@
     r(x0 - 1, y0 + 13 + respiro, 14, 1, "rgba(255,255,255,.18)");
     r(x0 + 4, y + 13, 4, 2, pelle);                   // collo
     // braccia
-    if (stato === "lavora") {                         // batte sui tasti: mani alternate
+    if (stato === "aspetta") {                        // alza la mano e saluta per farsi vedere
+      const onda = Math.floor((t + fase) / 2) % 2;
+      r(x0 - 3, y0 + 15, 3, 6, maglia); r(x0 - 3, y0 + 20, 3, 1, pelle);
+      r(x0 + 12, y0 + 3, 3, 13, maglia);
+      r(x0 + 12 + onda, y0, 3, 3, pelle);
+    } else if (stato === "lavora") {                  // batte sui tasti: mani alternate
       const su = (t + fase) % 2;
       r(x0 - 3, y0 + 15, 3, 5 - su, maglia); r(x0 - 3, y0 + 20 - su, 3, 1, pelle);
       r(x0 + 12, y0 + 15, 3, 4 + su, maglia); r(x0 + 12, y0 + 19 + su, 3, 1, pelle);
@@ -190,6 +195,7 @@
 
   // ---------- fumetti ed etichette ----------
   function testoFumetto(s) {
+    if (s.stato === "aspetta") return ["✋", s.attivita || "Aspetta te"];
     if (s.stato === "pensa") return ["💭", "Sta pensando…"];
     if (s.stato === "finito") return ["✅", "Ha finito"];
     if (s.stato === "ferma?") return ["⏳", s.attivita ? "Fermo su: " + s.attivita : "Fermo da un po'"];
@@ -199,7 +205,8 @@
 
   function scegli(sessioni) {
     // le prime MAX_POSTI per importanza, ma ognuno resta sempre alla sua scrivania
-    const ordine = sessioni.filter(s => PRESENTI.includes(s.stato))
+    const ordine = sessioni.filter(s => s.stato === "aspetta")
+      .concat(sessioni.filter(s => PRESENTI.includes(s.stato) && s.stato !== "aspetta"))
       .concat(sessioni.filter(s => !PRESENTI.includes(s.stato)))
       .slice(0, MAX_POSTI);
     const ids = new Set(ordine.map(s => s.id));
@@ -258,7 +265,7 @@
       zona.title = (s.titolo || "(senza titolo)") + "\nClic: apri la chat";
       const f = zona.firstChild;
       const [ic, testo] = presente ? testoFumetto(s) : ["", ""];
-      const nuovo = presente ? ic + " " + corto(testo, 34) : "";
+      const nuovo = presente ? ic + " " + corto(testo, s.stato === "aspetta" ? 32 : 34) : "";
       if (f.dataset.testo !== nuovo) {                // il fumetto "salta fuori" solo quando cambia
         f.dataset.testo = nuovo;
         f.textContent = nuovo;
