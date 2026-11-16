@@ -262,10 +262,11 @@
   const JEANS = ["#4a6fa5", "#5a7fb5", "#3d5a8a"];
   function omino(s, padre, x, z, ruolo) {
     const h = U.hash(s.id), capo = ruolo === "capo", resp = ruolo === "resp";
-    const donna = !capo && ((h >>> 12) & 1) === 1;
+    const postino = ruolo === "postino";
+    const donna = !capo && !postino && ((h >>> 12) & 1) === 1;
     const pelle = U.PELLE[h % U.PELLE.length], capelli = U.CAPELLI[(h >>> 4) % U.CAPELLI.length];
-    const maglia = capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
-    const pantaloni = capo ? "#7a1426" : resp ? maglia : donna ? pelle : JEANS[(h >>> 9) % JEANS.length];
+    const maglia = postino ? "#3b6fc4" : capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
+    const pantaloni = postino ? "#2a3f6b" : capo ? "#7a1426" : resp ? maglia : donna ? pelle : JEANS[(h >>> 9) % JEANS.length];
     const scarpe = capo ? "#e3b23c" : resp ? "#1f1f26" : donna ? ["#ef7f9f", "#2b2b33", "#ffffff"][(h >>> 10) % 3] : "#ffffff";
     const g = new T.Group(); g.position.set(x, 0, z); g.rotation.y = Math.PI; padre.add(g);
     const corpo = new T.Group(); g.add(corpo);
@@ -282,6 +283,9 @@
       if (donna) { const cl = new T.Mesh(new T.TorusGeometry(0.09, 0.012, 6, 20, Math.PI), m("#e3b23c", { metalness: 0.5 })); cl.rotation.set(-0.3, 0, Math.PI); cl.position.set(0, 1.02, -0.2); corpo.add(cl); }
       else tondo(0.07, 0.3, 0.03, s.colore || "#c62828", 0, 0.68, -0.23, corpo, 0.015);
       for (const by of [0.72, 0.6]) palla(0.022, "#1f1f26", 0.05, by, -0.215, corpo, 1, 1, 0.5);
+    } else if (postino) {                                                // borsa a tracolla
+      tondo(0.3, 0.24, 0.12, "#8a5a2b", 0.2, 0.55, -0.12, corpo, 0.04);
+      const tr = new T.Mesh(new T.TorusGeometry(0.3, 0.02, 6, 24), m("#6b4420")); tr.rotation.set(0, Math.PI / 2, 0.7); tr.position.set(0, 0.85, 0); corpo.add(tr);
     } else if (!donna && (h >>> 13) & 1) {                                // felpa con cappuccio per qualcuno
       palla(0.2, maglia, 0, 1.0, 0.16, corpo, 1.1, 0.6, 0.7);
       for (const dx of [-0.06, 0.06]) tondo(0.015, 0.16, 0.015, "#ffffff", dx, 0.86, -0.22, corpo, 0.006);
@@ -308,7 +312,12 @@
       palla(0.27, capelli, 0, -0.12, 0.08, testa, 1.08, 1.1, 0.85);
       for (const sx of [-0.25, 0.25]) palla(0.09, capelli, sx, -0.12, 0.02, testa, 0.7, 1.9, 1);
     }
-    const ciuffo = h % 3;
+    if (postino) {                                                       // berretto con visiera
+      const b = new T.Mesh(new T.CylinderGeometry(0.27, 0.29, 0.14, 20), m("#2a4f98")); b.position.y = 0.2; testa.add(b);
+      tondo(0.3, 0.025, 0.16, "#1c2f5c", 0, 0.14, -0.27, testa, 0.01);
+      palla(0.035, "#f2b443", 0, 0.22, -0.28, testa, 1, 1, 0.4, { metalness: 0.5 });
+    }
+    const ciuffo = postino ? -1 : h % 3;
     if (ciuffo === 0) palla(0.11, capelli, -0.1, 0.2, -0.17, testa, 1.3, 0.7, 0.8);
     if (ciuffo === 1) { palla(0.09, capelli, -0.24, 0.0, 0.02, testa, 0.6, 1.4, 1); palla(0.09, capelli, 0.24, 0.0, 0.02, testa, 0.6, 1.4, 1); }
     if (ciuffo === 2) palla(0.14, capelli, 0, 0.26, 0.05, testa, 1, 0.6, 1);
@@ -358,12 +367,34 @@
 
   // ---------- costruzione della scena dai dati ----------
   let animati = [], marcati = [], cliccabili = [], schermi = [], camminatori = [];
+  // postino: quando un thread passa da "aspetta te" a "lavora" vuol dire che Stefano ha risposto
+  const statiPrima = new Map();
+  let postini = [], bersagli = new Map(), ingresso = [-2.5, 6];
+  function creaPostino(p) {
+    p.g = omino({ id: "postino" + p.id }, mondo, p.punti[0][0], p.punti[0][1], "postino");
+    for (const l of p.g.userData.sedute) l.visible = false;
+    for (const l of p.g.userData.gambe) l.visible = true;
+    const busta = tondo(0.26, 0.17, 0.03, "#fffaf0", 0, -0.45, -0.1, p.g.userData.dx, 0.01);
+    palla(0.035, "#d23c3c", 0, -0.45, -0.12, p.g.userData.dx, 1, 1, 0.4);
+    p.busta = busta;
+    p.pos = new T.Vector3(p.punti[0][0], 2.0, p.punti[0][1]);
+    marcati.push(etichetta("f3d", "✉️ Da Stefano", p.pos));
+  }
+  function avviaPostino(id) {
+    const b = bersagli.get(id);
+    if (!b) return;
+    const [ix, iz] = ingresso, via = b.via;
+    const punti = [[ix, iz, 0], [b.x, via, 0], [b.x, b.z, 1.6, "consegna"], [b.x, via, 0], [ix, iz, 0]];
+    const p = { id, punti, inizio: performance.now() / 1000, verso: b.verso };
+    postini.push(p); creaPostino(p);
+  }
   let primaVolta = true, centro = new T.Vector3(), larg = 20, prof = 10;
 
   function costruisci(sessioni, extra) {
     mondo.clear();
     etichette.replaceChildren();
     animati = []; marcati = []; cliccabili = []; schermi = []; camminatori = [];
+    bersagli = new Map();
     const gruppi = U.prepara(sessioni, extra);
     const capi = gruppi.filter(U.haUfficio);
     const UFF = 3.6, PASSO = 2.6;
@@ -371,10 +402,13 @@
     const dim = gr => gr.chiave === "r:capo" ? [5.6, 4.6] : [UFF, UFF];
     const pulito = s => (s || "").replace(/^\S*[^\w\s]\S*\s+/u, "").replace(/\s*\(.*\)$/, "");   // toglie l'emoji iniziale
     let xc = 0, profMax = UFF;
+    const porte = {};
     capi.forEach((gr, i) => {
       const [LW, LD] = dim(gr), capo = gr.chiave === "r:capo";
       profMax = Math.max(profMax, LD);
       const x = xc + LW / 2, z = 0;
+      porte[gr.chiave] = [x - LW * 0.15, z + LD / 2 + 0.45];               // davanti al vetro, accanto all'apertura
+      bersagli.set("capo:" + gr.chiave, { x: x + LW * 0.3, z: z + LD / 2 + 0.45, via: z + LD / 2 + 2.2, verso: 0 });
       xc += LW + 0.6;
       const g = new T.Group(); g.position.set(x, 0, z); mondo.add(g);
       tondo(LW, 0.03, LD, capo ? "#efe6d6" : "#dfe7f1", 0, 0, 0, g, 0.01);         // pavimento dell'ufficio
@@ -450,7 +484,11 @@
           sedia(x, z0 - 0.95, mondo);
           const presente = U.PRESENTI.includes(s.stato);
           const om = presente ? omino(s, mondo, x, z0 - 0.8, "dip") : null;
-          if (om) { animati.push(om); camminatori.push(om); om.userData.corridoio = z0 - 1.75; }
+          if (om) {
+            animati.push(om); camminatori.push(om); om.userData.corridoio = z0 - 1.75;
+            om.userData.porta = porte[gr.chiave] || porte["r:capo"] || null;   // i thread senza responsabile vanno dal capo
+            bersagli.set(s.id, { x: x + 1.15, z: z0 - 0.8, via: profMax / 2 + 2.2, verso: Math.PI / 2 });
+          }
           schermi.push({ mesh: scr.userData.schermo, s: presente ? s : { stato: "spento" } });
           const apri = () => s.link ? apriLink(s.link) : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
           cliccabili.push({ obj: scr, apri });
@@ -488,6 +526,13 @@
       v.material = new T.MeshBasicMaterial({ color: new T.Color("#9fd4f2").convertSRGBToLinear() });
     }
     centro.copy(mid); larg = size.x + 1; prof = size.z + 2;
+    ingresso = [bb.min.x - 2, profMax / 2 + 2.2];
+    for (const p of postini) creaPostino(p);                               // quelli gia' in cammino continuano
+    const ora = new Map(schermi.map(q => [q.s.id, q.s.stato]));
+    for (const [id, st] of ora) {
+      if (statiPrima.get(id) === "aspetta" && ["lavora", "pensa", "supervisore"].includes(st) && !postini.some(p => p.id === id)) avviaPostino(id);
+    }
+    statiPrima.clear(); for (const [id, st] of ora) statiPrima.set(id, st);
     if (primaVolta) inquadra();
   }
 
@@ -526,6 +571,11 @@
     const l = punti[punti.length - 1];
     return { x: l[0], z: l[1], fine: true, fermo: true };
   }
+  function giroBussa(u) {                                            // fino alla porta dell'ufficio del responsabile e ritorno
+    const [x, z] = u.casa, c = u.corridoio, [px, pz] = u.porta;
+    return [[x, z, 0.7], [x, c, 0], [px, c, 0], [px, pz, 0], [px, pz, 2.4, "bussa"], [px, pz, 1.6, "attende"],
+            [px, c, 0], [x, c, 0], [x, z, 0.4, "siede"]];
+  }
   function giroCaffe(u) {                                            // dalla sedia al caffe' e ritorno, passando dietro le sedie
     const [x, z] = u.casa, c = u.corridoio, [mx, mz] = u.caffe;
     return [[x, z, 0.7], [x, c, 0], [mx - 0.7, c, 0], [mx - 0.7, mz, 0], [mx, mz, 4.5, "caffe"], [mx - 0.7, mz, 0],
@@ -551,9 +601,11 @@
       let inPiedi = false, cammina = false;
       u.telefono.visible = u.tazza.visible = false;
       // passeggiata al caffe' per chi lavora (ogni minuto circa); la finisce anche se nel frattempo cambia stato
-      if (!u.giro && u.caffe && s.stato === "lavora") {
+      // chi aspetta una risposta va a bussare dal suo responsabile (circa ogni minuto)
+      const vaCaffe = u.caffe && s.stato === "lavora", vaBussare = u.porta && s.stato === "aspetta";
+      if (!u.giro && (vaCaffe || vaBussare)) {
         if (u.prossimoT == null) u.prossimoT = t + u.prossimo;
-        if (t > u.prossimoT) { const punti = giroCaffe(u); u.giro = { punti, inizio: t }; }
+        if (t > u.prossimoT) u.giro = { punti: vaCaffe ? giroCaffe(u) : giroBussa(u), inizio: t };
       }
       let pos = null;
       if (u.giro) {
@@ -569,8 +621,9 @@
         cammina = !pos.fermo;
         a.position.x = pos.x; a.position.z = pos.z;
         if (pos.dir) a.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
-        else if (pos.azione === "caffe") a.rotation.y = 0;
-        else if (pos.azione === "telefono" || pos.azione === "siede" || !u.telefonata) a.rotation.y = pos.azione === "caffe" ? 0 : (pos.azione === "telefono" ? Math.PI + Math.sin(k) * 0.3 : Math.PI);
+        else if (["caffe", "bussa", "attende"].includes(pos.azione)) a.rotation.y = 0;      // verso la macchinetta o la porta
+        else if (pos.azione === "telefono") a.rotation.y = Math.PI + Math.sin(k) * 0.3;
+        else a.rotation.y = Math.PI;
         if (pos.fermo && u.giro && t - u.giro.inizio < 0.7) inPiedi = true;   // si alza
       } else { a.position.x = u.casa[0]; a.position.z = u.casa[1]; a.rotation.y = Math.PI; }
       for (const l of u.sedute) l.visible = !inPiedi;
@@ -586,6 +639,11 @@
           u.telefono.visible = true; dx.rotation.set(0.15, 0, 3.0);           // cornetta all'orecchio
           sx.rotation.set(0.5 + Math.sin(k * 3) * 0.4, 0, 0.3);               // gesticola
           testa.rotation.z = Math.sin(k * 2) * 0.1;
+        } else if (pos && pos.azione === "bussa") {                         // bussa sul vetro
+          dx.rotation.set(1.9 + Math.max(0, Math.sin(k * 14)) * 0.35, 0, 0.15);
+        } else if (pos && pos.azione === "attende") {
+          sx.rotation.set(0.3, 0, 0.5); dx.rotation.set(0.3, 0, -0.5);       // mani sui fianchi, aspetta
+          testa.rotation.z = Math.sin(k * 2) * 0.12;
         } else if (pos && pos.azione === "caffe") {
           u.tazza.visible = true;
           const sorso = Math.sin((t - u.giro.inizio) * 1.4) > 0.3;
@@ -609,6 +667,22 @@
       if (u.etichettaPos) { u.etichettaPos.x = a.position.x; u.etichettaPos.z = a.position.z; }
       if (u.etichetta) { u.etichetta.pos.x = u.etichetta.base[0] + a.position.x; u.etichetta.pos.z = u.etichetta.base[1] + a.position.z; }
     }
+    postini = postini.filter(p => {
+      const e = t - p.inizio, pos = lungo(p.punti, e, 1.6);
+      if (pos.fine) { mondo.remove(p.g); const i = marcati.findIndex(q => q.pos === p.pos); if (i >= 0) { marcati[i].e.remove(); marcati.splice(i, 1); } return false; }
+      const u = p.g.userData, o = Math.sin(e * 9);
+      p.g.position.set(pos.x, 0, pos.z); p.pos.set(pos.x, 2.0, pos.z);
+      if (pos.dir) p.g.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
+      else p.g.rotation.y = p.verso;                                       // consegna: guarda l'omino o la porta
+      u.gambe[0].rotation.x = pos.fermo ? 0 : o * 0.5; u.gambe[1].rotation.x = pos.fermo ? 0 : -o * 0.5;
+      u.sx.rotation.set(pos.fermo ? 0.1 : -o * 0.5, 0, 0.12);
+      if (pos.azione === "consegna") { u.dx.rotation.set(1.5, 0, 0); if (!p.data) p.data = e; if (e - p.data > 0.8) p.busta.visible = false; }
+      else u.dx.rotation.set(p.busta.visible ? 1.2 : o * 0.5, 0, -0.12);
+      u.corpo.position.y = pos.fermo ? 0 : Math.abs(Math.cos(e * 9)) * 0.03;
+      for (const oc of u.occhi) oc.scale.y = (e % 3) < 0.12 ? 0.25 : 1.5;
+      u.sorriso.visible = true; u.bocca_o.visible = u.linea.visible = false;
+      return true;
+    });
     for (const tx of texCodice) tx.offset.y = (tx.offset.y - 0.004) % 1;     // il codice scorre
     for (const { mesh, s } of schermi) {
       const c = s.stato === "aspetta" && Math.floor(t * 2) % 2 ? "#ff5d5d" : (s.colore && s.stato === "supervisore" ? s.colore : COL[s.stato] || "#2a2e3a");
@@ -661,6 +735,8 @@
     attiva(si) { attivo = si; if (si) misura(); },
     inquadra,
     camera, controlli,
+    provaPostino() { const id = [...bersagli.keys()].find(k => !k.startsWith("capo:")); avviaPostino(id); avviaPostino([...bersagli.keys()].find(k => k.startsWith("capo:r:") && k !== "capo:r:capo")); },
+    get postini() { return postini.map(p => [p.id, p.g && p.g.position.x, p.g && p.g.position.z, !!(p.g && p.g.parent)]); },
     caffeSubito() { for (const a of animati) a.userData.prossimoT = 0; },   // per le prove
   };
 })();
