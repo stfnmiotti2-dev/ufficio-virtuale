@@ -429,10 +429,19 @@
     strato.append(c);
   }
 
-  function disegna(sessioni, nuovoExtra) {
-    ultime = sessioni;
+  // gruppi (capo, responsabili, isole) con il loro colore: li usa anche la scena 3D
+  function prepara(sessioni, nuovoExtra) {
     if (nuovoExtra) extra = nuovoExtra;
     const gruppi = isole(sessioni);
+    let ci = 0;
+    for (const gr of gruppi) gr.colore = gr.chiave === "r:capo" ? ORO : gr.scheda ? gr.scheda.colore :
+      gr.chiave === "altro" ? "#8b90a3" : COLORI_ISOLE[ci++ % COLORI_ISOLE.length];
+    return gruppi;
+  }
+
+  function disegna(sessioni, nuovoExtra) {
+    ultime = sessioni;
+    const gruppi = prepara(sessioni, nuovoExtra);
     const disp = (wrap.clientWidth || 1000) - 40;   // tolgo il padding laterale
     // scala: la piu' grande che tiene gli uffici a vetri su due file al massimo
     const nUffici = gruppi.filter(haUfficio).length;
@@ -445,9 +454,6 @@
     // a scala 2 fumetti e scritte (in pixel veri) occupano piu' spazio: allargo le fasce dei testi
     const RIEP = scala >= 3 ? RIEPILOGO_H : RIEPILOGO_H + 6, ISO = scala >= 3 ? ISOLA_H : ISOLA_H + 12;
     // colore per ogni isola: oro per il capo, poi a giro
-    let ci = 0;
-    for (const gr of gruppi) gr.colore = gr.chiave === "r:capo" ? ORO : gr.scheda ? gr.scheda.colore :
-      gr.chiave === "altro" ? "#8b90a3" : COLORI_ISOLE[ci++ % COLORI_ISOLE.length];
     // 1) direzione: uffici a vetri in fila sotto il muro (capo e responsabili)
     const capi = gruppi.filter(haUfficio);
     const perFila = Math.max(1, Math.floor((colonne * SLOT_W + (colonne - 1) * GAP + GAP) / (UFF_W + GAP)));
@@ -586,5 +592,6 @@
     clearTimeout(attesa);
     attesa = setTimeout(() => disegna(ultime), 150);
   });
-  window.Ufficio = { disegna };
+  window.Ufficio = { disegna, prepara, haUfficio, nomeIsola, riepilogo, testoFumetto, targa, corto, hash,
+                     PRESENTI, PELLE, CAPELLI, MAGLIE, COLORI_STATO };
 })();
