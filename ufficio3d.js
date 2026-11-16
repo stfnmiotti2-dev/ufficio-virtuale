@@ -393,6 +393,8 @@
   let animati = [], marcati = [], cliccabili = [], schermi = [], camminatori = [];
   // postino: quando un thread passa da "aspetta te" a "lavora" vuol dire che Stefano ha risposto
   const statiPrima = new Map();
+  let porta = null, portaPos = null, portaAperta = 0;
+  const arrivi = new Map();                                              // id -> quando entra dalla porta (dopo il cantiere)
   let postini = [], bersagli = new Map(), ingresso = [-2.5, 6], ultimiDati = null;
   function creaPostino(p) {
     p.g = omino({ id: "postino" + p.id }, mondo, p.punti[0][0], p.punti[0][1], "postino");
@@ -544,6 +546,7 @@
     const pos = new T.Vector3(x, 2.3, z);
     const et = etichetta("f3d", "🔨 Lavori in corso", pos);
     marcati.push(et);
+    if (om) om.userData.idArrivo = id;
     lavori.push({ id, parti, om, operai, inizio, fine, et, x, z });
   }
   // thread chiuso: l'omino prende lo scatolone, saluta ed esce, poi due operai smontano la scrivania
@@ -759,7 +762,21 @@
       v.material = new T.MeshBasicMaterial({ color: new T.Color("#9fd4f2").convertSRGBToLinear() });
     }
     centro.copy(mid); larg = size.x + 1; prof = size.z + 2;
-    ingresso = [bb.min.x - 2, profMax / 2 + 2.2];
+    // parete di sinistra con la porta d'ingresso: da qui si entra (con la 24 ore) e si esce (cappotto o scatolone)
+    const xm = bb.min.x - 3, zp = profMax / 2 + 2.2, zb = bb.min.z - 3, zf = zp + 2.2, LP = 1.3;
+    box(0.2, 3, zp - LP / 2 - zb, "#efe8dc", xm, 0, (zb + zp - LP / 2) / 2);
+    box(0.2, 3, zf - zp - LP / 2, "#efe8dc", xm, 0, (zf + zp + LP / 2) / 2);
+    box(0.2, 0.7, LP, "#efe8dc", xm, 2.3, zp);                             // architrave
+    for (const dz of [-LP / 2, LP / 2]) box(0.3, 2.35, 0.1, "#6b3d22", xm, 0, zp + dz);   // stipiti
+    box(0.3, 0.1, LP + 0.1, "#6b3d22", xm, 2.3, zp);
+    const cartello = box(0.06, 0.24, 0.62, "#21a35b", xm + 0.14, 2.42, zp);   // cartello verde di uscita
+    cartello.material = new T.MeshBasicMaterial({ color: lin("#2fbf6d") });
+    porta = new T.Group(); porta.position.set(xm, 0, zp - LP / 2 + 0.03); mondo.add(porta);   // cardine
+    tondo(0.08, 2.25, LP - 0.08, "#9a6233", 0, 0, (LP - 0.08) / 2, porta, 0.03);
+    tondo(0.1, 0.9, LP - 0.4, "#b07a45", 0.02, 0.9, (LP - 0.08) / 2, porta, 0.03);   // pannello
+    palla(0.06, "#e3b23c", 0.08, 1.05, LP - 0.25, porta, 1, 1, 1, { metalness: 0.7 });
+    portaPos = new T.Vector3(xm, 0, zp);
+    ingresso = [xm - 0.3, zp];
     for (const p of postini) creaPostino(p);                               // quelli gia' in cammino continuano
     const ora = new Map(schermi.map(q => [q.s.id, q.s.stato]));
     const primaVoltaDati = statiPrima.size === 0;
@@ -889,6 +906,14 @@
         if (u.prossimoT == null) u.prossimoT = t + u.prossimo;
         if (t > u.prossimoT) u.giro = { punti: vaCaffe ? giroCaffe(u) : giroBussa(u), inizio: t };
       }
+      if (!u.giro && arrivi.has(u.idArrivo)) {                          // nuovo arrivato: entra dalla porta con la 24 ore
+        const [ix, iz] = ingresso, uf = u.chiave && uffici.get(u.chiave);
+        let punti;
+        if (uf) { const { gx, gz, LW, LD, casa } = uf, pt = LW * 0.32, fuori = LD / 2 + 0.7;
+          punti = [[ix - gx, iz - gz, 0], [pt, fuori, 0], [pt, casa[1], 0], [casa[0], casa[1], 0.6, "siede"]]; }
+        else { const [x, z] = u.casa; punti = [[ix, iz, 0], [x, u.via, 0], [x, u.corridoio, 0], [x, z, 0.6, "siede"]]; }
+        u.giro = { punti, inizio: arrivi.get(u.idArrivo), arrivo: true };
+      }
       if (u.chiave && !u.giro) {
         const o = ordini.find(o => o.chiave === u.chiave && t >= o.inizio && t < o.fine);
         if (o) u.giro = { punti: o.punti, inizio: o.inizio };
@@ -912,6 +937,7 @@
         pos = lungo(u.giro.punti, t - u.giro.inizio, 1.1);
         if (pos.fine) {
           if (u.giro.uscita) { usciti.add(s.id); a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); u.giro = null; continue; }
+          if (u.giro.arrivo) arrivi.delete(u.idArrivo);
           u.giro = null; u.prossimoT = t + 50 + (U.hash(s.id + t) % 40); pos = null;
         }
         else if (u.telefonata && pos) pos.azione = pos.azione || null;
@@ -942,6 +968,14 @@
           corpo.position.y += Math.abs(Math.cos(k * 9)) * 0.03;
         } else { sx.rotation.set(0.1, 0, 0.12); dx.rotation.set(0.1, 0, -0.12); }
         if (u.giro && u.giro.passeggio) { sx.rotation.set(-0.75, 0, 0.35); dx.rotation.set(-0.75, 0, -0.35); }   // mani dietro la schiena
+        if (u.giro && u.giro.arrivo) {                                   // grossa ventiquattrore nella destra
+          if (!u.valigetta) { u.valigetta = new T.Group(); dx.add(u.valigetta);
+            tondo(0.12, 0.42, 0.56, "#5a3420", 0, -0.98, 0, u.valigetta, 0.05);
+            tondo(0.13, 0.05, 0.58, "#3b2214", 0, -0.66, 0, u.valigetta, 0.02);
+            tondo(0.04, 0.1, 0.22, "#2b1a10", 0, -0.56, 0, u.valigetta, 0.02);
+            for (const dz of [-0.17, 0.17]) palla(0.035, "#e3b23c", 0.07, -0.72, dz, u.valigetta, 1, 1, 1, { metalness: 0.7 }); }
+          u.valigetta.visible = true; dx.rotation.set(Math.sin(k * 9) * 0.15, 0, -0.08);
+        } else if (u.valigetta) u.valigetta.visible = false;
         if (u.giro && u.giro.trasloco) {                                 // scatolone tra le braccia
           if (!u.scatola) { u.scatola = new T.Group(); corpo.add(u.scatola);
             tondo(0.56, 0.4, 0.4, "#c8955a", 0, 0.62, -0.38, u.scatola, 0.03);
@@ -1086,6 +1120,13 @@
       return true;
     });
     ordini = ordini.filter(o => t < o.fine + 1);
+    if (porta) {                                                          // la porta si apre quando qualcuno ci passa vicino
+      let vicino = false; const w = new T.Vector3();
+      for (const a of animati) { if (!a.visible || !a.userData.giro) continue; a.getWorldPosition(w); if (Math.hypot(w.x - portaPos.x, w.z - portaPos.z) < 2.2) { vicino = true; break; } }
+      if (!vicino) for (const q of postini) if (q.g && Math.hypot(q.g.position.x - portaPos.x, q.g.position.z - portaPos.z) < 2.2) { vicino = true; break; }
+      portaAperta += ((vicino ? 1 : 0) - portaAperta) * Math.min(1, dt * 4);
+      porta.rotation.y = portaAperta * 1.45;
+    }
     lavori = lavori.filter(l => {
       const p = Math.min(1, Math.max(0, (t - l.inizio) / (l.fine - l.inizio)));
       const sy = l.smonta ? Math.max(0.03, 1 - Math.floor(p * 1.15 * 6) / 6)    // smontaggio: cala a scatti
@@ -1113,6 +1154,7 @@
         u.testa.rotation.x = colpo * 0.25;
       }
       if (p >= 1) {
+        if (l.om && !arrivi.has(l.om.userData.idArrivo)) arrivi.set(l.om.userData.idArrivo, t);   // ora arriva dalla porta
         for (const o of l.operai) mondo.remove(o);
         l.et.e.remove(); cantieri.delete(l.id);
         return false;
