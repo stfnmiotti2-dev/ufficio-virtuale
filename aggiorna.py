@@ -8,7 +8,10 @@ Uso a mano:  python aggiorna.py
 """
 import io
 import json
+import os
+import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 import zipfile
@@ -44,12 +47,44 @@ def local_sha():
         return ""
 
 
+def _powershell_get(url, headers):
+    """Download con PowerShell: usa i certificati di Windows, che a volte Python
+    non riesce a verificare (antivirus o proxy aziendali che ispezionano HTTPS)."""
+    fd, tmp = tempfile.mkstemp(prefix="ufficio-")
+    os.close(fd)
+    try:
+        h = "; ".join(f"'{k}'='{v}'" for k, v in headers.items())
+        cmd = (f"$ProgressPreference='SilentlyContinue'; "
+               f"Invoke-WebRequest -UseBasicParsing -Uri '{url}' -Headers @{{{h}}} -OutFile '{tmp}'")
+        subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd],
+                       check=True, timeout=120, capture_output=True,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        with open(tmp, "rb") as f:
+            return f.read()
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+def fetch(url, headers=None, timeout=60):
+    headers = {**UA, **(headers or {})}
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.read()
+    except Exception as exc:
+        if sys.platform != "win32":
+            raise
+        log(f"Python non riesce a scaricare ({exc}); provo con PowerShell")
+        return _powershell_get(url, {k: v for k, v in headers.items() if k != "User-Agent"})
+
+
 def remote_sha(timeout=10):
-    req = urllib.request.Request(
-        f"https://api.github.com/repos/{REPO}/commits/{BRANCH}",
-        headers={**UA, "Accept": "application/vnd.github.sha"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read().decode("ascii").strip()
+    data = fetch(f"https://api.github.com/repos/{REPO}/commits/{BRANCH}",
+                 {"Accept": "application/vnd.github.sha"}, timeout)
+    return data.decode("ascii").strip()
 
 
 def update():
@@ -62,9 +97,7 @@ def update():
     if not sha or sha == local_sha():
         return False
     try:
-        req = urllib.request.Request(f"https://codeload.github.com/{REPO}/zip/{sha}", headers=UA)
-        with urllib.request.urlopen(req, timeout=60) as r:
-            data = r.read()
+        data = fetch(f"https://codeload.github.com/{REPO}/zip/{sha}")
         written = 0
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             for info in z.infolist():
