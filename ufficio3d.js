@@ -360,9 +360,10 @@
     };
     const sx = braccio(-0.31), dx = braccio(0.31);
     if (operaio) {                                                       // martello nella destra, scalpello nella sinistra
-      tondo(0.04, 0.3, 0.04, "#8a5a2b", 0, -0.62, -0.02, dx, 0.015);
-      tondo(0.2, 0.08, 0.08, "#5b6270", 0, -0.48, -0.02, dx, 0.02, { metalness: 0.6 });
-      tondo(0.03, 0.26, 0.03, "#9aa3b0", 0, -0.58, -0.02, sx, 0.01, { metalness: 0.6 });
+      tondo(0.08, 0.62, 0.08, "#b0703a", 0, -1.0, 0, dx, 0.03);                         // martellone: manico lungo
+      tondo(0.22, 0.22, 0.5, "#3a3f4a", 0, -1.14, -0.08, dx, 0.05, { metalness: 0.7, roughness: 0.3 });   // testa enorme
+      tondo(0.1, 0.18, 0.1, "#ffd23f", 0, -0.62, 0, sx, 0.03);                           // scalpello: impugnatura gialla
+      tondo(0.06, 0.42, 0.06, "#c9d1dc", 0, -1.02, 0, sx, 0.02, { metalness: 0.7, roughness: 0.25 });
     }
     // cornetta da telefono classico, grande e rossa, con il filo a spirale (si vede bene anche da lontano)
     const giacca = palla(0.29, "#5b4a3f", 0, 0.8, 0, corpo, 1, 1.25, 0.9); giacca.visible = false;   // cappotto per uscire la sera
@@ -415,7 +416,7 @@
   const venerdi = () => t < forzaVenerdi || (ora_().getDay() === 5 && ora_().getHours() >= 14);
   function momento(id, tipo, durata) { const ini = performance.now() / 1000; momenti.set(id, { tipo, inizio: ini, fine: ini + durata }); }
   const MAT_COR = ["#ff5d8f", "#ffd43b", "#4dabf7", "#69db7c", "#b197fc", "#ff922b"].map(c => new T.MeshBasicMaterial({ color: lin(c), side: T.DoubleSide }));
-  const geoCor = new T.PlaneGeometry(0.06, 0.04), geoFumo = new T.SphereGeometry(0.08, 8, 6), geoPallina = new T.IcosahedronGeometry(0.06, 0);
+  const geoCor = new T.PlaneGeometry(0.06, 0.04), geoFumo = new T.SphereGeometry(0.08, 8, 6), geoPallina = new T.IcosahedronGeometry(0.06, 0), geoPolvere = new T.IcosahedronGeometry(0.15, 1);
   function coriandoli(x, y, z) {
     for (let i = 0; i < 40; i++) {
       const c = new T.Mesh(geoCor, MAT_COR[i % MAT_COR.length]);
@@ -429,6 +430,14 @@
       const f = new T.Mesh(geoFumo, new T.MeshStandardMaterial({ color: lin("#6b6f78"), transparent: true, opacity: 0.7, roughness: 1 }));
       f.position.set(x + (Math.random() - 0.5) * 0.2, y, z); mondo.add(f);
       effetti.push({ o: f, v: [(Math.random() - 0.5) * 0.15, 0.5 + Math.random() * 0.3, 0], g: 0, cresce: 1.6, vita: 2.5, nato: t + i * 0.3, fumo: true });
+    }
+  }
+  function polvere(x, y, z) {                                             // sbuffo di polvere a ogni martellata
+    for (let i = 0; i < 7; i++) {
+      const f = new T.Mesh(geoPolvere, new T.MeshStandardMaterial({ color: lin(i % 2 ? "#f6efe2" : "#d9c9a8"), transparent: true, opacity: 0.7, roughness: 1 }));
+      const a = Math.random() * Math.PI * 2;
+      f.position.set(x, y, z); f.scale.setScalar(0.8); mondo.add(f);
+      effetti.push({ o: f, v: [Math.cos(a) * 0.45, 0.35 + Math.random() * 0.3, Math.sin(a) * 0.45], g: 0.25, cresce: 2.4, vita: 1.5, nato: t + i * 0.03, fumo: true });
     }
   }
   function pallina(da, a) {                                              // pallina di carta lanciata nel cestino
@@ -535,7 +544,7 @@
     const pos = new T.Vector3(x, 2.3, z);
     const et = etichetta("f3d", "🔨 Lavori in corso", pos);
     marcati.push(et);
-    lavori.push({ id, parti, om, operai, inizio, fine, et });
+    lavori.push({ id, parti, om, operai, inizio, fine, et, x, z });
   }
   function avviaPostino(id) {
     let b = bersagli.get(id);
@@ -905,14 +914,23 @@
           if (pos && pos.azione === "saluta") dx.rotation.set(0, 0, 2.5 + Math.sin(k * 9) * 0.35);      // ciao ciao
         }
         if (pos && pos.azione === "caffe" && u.chiacchiera) u.chiacchiera.alCaffe.push(a);
+        if (u.nuvolaOrdini && !(pos && pos.azione === "ordini")) u.nuvolaOrdini.e.style.visibility = "hidden";
         if (pos && pos.azione === "telefono") {
           u.telefono.visible = true; dx.rotation.set(0.15, 0, 3.0);           // cornetta all'orecchio
           sx.rotation.set(0.5 + Math.sin(k * 3) * 0.4, 0, 0.3);               // gesticola
           testa.rotation.z = Math.sin(k * 2) * 0.1;
-        } else if (pos && pos.azione === "ordini") {                        // gesticola mentre da' istruzioni
-          sx.rotation.set(1.3 + Math.sin(k * 5) * 0.5, 0, 0.35);
-          dx.rotation.set(1.6 + Math.cos(k * 4) * 0.6, 0, -0.35 + Math.sin(k * 3) * 0.2);
-          testa.rotation.x = Math.sin(k * 6) * 0.08;
+        } else if (pos && pos.azione === "ordini") {                        // gesticola animatamente mentre da' istruzioni
+          sx.rotation.set(1.4 + Math.sin(k * 9) * 1.1, 0, 0.5 + Math.sin(k * 5) * 0.35);
+          dx.rotation.set(1.6 + Math.cos(k * 8) * 1.2, 0, -0.5 + Math.cos(k * 6) * 0.35);
+          testa.rotation.x = Math.sin(k * 7) * 0.12; testa.rotation.z = Math.sin(k * 3) * 0.1;
+          u.corpo.position.y = Math.abs(Math.sin(k * 4.5)) * 0.04;
+          if (!u.nuvolaOrdini) { u.nuvolaOrdini = etichetta("f3d", "", new T.Vector3()); marcati.push(u.nuvolaOrdini); }
+          const nv = u.nuvolaOrdini, giro = Math.floor(t / 0.7);
+          if (nv.giro !== giro) {                                           // simboli a caso, cambiano mentre parla
+            nv.giro = giro; const S = ["⚙️", "📐", "🔧", "⚡", "📊", "💡", "🔩", "📋", "🧮", "✏️", "#", "@", "%", "&"];
+            nv.e.textContent = [0, 1, 2].map(j => S[(U.hash(s.id + giro + j) >>> 3) % S.length]).join(" ") + " ❗";
+          }
+          a.getWorldPosition(nv.pos); nv.pos.y = 2.45; nv.e.style.visibility = "";
         } else if (pos && pos.azione === "bussa") {                         // bussa sul vetro
           dx.rotation.set(1.9 + Math.max(0, Math.sin(k * 14)) * 0.35, 0, 0.15);
         } else if (pos && pos.azione === "attende") {
@@ -1038,10 +1056,18 @@
         if (mk) mk.e.style.visibility = p >= 1 ? "" : "hidden";           // il pensiero compare quando arriva l'omino
       }
       for (const [i, o] of l.operai.entries()) {
-        const k = t * 10 + i * 1.7;
-        o.userData.dx.rotation.set(1.2 + Math.max(0, Math.sin(k)) * 0.9, 0, -0.1);   // martellate
-        o.userData.sx.rotation.set(1.3, 0, 0.2);
-        o.userData.corpo.position.y = Math.max(0, Math.sin(k)) * 0.02;
+        const giro = t * 1.4 + i * 0.45, c = giro % 1;                      // martellate esagerate: su piano, giu' di colpo
+        if (Math.floor(giro) !== o.userData.colpi && p < 1) {               // appena ha colpito: nuvoletta di polvere
+          if (o.userData.colpi != null) polvere(o.position.x + (l.x - o.position.x) * 0.4, 0.85, o.position.z + (l.z - o.position.z) * 0.45 + 0.3);
+          o.userData.colpi = Math.floor(giro);
+        }
+        const su = c < 0.65 ? 1 - Math.pow(1 - c / 0.65, 2) : 1 - Math.pow((c - 0.65) / 0.35, 3);
+        const u = o.userData, colpo = c < 0.1 ? 1 - c / 0.1 : 0;          // appena dopo il colpo: contraccolpo
+        u.dx.rotation.set(0.5 + su * 2.7, 0, -0.15);                        // dal davanti fin sopra la testa
+        u.sx.rotation.set(0.9 + colpo * 0.25, 0, 0.35);                     // scalpello puntato in avanti
+        u.corpo.position.y = su * 0.06 - colpo * 0.05;
+        u.corpo.rotation.x = 0.12 - su * 0.18;                              // si inarca caricando, si piega colpendo
+        u.testa.rotation.x = colpo * 0.25;
       }
       if (p >= 1) {
         for (const o of l.operai) mondo.remove(o);
@@ -1131,7 +1157,7 @@
     },
     provaCantiere(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); cantieri.set(ids[n || 0], performance.now() / 1000); const uf = [...bersagli.keys()].filter(k => k.startsWith("capo:") && k !== "capo:r:capo"); if (uf.length) cantieri.set(uf[uf.length - 1], performance.now() / 1000); if (ultimiDati) costruisci(...ultimiDati); },
     provaPostino(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); avviaPostino(ids[n || 0]); },
-    get postini() { return postini.map(p => [p.id, p.g && p.g.position.x, p.g && p.g.position.z, !!(p.g && p.g.parent)]); },
+    get effetti() { return effetti.length; }, get postini() { return postini.map(p => [p.id, p.g && p.g.position.x, p.g && p.g.position.z, !!(p.g && p.g.parent)]); },
     caffeSubito() { for (const a of animati) a.userData.prossimoT = 0; },   // per le prove
   };
 })();
