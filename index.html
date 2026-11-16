@@ -60,7 +60,10 @@
              border: 2px solid #222; box-shadow: 2px 2px 0 rgba(0,0,0,.35); text-align: center; z-index: 2; }
   .fumetto::after { content: ""; position: absolute; left: 50%; top: 100%; margin-left: -5px;
                     border: 5px solid transparent; border-top-color: #222; }
-  .fumetto.st-ferma { background: #fff1d6; }
+  .fumetto.pop { animation: pop .35s cubic-bezier(.3,1.6,.6,1); }
+  @keyframes pop { from { transform: translateX(-50%) scale(.3); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+  .fumetto.st-ferma { background: #fff1d6; animation: dondola 2.4s ease-in-out infinite; }
+  @keyframes dondola { 50% { transform: translateX(-50%) translateY(-3px); } }
   .fumetto.st-finito { background: #e9ecf2; color: #555; }
   .fumetto.st-pensa { background: #e4f1ff; }
   .targa { position: absolute; left: 0; right: 0; bottom: 2px; text-align: center; color: #fff;
