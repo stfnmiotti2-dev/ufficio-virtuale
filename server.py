@@ -28,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 7.6"
+VERSIONE = "task 7.7"
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
 
@@ -134,6 +134,18 @@ def _con_nomi(sessions):
     return out
 
 
+def _diagnosi(sessions):
+    """Riassunto per capire da fuori cosa vede il server (niente testo delle chat)."""
+    campi = ("id", "stato", "remoto", "thread", "thread_titolo", "responsabile", "commessa",
+             "progetto_claude", "progetto_tia", "titolo", "modificato")
+    try:
+        (HERE / "diagnosi-sessioni.json").write_text(json.dumps(
+            {"nomi_isole": len(_nomi_isole()), "sessioni": [{k: s.get(k) for k in campi} for s in sessions]},
+            ensure_ascii=False, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+
+
 def _watcher(hours):
     while True:
         try:
@@ -142,6 +154,7 @@ def _watcher(hours):
             with _cond:
                 if data != _snapshot["json"]:
                     _snapshot.update(versione=_snapshot["versione"] + 1, sessioni=sessions, json=data)
+                    _diagnosi(sessions)
                     _cond.notify_all()
         except Exception as exc:  # non deve mai fermarsi
             print("errore durante la scansione:", exc, file=sys.stderr)

@@ -256,7 +256,7 @@ def _esito_compilazione(testo):
 ASPETTA_ORE = 12            # oltre, una domanda senza risposta non conta piu'
 _URL = re.compile(r"https?://\S+|\(#[^)]*\)|\(/[^)]*\)")
 _DOMANDE_STRUMENTI = {"askuserquestion", "request_decision"}
-_MESSAGGI_STRUMENTI = {"post_message", "send_message"}
+_MESSAGGI_STRUMENTI = {"post_message"}   # send_message va a un'altra sessione, non alla persona
 
 
 def _domanda(testo):
