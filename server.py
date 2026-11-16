@@ -3,7 +3,8 @@
 Avvio:   python server.py            (poi apri http://localhost:8787)
 Opzioni: --porta 8787  --ore 24
 
-Ascolta solo su 127.0.0.1, quindi dagli altri PC non si raggiunge. Legge i transcript
+Ascolta sulla rete di casa (per vederlo dal tablet), ma risponde solo agli indirizzi
+privati della rete locale; le operazioni che scrivono si fanno solo dal PC stesso. Legge i transcript
 con scanner.py, non chiama nessuna AI e non scrive nulla.
 """
 import argparse
@@ -28,7 +29,7 @@ HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 8.7"
+VERSIONE = "task 8.8"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
@@ -431,7 +432,7 @@ def _diagnosi(sessions, extra=None):
     da fuori senza screenshot. Niente percorsi dei file e niente dettagli dei comandi."""
     try:
         (HERE / "diagnosi-sessioni.json").write_text(json.dumps(
-            {"nomi_isole": len(_nomi_isole()), "scritto": time.time(),
+            {"nomi_isole": len(_nomi_isole()), "scritto": time.time(), "indirizzo_tablet": _indirizzo_rete(),
              "extra": json.loads(extra) if extra else None,
              "sessioni": [{k: v for k, v in s.items() if k not in ("file", "dettaglio")} for s in sessions]},
             ensure_ascii=False, indent=1), encoding="utf-8")
@@ -456,6 +457,28 @@ def _watcher(hours):
         except Exception as exc:  # non deve mai fermarsi
             print("errore durante la scansione:", exc, file=sys.stderr)
         time.sleep(POLL_S)
+
+
+def _rete_privata(ip):
+    import ipaddress
+    try:
+        a = ipaddress.ip_address(ip.split("%")[0])
+        if a.version == 6 and a.ipv4_mapped:
+            a = a.ipv4_mapped
+        return a.is_private and not a.is_unspecified
+    except ValueError:
+        return False
+
+
+def _indirizzo_rete():
+    """L'indirizzo del PC sulla Wi-Fi di casa (nessun pacchetto parte davvero)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as so:
+            so.connect(("10.255.255.255", 1))
+            ip = so.getsockname()[0]
+        return ip if _rete_privata(ip) and not ip.startswith("127.") else None
+    except OSError:
+        return None
 
 
 class Server(ThreadingHTTPServer):
@@ -483,6 +506,10 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        ip = self.client_address[0]
+        locale = ip in ("127.0.0.1", "::1")
+        if not (locale or _rete_privata(ip)):          # solo la rete di casa
+            return self._send(403, b"solo dalla rete locale", "text/plain; charset=utf-8")
         path = self.path.split("?", 1)[0]
         if path in STATIC:
             name, ctype = STATIC[path]
@@ -492,13 +519,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/stream":
             return self._stream()
         if path == "/api/versione":
-            body = json.dumps({"versione": VERSIONE, "git": aggiorna.local_sha()[:7]})
+            body = json.dumps({"versione": VERSIONE, "git": aggiorna.local_sha()[:7], "indirizzo_tablet": _indirizzo_rete()})
             return self._send(200, body.encode(), "application/json")
         if path == "/api/etichette":
             body = json.dumps(etichette.load(), ensure_ascii=False).encode("utf-8")
             return self._send(200, body, "application/json; charset=utf-8")
         if path == "/api/chat":
             return self._chat()
+        if path in ("/api/nome-isola", "/api/riavvia") and not locale:
+            return self._send(403, b"solo dal PC", "text/plain; charset=utf-8")
         if path == "/api/nome-isola":       # ?thread=cmsg_...&nome=24_247 op20 (nome vuoto = cancella)
             q = parse_qs(urlparse(self.path).query)
             thread, nome = q.get("thread", [""])[0], q.get("nome", [""])[0].strip()[:60]
@@ -603,7 +632,7 @@ def main():
     server = None
     for _ in range(20):              # dopo un riavvio la porta puo' restare occupata per un attimo
         try:
-            server = Server(("127.0.0.1", args.porta), Handler)
+            server = Server(("0.0.0.0", args.porta), Handler)
             break
         except OSError:
             time.sleep(0.5)
@@ -619,6 +648,8 @@ def main():
     threading.Thread(target=_tia_processi, daemon=True).start()
     if not args.senza_aggiornamenti:
         threading.Thread(target=_aggiornatore, args=(server,), daemon=True).start()
+    if _indirizzo_rete():
+        print(f"Dal tablet (stessa Wi-Fi): http://{_indirizzo_rete()}:{args.porta}", flush=True)
     print(f"Ufficio virtuale ({VERSIONE}, {aggiorna.local_sha()[:7] or 'locale'}) su "
           f"http://localhost:{args.porta}  (Ctrl+C per fermare)", flush=True)
     print(f"Leggo i transcript da {scanner.PROJECTS_DIR}", flush=True)

@@ -3,7 +3,8 @@
   // Con "apri nel browser" spuntato (o senza app) restano link web normali.
   function nelBrowser() { try { return localStorage.getItem("linkBrowser") === "1"; } catch (e) { return false; } }
   function perApp(url) {
-    return !nelBrowser() && /^https:\/\/claude\.ai\//.test(url || "") ? url.replace(/^https:\/\//, "claude://") : null;
+    const sulPC = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);   // dal tablet: link web
+    return sulPC && !nelBrowser() && /^https:\/\/claude\.ai\//.test(url || "") ? url.replace(/^https:\/\//, "claude://") : null;
   }
   window.apriLink = function (url) {
     if (!url) return;
