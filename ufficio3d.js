@@ -219,8 +219,14 @@
     const g = new T.Group(); g.position.set(x, 0, z); g.rotation.y = Math.PI; padre.add(g);
     const corpo = new T.Group(); g.add(corpo);
     palla(0.26, maglia, 0, 0.78, 0, corpo, 1, 1.3, 0.85);                 // busto a pillola
-    palla(0.11, "#5f6f8f", -0.12, 0.47, -0.2, corpo, 1, 0.9, 1.9);         // gambe sotto la scrivania
-    palla(0.11, "#5f6f8f", 0.12, 0.47, -0.2, corpo, 1, 0.9, 1.9);
+    const sedute = [palla(0.11, "#5f6f8f", -0.12, 0.47, -0.2, corpo, 1, 0.9, 1.9),   // gambe sotto la scrivania (seduto)
+                    palla(0.11, "#5f6f8f", 0.12, 0.47, -0.2, corpo, 1, 0.9, 1.9)];
+    const gambe = [-0.11, 0.11].map(lx => {                              // gambe in piedi, con l'anca come perno
+      const a = new T.Group(); a.position.set(lx, 0.56, 0); corpo.add(a);
+      const c = new T.Mesh(new T.CylinderGeometry(0.075, 0.07, 0.42, 10), m("#5f6f8f")); c.position.y = -0.24; c.castShadow = true; a.add(c);
+      palla(0.09, "#3c4658", 0, -0.47, -0.04, a, 1, 0.6, 1.4);            // scarpa
+      a.visible = false; return a;
+    });
     const testa = new T.Group(); testa.position.set(0, 1.33, 0); corpo.add(testa);
     palla(0.27, pelle, 0, 0, 0, testa, 1, 1.05, 1);                         // testa
     // capelli: calotta sopra e dietro, con un ciuffo diverso per ognuno
@@ -260,7 +266,10 @@
       return b;
     };
     const sx = braccio(-0.31), dx = braccio(0.31);
-    g.userData = { corpo, testa, sx, dx, s, fase: (h % 97) / 10, occhi, sorriso, bocca_o, linea, stato: null, salto: 0 };
+    const telefono = tondo(0.07, 0.24, 0.06, "#2b2b33", 0, -0.52, -0.04, dx, 0.025); telefono.visible = false;   // cornetta in mano
+    const tazza = tondo(0.1, 0.12, 0.1, "#ffffff", 0, -0.55, -0.06, dx, 0.04); tazza.visible = false;           // tazza del caffe'
+    g.userData = { corpo, testa, sx, dx, s, fase: (h % 97) / 10, occhi, sorriso, bocca_o, linea, stato: null, salto: 0,
+      sedute, gambe, telefono, tazza, casa: [x, z], giro: null, prossimo: 8 + (h % 40) };
     return g;
   }
   function etichetta(cls, testo, pos, titolo) {
@@ -273,13 +282,13 @@
   }
 
   // ---------- costruzione della scena dai dati ----------
-  let animati = [], marcati = [], cliccabili = [], schermi = [];
+  let animati = [], marcati = [], cliccabili = [], schermi = [], camminatori = [];
   let primaVolta = true, centro = new T.Vector3(), larg = 20, prof = 10;
 
   function costruisci(sessioni, extra) {
     mondo.clear();
     etichette.replaceChildren();
-    animati = []; marcati = []; cliccabili = []; schermi = [];
+    animati = []; marcati = []; cliccabili = []; schermi = []; camminatori = [];
     const gruppi = U.prepara(sessioni, extra);
     const capi = gruppi.filter(U.haUfficio);
     const UFF = 3.6, PASSO = 2.6;
@@ -323,7 +332,15 @@
       const nome = capo ? "CAPO" : pulito(U.nomeIsola(gr));
       const scr = scrivania(0, capo ? 0.35 : 0.3, g, s, capo ? "capo" : "resp", nome);
       sedia(0, capo ? -0.75 : -0.65, g, gr.colore, capo);
-      animati.push(omino(s, g, 0, capo ? -0.6 : -0.5, capo));
+      const capoOm = omino(s, g, 0, capo ? -0.6 : -0.5, capo);
+      animati.push(capoOm);
+      if (stato === "aspetta") {                                         // ti sta chiamando: in piedi con la cornetta, avanti e indietro
+        const zc = capo ? -1.45 : -1.15, lx = LW / 2 - 0.9;
+        capoOm.userData.telefonata = { giro: [[0, zc, 0.6], [-lx, zc, 1.6], [lx, zc, 1.6], [0, zc, 0.4]] };
+        const pos = new T.Vector3(x, 1.85, z - 0.6);
+        capoOm.userData.etichetta = { pos, base: [x, z] };
+        marcati.push(etichetta("f3d st-aspetta", "📞", pos, "Ti sta chiamando: aspetta una tua risposta"));
+      }
       schermi.push({ mesh: scr.userData.schermo, s });
       const link = gr.link || (gr.s0 && gr.s0.link);
       cliccabili.push({ obj: g, apri: () => link && apriLink(link) });
@@ -357,20 +374,29 @@
           const scr = scrivania(x, z0, mondo, s, "", pulito(U.targa(s)).replace(/\s*❌\d*$/, ""));
           sedia(x, z0 - 0.95, mondo);
           const presente = U.PRESENTI.includes(s.stato);
-          if (presente) animati.push(omino(s, mondo, x, z0 - 0.8, false));
+          const om = presente ? omino(s, mondo, x, z0 - 0.8, false) : null;
+          if (om) { animati.push(om); camminatori.push(om); om.userData.corridoio = z0 - 1.75; }
           schermi.push({ mesh: scr.userData.schermo, s: presente ? s : { stato: "spento" } });
           const apri = () => s.link ? apriLink(s.link) : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
           cliccabili.push({ obj: scr, apri });
           if (presente) {
             const [ic, testo] = U.testoFumetto(s);
             marcati.push(etichetta("f3d st-" + (s.download ? "allarme" : s.stato.replace("?", "")),
-              ic + " " + U.corto(testo, s.stato === "aspetta" ? 40 : 30), new T.Vector3(x, 1.95, z0 - 0.8), s.titolo));
+              ic + " " + U.corto(testo, s.stato === "aspetta" ? 40 : 30), om.userData.etichettaPos = new T.Vector3(x, 1.95, z0 - 0.8), s.titolo));
           }
           const tg = U.targa(s) || U.corto((s.titolo || "").replace(/^.*?›\s*/, ""), 18);
           if (tg) marcati.push(etichetta("tg3d", (s.cloud ? "☁️ " : "") + tg, new T.Vector3(x, 0.05, z0 + 1.5), s.titolo));
         });
         x0 += wi + 0.8;
       }
+      // angolo caffe' in fondo alla fila: chi lavora ogni tanto si alza e ci va
+      const cx = x0 + 0.6, cz = z0 - 1.75;
+      tondo(1.2, 0.9, 0.6, "#ffffff", cx, 0, cz, mondo, 0.06);
+      tondo(1.24, 0.06, 0.64, "#c08850", cx, 0.9, cz, mondo, 0.03);
+      tondo(0.36, 0.5, 0.32, "#3c4658", cx - 0.2, 0.96, cz - 0.05, mondo, 0.06);       // macchinetta
+      palla(0.035, "#ff6b6b", cx - 0.2, 1.3, cz + 0.12, mondo, 1, 1, 0.5, { emissive: "#ff6b6b", emissiveIntensity: 0.6 });
+      for (const dx of [0.15, 0.32]) tondo(0.1, 0.11, 0.1, "#ffffff", cx + dx, 0.96, cz + 0.1, mondo, 0.04);
+      for (const om of camminatori.splice(0)) om.userData.caffe = [cx - 0.2, cz + 0.65];
       z0 += 4.4;
     }
     // pavimento e pareti attorno a tutto
@@ -404,6 +430,32 @@
   const COL = Object.assign({}, U.COLORI_STATO, { supervisore: "#9fd2f0", spento: "#2a2e3a", inattiva: "#2a2e3a", vuota: "#2a2e3a" });
   const v = new T.Vector3();
   let t = 0, ultimo = 0, attivo = false;
+  // percorso a tappe: punti = [[x, z, pausa, azione]]; restituisce dove si trova l'omino dopo e secondi
+  function durata(punti, vel) {
+    let tt = 0;
+    punti.forEach((p, i) => { tt += p[2] || 0; const q = punti[i + 1]; if (q) tt += Math.hypot(q[0] - p[0], q[1] - p[1]) / vel; });
+    return tt;
+  }
+  function lungo(punti, e, vel) {
+    let tt = 0;
+    for (let i = 0; i < punti.length; i++) {
+      const p = punti[i];
+      if (e < tt + (p[2] || 0)) return { x: p[0], z: p[1], azione: p[3], fermo: true };
+      tt += p[2] || 0;
+      const q = punti[i + 1];
+      if (!q) break;
+      const d = Math.hypot(q[0] - p[0], q[1] - p[1]), dur = d / vel;
+      if (e < tt + dur) { const f = (e - tt) / dur; return { x: p[0] + (q[0] - p[0]) * f, z: p[1] + (q[1] - p[1]) * f, dir: [q[0] - p[0], q[1] - p[1]] }; }
+      tt += dur;
+    }
+    const l = punti[punti.length - 1];
+    return { x: l[0], z: l[1], fine: true, fermo: true };
+  }
+  function giroCaffe(u) {                                            // dalla sedia al caffe' e ritorno, passando dietro le sedie
+    const [x, z] = u.casa, c = u.corridoio, [mx, mz] = u.caffe;
+    return [[x, z, 0.7], [x, c, 0], [mx - 0.7, c, 0], [mx - 0.7, mz, 0], [mx, mz, 4.5, "caffe"], [mx - 0.7, mz, 0],
+            [mx - 0.7, c, 0], [x, c, 0], [x, z, 0.4, "siede"]];
+  }
   function anima(ms) {
     requestAnimationFrame(anima);
     if (!attivo || document.hidden || ms - ultimo < 1000 / 24) return;   // 24 fotogrammi al secondo bastano
@@ -420,13 +472,63 @@
       u.sorriso.visible = ["lavora", "supervisore"].includes(s.stato);
       u.bocca_o.visible = s.stato === "aspetta";
       u.linea.visible = !u.sorriso.visible && !u.bocca_o.visible;
-      testa.rotation.set(0, 0, 0); sx.rotation.set(-1.2, 0, 0); dx.rotation.set(-1.2, 0, 0);
-      if (s.stato === "lavora") { sx.rotation.x = -1.25 + Math.sin(k * 18) * 0.12; dx.rotation.x = -1.25 + Math.cos(k * 18) * 0.12; }
-      else if (s.stato === "pensa") { testa.rotation.z = Math.sin(k * 1.2) * 0.15; dx.rotation.set(-2.3, 0, 0.5); }
+      testa.rotation.set(0, 0, 0); corpo.rotation.set(0, 0, 0); sx.rotation.set(1.2, 0, 0); dx.rotation.set(1.2, 0, 0);
+      let inPiedi = false, cammina = false;
+      u.telefono.visible = u.tazza.visible = false;
+      // passeggiata al caffe' per chi lavora (ogni minuto circa); la finisce anche se nel frattempo cambia stato
+      if (!u.giro && u.caffe && s.stato === "lavora") {
+        if (u.prossimoT == null) u.prossimoT = t + u.prossimo;
+        if (t > u.prossimoT) { const punti = giroCaffe(u); u.giro = { punti, inizio: t }; }
+      }
+      let pos = null;
+      if (u.giro) {
+        pos = lungo(u.giro.punti, t - u.giro.inizio, 1.1);
+        if (pos.fine) { u.giro = null; u.prossimoT = t + 50 + (U.hash(s.id + t) % 40); pos = null; }
+      } else if (u.telefonata) {
+        const g = u.telefonata.giro, tot = durata(g, 0.7);
+        pos = lungo(g, (t + fase) % tot, 0.7);
+        pos.azione = "telefono";
+      }
+      if (pos) {
+        inPiedi = !(pos.azione === "siede" || (pos.fermo && pos.x === u.casa[0] && pos.z === u.casa[1] && !u.telefonata && !pos.azione));
+        cammina = !pos.fermo;
+        a.position.x = pos.x; a.position.z = pos.z;
+        if (pos.dir) a.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
+        else if (pos.azione === "caffe") a.rotation.y = 0;
+        else if (pos.azione === "telefono" || pos.azione === "siede" || !u.telefonata) a.rotation.y = pos.azione === "caffe" ? 0 : (pos.azione === "telefono" ? Math.PI + Math.sin(k) * 0.3 : Math.PI);
+        if (pos.fermo && u.giro && t - u.giro.inizio < 0.7) inPiedi = true;   // si alza
+      } else { a.position.x = u.casa[0]; a.position.z = u.casa[1]; a.rotation.y = Math.PI; }
+      for (const l of u.sedute) l.visible = !inPiedi;
+      for (const l of u.gambe) { l.visible = inPiedi; l.rotation.x = 0; }
+      if (inPiedi) {
+        if (cammina) {
+          const o = Math.sin(k * 9);
+          u.gambe[0].rotation.x = o * 0.5; u.gambe[1].rotation.x = -o * 0.5;
+          sx.rotation.set(-o * 0.5, 0, 0.12); dx.rotation.set(o * 0.5, 0, -0.12);
+          corpo.position.y += Math.abs(Math.cos(k * 9)) * 0.03;
+        } else { sx.rotation.set(0.1, 0, 0.12); dx.rotation.set(0.1, 0, -0.12); }
+        if (pos && pos.azione === "telefono") {
+          u.telefono.visible = true; dx.rotation.set(0.15, 0, 3.0);           // cornetta all'orecchio
+          sx.rotation.set(0.5 + Math.sin(k * 3) * 0.4, 0, 0.3);               // gesticola
+          testa.rotation.z = Math.sin(k * 2) * 0.1;
+        } else if (pos && pos.azione === "caffe") {
+          u.tazza.visible = true;
+          const sorso = Math.sin((t - u.giro.inizio) * 1.4) > 0.3;
+          dx.rotation.set(sorso ? 2.3 : 1.2, 0, -0.1);
+          if (!sorso) { sx.rotation.set(0, 0, 2.6 + Math.sin(k * 2) * 0.2); }  // si stiracchia
+        }
+      } else if (s.stato === "lavora") { sx.rotation.x = 1.25 + Math.sin(k * 18) * 0.12; dx.rotation.x = 1.25 + Math.cos(k * 18) * 0.12; }
+      else if (s.stato === "pensa") { testa.rotation.z = Math.sin(k * 1.2) * 0.15; dx.rotation.set(2.3, 0, 0.5); }
       else if (s.stato === "aspetta") { dx.rotation.set(-2.9, 0, 0.25 + Math.sin(k * 6) * 0.35); }
       else if (s.stato === "ferma?") { testa.rotation.y = Math.sin(k * 0.8) * 0.6; }
-      else if (s.stato === "finito") { testa.rotation.x = 0.45; corpo.position.y -= 0.03; sx.rotation.x = dx.rotation.x = -0.9; }
+      else if (s.stato === "finito") {                                   // dorme sdraiato sulla scrivania, con il respiro
+        corpo.rotation.x = -0.62 - Math.sin(k * 1.3) * 0.02; corpo.position.y = 0;
+        testa.rotation.set(-0.5, 0, 0.45);
+        sx.rotation.set(2.0, 0, -0.5); dx.rotation.set(2.0, 0, 0.5);
+      }
       else if (s.stato === "supervisore") { testa.rotation.y = Math.sin(k * 0.5) * 0.3; }
+      if (u.etichettaPos) { u.etichettaPos.x = a.position.x; u.etichettaPos.z = a.position.z; }
+      if (u.etichetta) { u.etichetta.pos.x = u.etichetta.base[0] + a.position.x; u.etichetta.pos.z = u.etichetta.base[1] + a.position.z; }
     }
     for (const { mesh, s } of schermi) {
       const c = s.stato === "aspetta" && Math.floor(t * 2) % 2 ? "#ff5d5d" : (s.colore && s.stato === "supervisore" ? s.colore : COL[s.stato] || "#2a2e3a");
@@ -472,5 +574,6 @@
     attiva(si) { attivo = si; if (si) misura(); },
     inquadra,
     camera, controlli,
+    caffeSubito() { for (const a of animati) a.userData.prossimoT = 0; },   // per le prove
   };
 })();
