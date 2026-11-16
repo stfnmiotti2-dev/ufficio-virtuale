@@ -604,6 +604,8 @@
     for (const e of effetti) e.o.parent && e.o.parent.remove(e.o); effetti = [];
     const gruppi = U.prepara(sessioni, extra);
     impostaPc(extra.pc, pcPrimaVolta);                                   // all'apertura niente animazione: si parte gia' cosi'
+    const ieri = Date.now() / 1000 - 86400;                              // finito da piu' di un giorno: si chiude (scatolone e smontaggio)
+    for (const gr of gruppi) gr.sessioni = gr.sessioni.filter(q => q.inUfficio || !(q.stato === "finito" && q.modificato && q.modificato < ieri));
     for (const [id, c] of chiusi) {                                       // i thread appena chiusi restano finche' non e' finito il trasloco
       const gr = gruppi.find(g => g.chiave === c.chiave); if (!gr) continue;
       const i = gr.sessioni.findIndex(q => q.id === id);
@@ -923,16 +925,10 @@
       u.telefono.visible = u.tazza.visible = false; u.giacca.visible = false;
       // passeggiata al caffe' per chi lavora (ogni minuto circa); la finisce anche se nel frattempo cambia stato
       // chi aspetta una risposta va a bussare dal suo responsabile (circa ogni minuto)
-      const aCasa = () => {                                               // scrivania vuota: cartellino "a casa"
-        if (!u.caffe) return;
-        if (!u.cartello) { u.cartello = etichetta("f3d", "🏠 A casa", new T.Vector3(u.casa[0], 1.7, u.casa[1])); marcati.push(u.cartello); }
-        u.cartello.e.style.visibility = "";
-      };
-      if (u.cartello) u.cartello.e.style.visibility = "hidden";
       const iPc = u.iPc = animati.indexOf(a), lontano = t - pcT > 900;
       if (pc === "off") {                                                 // tutti a casa: si alzano col cappotto, salutano, escono dalla porta
         if (lontano && !pcFuori.has(s.id)) { pcFuori.add(s.id); spenti.add(s.id); }
-        if (pcFuori.has(s.id)) { a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); aCasa(); continue; }
+        if (pcFuori.has(s.id)) { a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); continue; }
         if (t > pcT + 0.6 + iPc * 0.15) spenti.add(s.id);                  // per primo spengono il computer
         if (!(u.giro && u.giro.pc) && t > pcT + 2.5 + iPc * 0.8) u.giro = { punti: versoPorta(u), inizio: t, uscita: true, pc: true };
       } else if (pcFuori.has(s.id)) {                                     // si rientra: uno alla volta dalla porta
@@ -957,11 +953,8 @@
         const o = ordini.find(o => o.chiave === u.chiave && t >= o.inizio && t < o.fine);
         if (o) u.giro = { punti: o.punti, inizio: o.inizio };
       }
-      // la sera chi ha finito si mette il cappotto, saluta ed esce; il giorno dopo (o se riparte) torna
-      if (u.caffe && s.stato === "finito" && eSera) {
-        if (usciti.has(s.id)) { a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); aCasa(); continue; }
-        if (!u.giro) { if (u.uscitaT == null) u.uscitaT = t + 2 + (U.hash(s.id) % 25); if (t > u.uscitaT) u.giro = { punti: giroUscita(u), inizio: t, uscita: true }; }
-      } else if (usciti.has(s.id)) { usciti.delete(s.id); a.visible = true; if (u.etichettaPos) nascondi(u.etichettaPos, false); }
+      // (niente piu' uscita serale: chi ha finito resta a dormire sulla scrivania)
+      if (s.chiude == null && usciti.has(s.id)) { usciti.delete(s.id); a.visible = true; if (u.etichettaPos) nascondi(u.etichettaPos, false); }
       // il capo, se nessuno lo chiama, ogni tanto fa un giro dell'open space
       if (u.chiave === "r:capo" && !u.giro && !u.telefonata && s.stato === "supervisore") {
         if (u.passeggioT == null) u.passeggioT = t + 40;
@@ -1022,7 +1015,9 @@
           if (!u.scatola) { u.scatola = new T.Group(); corpo.add(u.scatola);
             tondo(0.56, 0.4, 0.4, "#c8955a", 0, 0.62, -0.38, u.scatola, 0.03);
             tondo(0.57, 0.05, 0.1, "#e9d8a6", 0, 1.0, -0.38, u.scatola, 0.01);
-            palla(0.08, "#7cc98a", 0.12, 1.06, -0.38, u.scatola); }
+            palla(0.08, "#7cc98a", 0.12, 1.06, -0.38, u.scatola);                     // le sue cose: piantina,
+            tondo(0.16, 0.2, 0.03, "#e3b23c", -0.1, 0.98, -0.42, u.scatola, 0.01);       // cornice con la foto,
+            tondo(0.1, 0.12, 0.1, "#e0303a", 0.02, 0.98, -0.3, u.scatola, 0.03); }       // tazza
           u.scatola.visible = true;
           if (!(pos && pos.azione === "saluta")) { sx.rotation.set(1.25, 0, 0.25); dx.rotation.set(1.25, 0, -0.25); }
         } else if (u.scatola) u.scatola.visible = false;
