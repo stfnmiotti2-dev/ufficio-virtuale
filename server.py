@@ -28,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 8.4"
+VERSIONE = "task 8.5"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
@@ -97,6 +97,14 @@ def _nomi_isole():
     return _nomi["dati"]
 
 
+_BOSS = re.compile(r"\s*-\s*boss\s*$", re.I)
+
+
+def _senza_boss(nome):
+    """'24_247 OP60 -boss' -> '24_247 OP60' (il suffisso dice che il thread e' un responsabile)."""
+    return _BOSS.sub("", str(nome or "")).strip()
+
+
 _SEPARATORE = re.compile(r"\s+(?:›|>)\s+")
 _COMMESSA_STAZIONE = re.compile(r"^\d{2}_\d{3}\s+OP\s?\d{2,3}(?:\s*/\s*OP\s?\d{2,3})*$", re.I)
 _STAZIONE = re.compile(r"(?<![A-Za-z0-9])OP\s?(\d{2,3})(?!\d)", re.I)
@@ -140,8 +148,8 @@ def _responsabili(nomi):
     """[(nome, thread)] dei responsabili: le voci stringa di nomi-isole.json, piu' il Capo."""
     out = [("Capo", None)]
     for k, v in nomi.items():
-        if isinstance(v, str) and v.strip() and v.strip().lower() != "capo":
-            out.append((v.strip(), k))
+        if isinstance(v, str) and _senza_boss(v) and _senza_boss(v).lower() != "capo":
+            out.append((_senza_boss(v), k))
     return out
 
 
@@ -177,25 +185,27 @@ def _con_nomi(sessions):
     per_titolo = {"capo": "Capo"}
     for v in nomi.values():
         if isinstance(v, str):
-            per_titolo[v.strip().lower()] = v.strip()
+            per_titolo[_senza_boss(v).lower()] = _senza_boss(v)
         elif isinstance(v, dict) and v.get("titolo"):
             per_titolo[str(v["titolo"]).strip().lower()] = v.get("responsabile") or v["titolo"]
     out = []
     for s in sessions:
         s = dict(s)
         titolo_thread, resp = s.get("thread_titolo"), None
+        if titolo_thread and _BOSS.search(titolo_thread):     # "24_247 OP60 -boss": e' un responsabile
+            titolo_thread = resp = _senza_boss(titolo_thread)
         voce = _trova_voce(nomi, s.get("thread"))
         if isinstance(voce, str):                       # il thread e' un responsabile
-            titolo_thread, resp = titolo_thread or voce, voce
+            titolo_thread, resp = titolo_thread or _senza_boss(voce), resp or _senza_boss(voce)
         elif isinstance(voce, dict):
             titolo_thread = voce.get("titolo") or titolo_thread
-            resp = voce.get("responsabile")
+            resp = resp or (_senza_boss(voce.get("responsabile")) or None)
         if voce is not None:
             s["in_nomi"] = True
         # schema dei titoli "24_247 OP60 › Criticare pulsanti": prima di " › " c'e' il responsabile
         m = _SEPARATORE.split(str(titolo_thread or ""), 1)
         if not resp and len(m) == 2 and m[0].strip():
-            capo = m[0].strip()
+            capo = _senza_boss(m[0])
             resp = canonico.get(capo.lower()) or ("Capo" if capo.lower() == "capo" else
                                                   (capo if _COMMESSA_STAZIONE.match(capo) else "Capo"))
         if str(s.get("voce_cloud_resp") or "").startswith("("):   # "(responsabile)": e' lui stesso un responsabile
