@@ -546,6 +546,24 @@
     marcati.push(et);
     lavori.push({ id, parti, om, operai, inizio, fine, et, x, z });
   }
+  // thread chiuso: l'omino prende lo scatolone, saluta ed esce, poi due operai smontano la scrivania
+  const DURATA_CHIUSURA = 24, chiusi = new Map(), chiusiFatti = new Set(), ultimeSessioni = new Map();
+  function chiudi(id, c) {
+    chiusi.set(id, { ...c, inizio: performance.now() / 1000 }); chiusiFatti.add(id);
+    setTimeout(() => { chiusi.delete(id); usciti.delete(id); if (ultimiDati) costruisci(...ultimiDati); }, DURATA_CHIUSURA * 1000);
+  }
+  function apriSmontaggio(id, parti, x, z, inizio) {
+    const operai = [[x - 1.25, z, -Math.PI / 2], [x + 1.25, z, Math.PI / 2]].map(([ox, oz, r], i) => {
+      const o = omino({ id: "operaio" + id + i }, mondo, ox, oz, "operaio");
+      o.rotation.y = r; o.visible = false;
+      for (const l of o.userData.sedute) l.visible = false;
+      for (const l of o.userData.gambe) l.visible = true;
+      return o;
+    });
+    const pos = new T.Vector3(x, 2.3, z), et = etichetta("f3d", "🔧 Smontaggio", pos);
+    et.e.style.visibility = "hidden"; marcati.push(et);
+    lavori.push({ id, parti, om: null, operai, inizio, fine: inizio + 11, et, x, z, smonta: true });
+  }
   function avviaPostino(id) {
     let b = bersagli.get(id);
     if (!b) return;
@@ -576,6 +594,12 @@
     bersagli = new Map(); uffici = new Map(); lavori = []; lampadine = []; lampadari = []; chiacchiere = []; gruppoDi = new Map();
     for (const e of effetti) e.o.parent && e.o.parent.remove(e.o); effetti = [];
     const gruppi = U.prepara(sessioni, extra);
+    for (const [id, c] of chiusi) {                                       // i thread appena chiusi restano finche' non e' finito il trasloco
+      const gr = gruppi.find(g => g.chiave === c.chiave); if (!gr) continue;
+      const i = gr.sessioni.findIndex(q => q.id === id);
+      if (i >= 0) gr.sessioni[i] = { ...gr.sessioni[i], chiude: c.inizio };
+      else gr.sessioni.splice(Math.min(c.idx, gr.sessioni.length), 0, { ...c.s, chiude: c.inizio });
+    }
     const capi = gruppi.filter(U.haUfficio);
     const UFF = 3.6, PASSO = 2.6;
     // 1) uffici a vetri in fila in fondo; quello del capo e' piu' grande, con tappeto persiano e finiture d'oro
@@ -677,9 +701,11 @@
           xDestra = Math.max(xDestra, x);
           const scr = scrivania(x, z0, mondo, s, "", pulito(U.targa(s)).replace(/\s*❌\d*$/, ""));
           const sd = sedia(x, z0 - 0.95, mondo);
-          const presente = U.PRESENTI.includes(s.stato);
+          const presente = U.PRESENTI.includes(s.stato) || s.chiude != null;
+          if (s.chiude == null) ultimeSessioni.set(s.id, { s, chiave: gr.chiave, idx: gr.sessioni.indexOf(s) });
           const om = presente ? omino(s, mondo, x, z0 - 0.8, "dip") : null;
           apriCantiere(s.id, [scr, sd], om, x, z0 - 0.3, false);
+          if (s.chiude != null) apriSmontaggio(s.id, [scr, sd], x, z0 - 0.3, s.chiude + 10);
           if (om) {
             animati.push(om); camminatori.push(om); om.userData.corridoio = z0 - 1.75;
             om.userData.porta = porte[gr.chiave] || porte["r:capo"] || null;   // i thread senza responsabile vanno dal capo
@@ -745,6 +771,9 @@
       if (prima === undefined) { cantieri.set(id, performance.now() / 1000); nuovi = true; continue; }
       if (attivo && (prima === "aspetta" || prima === "finito" || prima === "ferma?")) avviaPostino(id);
     }
+    if (!primaVoltaDati) for (const id of statiPrima.keys())               // thread sparito dai dati: animazione di chiusura
+      if (!ora.has(id) && ultimeSessioni.has(id) && !chiusiFatti.has(id)) { chiudi(id, ultimeSessioni.get(id)); nuovi = true; }
+    for (const id of ora.keys()) if (!chiusi.has(id)) chiusiFatti.delete(id);
     statiPrima.clear(); for (const [id, st] of ora) statiPrima.set(id, st);
     for (const { s } of schermi) {                                        // esito della compilazione cambiato: festa o disperazione
       if (!s.id || !s.compilazione) continue;
@@ -851,7 +880,11 @@
       u.telefono.visible = u.tazza.visible = false; u.giacca.visible = false;
       // passeggiata al caffe' per chi lavora (ogni minuto circa); la finisce anche se nel frattempo cambia stato
       // chi aspetta una risposta va a bussare dal suo responsabile (circa ogni minuto)
-      const vaCaffe = u.caffe && s.stato === "lavora", vaBussare = u.porta && s.stato === "aspetta";
+      if (s.chiude != null) {                                             // chiuso: esce con lo scatolone e non torna
+        if (usciti.has(s.id)) { a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); continue; }
+        if (!(u.giro && u.giro.trasloco) && t > s.chiude + 0.8) u.giro = { punti: giroUscita(u), inizio: t, uscita: true, trasloco: true };
+      }
+      const vaCaffe = u.caffe && s.stato === "lavora" && s.chiude == null, vaBussare = u.porta && s.stato === "aspetta";
       if (!u.giro && (vaCaffe || vaBussare)) {
         if (u.prossimoT == null) u.prossimoT = t + u.prossimo;
         if (t > u.prossimoT) u.giro = { punti: vaCaffe ? giroCaffe(u) : giroBussa(u), inizio: t };
@@ -909,10 +942,18 @@
           corpo.position.y += Math.abs(Math.cos(k * 9)) * 0.03;
         } else { sx.rotation.set(0.1, 0, 0.12); dx.rotation.set(0.1, 0, -0.12); }
         if (u.giro && u.giro.passeggio) { sx.rotation.set(-0.75, 0, 0.35); dx.rotation.set(-0.75, 0, -0.35); }   // mani dietro la schiena
-        if (u.giro && u.giro.uscita) {
+        if (u.giro && u.giro.trasloco) {                                 // scatolone tra le braccia
+          if (!u.scatola) { u.scatola = new T.Group(); corpo.add(u.scatola);
+            tondo(0.56, 0.4, 0.4, "#c8955a", 0, 0.62, -0.38, u.scatola, 0.03);
+            tondo(0.57, 0.05, 0.1, "#e9d8a6", 0, 1.0, -0.38, u.scatola, 0.01);
+            palla(0.08, "#7cc98a", 0.12, 1.06, -0.38, u.scatola); }
+          u.scatola.visible = true;
+          if (!(pos && pos.azione === "saluta")) { sx.rotation.set(1.25, 0, 0.25); dx.rotation.set(1.25, 0, -0.25); }
+        } else if (u.scatola) u.scatola.visible = false;
+        if (u.giro && u.giro.uscita && !u.giro.trasloco) {
           u.giacca.visible = true;
-          if (pos && pos.azione === "saluta") dx.rotation.set(0, 0, 2.5 + Math.sin(k * 9) * 0.35);      // ciao ciao
         }
+        if (u.giro && u.giro.uscita && pos && pos.azione === "saluta") dx.rotation.set(0, 0, 2.5 + Math.sin(k * 9) * 0.35);   // ciao ciao
         if (pos && pos.azione === "caffe" && u.chiacchiera) u.chiacchiera.alCaffe.push(a);
         if (u.nuvolaOrdini && !(pos && pos.azione === "ordini")) u.nuvolaOrdini.e.style.visibility = "hidden";
         if (pos && pos.azione === "telefono") {
@@ -1047,7 +1088,9 @@
     ordini = ordini.filter(o => t < o.fine + 1);
     lavori = lavori.filter(l => {
       const p = Math.min(1, Math.max(0, (t - l.inizio) / (l.fine - l.inizio)));
-      const sy = Math.max(0.03, Math.min(1, Math.floor(p * 1.15 * 6) / 6));      // cresce a scatti, un pezzo alla volta
+      const sy = l.smonta ? Math.max(0.03, 1 - Math.floor(p * 1.15 * 6) / 6)    // smontaggio: cala a scatti
+        : Math.max(0.03, Math.min(1, Math.floor(p * 1.15 * 6) / 6));      // cresce a scatti, un pezzo alla volta
+      if (l.smonta) { const via = t >= l.inizio; for (const o of l.operai) o.visible = via; l.et.e.style.visibility = via ? "" : "hidden"; }
       for (const q of l.parti) q.scale.set(1, sy, 1);
       if (l.om) {
         l.om.visible = p >= 1;
@@ -1057,7 +1100,7 @@
       }
       for (const [i, o] of l.operai.entries()) {
         const giro = t * 1.4 + i * 0.45, c = giro % 1;                      // martellate esagerate: su piano, giu' di colpo
-        if (Math.floor(giro) !== o.userData.colpi && p < 1) {               // appena ha colpito: nuvoletta di polvere
+        if (Math.floor(giro) !== o.userData.colpi && p < 1 && t >= l.inizio) {               // appena ha colpito: nuvoletta di polvere
           if (o.userData.colpi != null) polvere(o.position.x + (l.x - o.position.x) * 0.4, 0.85, o.position.z + (l.z - o.position.z) * 0.45 + 0.3);
           o.userData.colpi = Math.floor(giro);
         }
@@ -1155,6 +1198,7 @@
       setTimeout(() => { forzaSera = t + 60; }, 12000);
       for (const a of lav) a.userData.prossimoT = 0;
     },
+    provaChiusura(n) { const ids = [...ultimeSessioni.keys()].filter(id => bersagli.has(id) && !chiusi.has(id)); const id = ids[ids.length - 1 - (n || 0)]; if (!id) return; chiudi(id, ultimeSessioni.get(id)); if (ultimiDati) costruisci(...ultimiDati); },
     provaCantiere(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); cantieri.set(ids[n || 0], performance.now() / 1000); const uf = [...bersagli.keys()].filter(k => k.startsWith("capo:") && k !== "capo:r:capo"); if (uf.length) cantieri.set(uf[uf.length - 1], performance.now() / 1000); if (ultimiDati) costruisci(...ultimiDati); },
     provaPostino(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); avviaPostino(ids[n || 0]); },
     get effetti() { return effetti.length; }, get postini() { return postini.map(p => [p.id, p.g && p.g.position.x, p.g && p.g.position.z, !!(p.g && p.g.parent)]); },
