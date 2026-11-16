@@ -28,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 8.3"
+VERSIONE = "task 8.4"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
@@ -97,6 +97,8 @@ def _nomi_isole():
     return _nomi["dati"]
 
 
+_SEPARATORE = re.compile(r"\s+(?:›|>)\s+")
+_COMMESSA_STAZIONE = re.compile(r"^\d{2}_\d{3}\s+OP\s?\d{2,3}(?:\s*/\s*OP\s?\d{2,3})*$", re.I)
 _STAZIONE = re.compile(r"(?<![A-Za-z0-9])OP\s?(\d{2,3})(?!\d)", re.I)
 _voci_cache = {}
 
@@ -190,6 +192,12 @@ def _con_nomi(sessions):
             resp = voce.get("responsabile")
         if voce is not None:
             s["in_nomi"] = True
+        # schema dei titoli "24_247 OP60 › Criticare pulsanti": prima di " › " c'e' il responsabile
+        m = _SEPARATORE.split(str(titolo_thread or ""), 1)
+        if not resp and len(m) == 2 and m[0].strip():
+            capo = m[0].strip()
+            resp = canonico.get(capo.lower()) or ("Capo" if capo.lower() == "capo" else
+                                                  (capo if _COMMESSA_STAZIONE.match(capo) else "Capo"))
         if str(s.get("voce_cloud_resp") or "").startswith("("):   # "(responsabile)": e' lui stesso un responsabile
             s["voce_cloud_resp"] = None
         if not resp and s.get("voce_cloud_resp"):      # il responsabile scritto in stato-thread.json
