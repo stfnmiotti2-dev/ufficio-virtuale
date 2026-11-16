@@ -122,6 +122,7 @@
   #commesse[hidden] { display: none; }
   /* nel 3D le dashboard in alto stanno chiuse: si aprono (al loro solito posto) cliccando il proiettore */
   body.tre:not(.dash) #commesse { display: none; }
+  body.tre #lista { display: none; }                                     /* in 3D le schede in basso non servono */
   #commesse .chiudi { display: none; float: right; background: var(--card); color: var(--text); border: 1px solid var(--line);
                       border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
   body.tre.dash #commesse .chiudi { display: inline-block; }
@@ -396,13 +397,18 @@ function disegnaUfficio() {
   if (window.Ufficio3D) Ufficio3D.attiva(tre);
   document.getElementById("demo3d").hidden = !tre;
   document.body.classList.toggle("tre", tre);
+  const dash = document.getElementById("commesse");                      // in 3D la dashboard sta sotto l'ufficio, al posto delle schede
+  if (tre) document.getElementById("ufficio3d").after(dash); else document.getElementById("ufficio").before(dash);
   if (tre) Ufficio3D.disegna(sessioni, extra);
   else if (window.Ufficio) Ufficio.disegna(sessioni, extra);
 }
 // dashboard sopra la pagina, aperta dal proiettore del 3D
 window.apriDashboard = si => {
   document.body.classList.toggle("dash", si !== false);
-  if (si !== false) window.scrollTo({ top: 0, behavior: "smooth" });
+  if (si !== false) {
+    const d = document.getElementById("commesse");
+    setTimeout(() => d.scrollIntoView({ behavior: "smooth", block: document.body.classList.contains("tre") ? "nearest" : "start" }), 50);
+  }
 };
 document.getElementById("chiudiDash").onclick = () => apriDashboard(false);
 // schermo intero: il pulsante cambia icona e lo stesso pulsante riporta alla finestra
