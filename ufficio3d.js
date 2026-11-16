@@ -923,10 +923,16 @@
       u.telefono.visible = u.tazza.visible = false; u.giacca.visible = false;
       // passeggiata al caffe' per chi lavora (ogni minuto circa); la finisce anche se nel frattempo cambia stato
       // chi aspetta una risposta va a bussare dal suo responsabile (circa ogni minuto)
+      const aCasa = () => {                                               // scrivania vuota: cartellino "a casa"
+        if (!u.caffe) return;
+        if (!u.cartello) { u.cartello = etichetta("f3d", "🏠 A casa", new T.Vector3(u.casa[0], 1.7, u.casa[1])); marcati.push(u.cartello); }
+        u.cartello.e.style.visibility = "";
+      };
+      if (u.cartello) u.cartello.e.style.visibility = "hidden";
       const iPc = u.iPc = animati.indexOf(a), lontano = t - pcT > 900;
       if (pc === "off") {                                                 // tutti a casa: si alzano col cappotto, salutano, escono dalla porta
         if (lontano && !pcFuori.has(s.id)) { pcFuori.add(s.id); spenti.add(s.id); }
-        if (pcFuori.has(s.id)) { a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); continue; }
+        if (pcFuori.has(s.id)) { a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); aCasa(); continue; }
         if (t > pcT + 0.6 + iPc * 0.15) spenti.add(s.id);                  // per primo spengono il computer
         if (!(u.giro && u.giro.pc) && t > pcT + 2.5 + iPc * 0.8) u.giro = { punti: versoPorta(u), inizio: t, uscita: true, pc: true };
       } else if (pcFuori.has(s.id)) {                                     // si rientra: uno alla volta dalla porta
@@ -953,7 +959,7 @@
       }
       // la sera chi ha finito si mette il cappotto, saluta ed esce; il giorno dopo (o se riparte) torna
       if (u.caffe && s.stato === "finito" && eSera) {
-        if (usciti.has(s.id)) { a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); continue; }
+        if (usciti.has(s.id)) { a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); aCasa(); continue; }
         if (!u.giro) { if (u.uscitaT == null) u.uscitaT = t + 2 + (U.hash(s.id) % 25); if (t > u.uscitaT) u.giro = { punti: giroUscita(u), inizio: t, uscita: true }; }
       } else if (usciti.has(s.id)) { usciti.delete(s.id); a.visible = true; if (u.etichettaPos) nascondi(u.etichettaPos, false); }
       // il capo, se nessuno lo chiama, ogni tanto fa un giro dell'open space
