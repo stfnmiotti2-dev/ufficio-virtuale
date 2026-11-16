@@ -28,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 7.4"
+VERSIONE = "task 7.5"
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
 
@@ -97,16 +97,26 @@ def _nomi_isole():
 
 
 def _con_nomi(sessions):
-    """Aggiunge il responsabile dato a mano dalla pagina, se la sessione non lo dice da sola."""
+    """Titoli dei thread e responsabili da nomi-isole.json. Il file lo scrive la pagina
+    (matita) oppure la chat principale di claude.ai, con una di queste forme:
+      "cmsg_...": "24_247 op20"                                   (il thread e' un responsabile)
+      "cmsg_...": {"titolo": "Correggi MSG_104", "responsabile": "24_247 op20"}"""
     nomi = _nomi_isole()
     out = []
     for s in sessions:
         s = dict(s)
-        if not s.get("responsabile") and s.get("thread") in nomi:
-            s["responsabile"] = str(nomi[s["thread"]])[:60]
-            m = scanner._COMMESSA.search(s["responsabile"])
-            if m:
-                s["commessa"] = m.group(1)
+        voce = nomi.get(s.get("thread"))
+        if isinstance(voce, str):
+            voce = {"responsabile": voce}
+        if isinstance(voce, dict):
+            if voce.get("titolo"):
+                s["titolo"] = str(voce["titolo"])[:90]       # il titolo vero della chat
+            resp = voce.get("responsabile") or voce.get("titolo")
+            if resp and not s.get("responsabile"):
+                s["responsabile"] = str(resp)[:60]
+        m = scanner._COMMESSA.search(s.get("responsabile") or "")
+        if m:
+            s["commessa"] = m.group(1)
         out.append(s)
     return out
 
