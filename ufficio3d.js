@@ -91,6 +91,46 @@
   }
 
   // ---------- pezzi d'arredo ----------
+  // schermi: codice colorato su nero (scorre), e codice con un grosso "?" arancione per chi aspetta una risposta
+  const COLORI_CODICE = ["#c792ea", "#82aaff", "#c3e88d", "#f78c6c", "#89ddff", "#ffcb6b", "#ff5370"];
+  function disegnaCodice(x, W, H, seme) {
+    let r = seme * 9301 + 49297;
+    const rnd = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+    x.fillStyle = "#0d1117"; x.fillRect(0, 0, W, H);
+    let rientro = 0;
+    for (let y = 8; y < H - 6; y += 13) {
+      if (rnd() < 0.12) continue;                                        // riga vuota
+      rientro = Math.max(0, Math.min(4, rientro + (rnd() < 0.3 ? 1 : rnd() < 0.3 ? -1 : 0)));
+      let px = 10 + rientro * 16;
+      if (rnd() < 0.15) { x.fillStyle = "#5c6370"; x.fillRect(px, y, 60 + rnd() * 120, 7); continue; }   // commento
+      const n = 1 + Math.floor(rnd() * 5);
+      for (let i = 0; i < n && px < W - 20; i++) {
+        const w = 12 + rnd() * 50;
+        x.fillStyle = COLORI_CODICE[Math.floor(rnd() * COLORI_CODICE.length)];
+        x.fillRect(px, y, Math.min(w, W - 10 - px), 7);
+        px += w + 7;
+      }
+    }
+  }
+  const texCodice = [0, 1, 2].map(i => {
+    const c = document.createElement("canvas"); c.width = 256; c.height = 512;
+    disegnaCodice(c.getContext("2d"), 256, 512, i + 1);
+    const tx = new T.CanvasTexture(c); tx.encoding = T.sRGBEncoding; tx.wrapT = T.RepeatWrapping; tx.repeat.set(1, 0.3);
+    return tx;
+  });
+  const texDomanda = (() => {
+    const c = document.createElement("canvas"); c.width = 256; c.height = 150;
+    const x = c.getContext("2d");
+    disegnaCodice(x, 256, 150, 7);
+    x.fillStyle = "rgba(13,17,23,.35)"; x.fillRect(0, 0, 256, 150);
+    x.font = "900 150px 'Segoe UI', system-ui, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+    x.lineWidth = 10; x.strokeStyle = "#3a1d00"; x.strokeText("?", 128, 82);
+    x.fillStyle = "#ff9a1f"; x.fillText("?", 128, 82);
+    const tx = new T.CanvasTexture(c); tx.encoding = T.sRGBEncoding;
+    return tx;
+  })();
+  const BIANCO = new T.Color("#ffffff");
+
   // targhetta con testo (commessa) disegnata su una texture, messa sul pannello davanti della scrivania
   const texCache = {};
   function testoTex(testo, fondo, inchiostro, bordo) {
@@ -188,8 +228,8 @@
     const ym = capo ? 0.83 : 0.8;
     tondo(0.1, 0.26, 0.1, "#f5f6f8", 0, ym, 0.2, g, 0.04);             // monitor bianco, visto da dietro
     tondo(0.8, 0.5, 0.07, capo ? "#2b2b33" : "#f5f6f8", 0, ym + 0.22, 0.2, g, 0.035);
-    const schermo = new T.Mesh(geoTondo(0.7, 0.4, 0.012, 0.005), new T.MeshBasicMaterial({ color: new T.Color("#2a2e3a").convertSRGBToLinear() }));
-    schermo.position.set(0, ym + 0.47, 0.163); g.add(schermo);
+    const schermo = new T.Mesh(new T.PlaneGeometry(0.7, 0.4), new T.MeshBasicMaterial({ color: new T.Color("#2a2e3a").convertSRGBToLinear() }));
+    schermo.rotation.y = Math.PI; schermo.position.set(0, ym + 0.47, 0.158); g.add(schermo);   // guarda verso l'omino
     // retro del monitor (quello che si vede dalla telecamera): bordo e bollino dello stesso colore dello schermo
     const mr = new T.MeshStandardMaterial({ color: new T.Color("#2a2e3a").convertSRGBToLinear(), roughness: 0.4, emissive: new T.Color("#000000"), emissiveIntensity: 0.35 });
     const bordo = new T.Mesh(geoTondo(0.9, 0.6, 0.05, 0.05), mr); bordo.position.set(0, ym + 0.47, 0.2); g.add(bordo);
@@ -569,11 +609,17 @@
       if (u.etichettaPos) { u.etichettaPos.x = a.position.x; u.etichettaPos.z = a.position.z; }
       if (u.etichetta) { u.etichetta.pos.x = u.etichetta.base[0] + a.position.x; u.etichetta.pos.z = u.etichetta.base[1] + a.position.z; }
     }
+    for (const tx of texCodice) tx.offset.y = (tx.offset.y - 0.004) % 1;     // il codice scorre
     for (const { mesh, s } of schermi) {
       const c = s.stato === "aspetta" && Math.floor(t * 2) % 2 ? "#ff5d5d" : (s.colore && s.stato === "supervisore" ? s.colore : COL[s.stato] || "#2a2e3a");
-      mesh.material.color.set(c).convertSRGBToLinear();
       const r = mesh.userData.retro;
-      if (r) { r.color.copy(mesh.material.color); r.emissive.copy(mesh.material.color); }
+      if (r) { r.color.set(c).convertSRGBToLinear(); r.emissive.copy(r.color); }     // il retro tiene la legenda dei colori
+      const mat = mesh.material;
+      const map = s.stato === "aspetta" ? texDomanda
+        : ["lavora", "pensa", "supervisore"].includes(s.stato) ? texCodice[U.hash(s.id || "x") % 3] : null;
+      if (mat.map !== map) { mat.map = map; mat.needsUpdate = true; }
+      if (map) mat.color.copy(BIANCO);
+      else mat.color.set(["finito", "spento", "inattiva", "vuota"].includes(s.stato) ? "#8f949c" : c).convertSRGBToLinear();
     }
     controlli.update();
     renderer.render(scena, camera);
