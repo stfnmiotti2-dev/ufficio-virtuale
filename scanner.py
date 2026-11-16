@@ -247,6 +247,7 @@ def analyze(path):
     # Stato: guardo l'ultimo messaggio "vero" (user/assistant) del filo principale.
     pending = {}           # tool_use senza risposta
     last = None
+    commessa_strumenti = None   # codice commessa trovato nei percorsi usati dagli strumenti
     for rec in tail:
         if rec.get("isSidechain") or rec.get("type") not in ("user", "assistant"):
             continue
@@ -265,12 +266,26 @@ def analyze(path):
                         info["progetto_tia"] = re.sub(r"\.(ap|zap)\d+$", "", p_tia, flags=re.I)
                     icon, text = etichette.label(b.get("name", "?"), b.get("input"))
                     info["ultimo_strumento"] = f"{icon} {text}"
+                    if not commessa_strumenti:          # es. D:\\Commesse\\24_247\\progetto.ap18
+                        percorsi = " ".join(str(v) for k, v in inp.items()
+                                            if isinstance(v, str) and ("path" in k.lower() or k in ("name", "project")))
+                        m = _COMMESSA.search(percorsi.replace("\\", "/"))
+                        if m:
+                            commessa_strumenti = m.group(1)
         if rec["type"] == "user" and isinstance(content, list):
             for b in content:
                 if isinstance(b, dict) and b.get("type") == "tool_result":
                     pending.pop(b.get("tool_use_id"), None)
         if rec["type"] == "assistant" or _is_real_prompt(rec) or isinstance(content, list):
             last = rec
+
+    # commessa: prima quella scritta dalla persona, poi percorsi e nomi del progetto
+    if not info["commessa"]:
+        info["commessa"] = commessa_strumenti
+        for fonte in (info["progetto_tia"], info["progetto_claude"], info["cartella"]):
+            m = None if info["commessa"] else _COMMESSA.search((fonte or "").replace("\\", "/"))
+            if m:
+                info["commessa"] = m.group(1)
 
     mtime = path.stat().st_mtime
     age_min = (time.time() - mtime) / 60
