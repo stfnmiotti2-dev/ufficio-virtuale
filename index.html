@@ -395,6 +395,7 @@ function disegnaUfficio() {
 document.getElementById("demo3d").onclick = () => {
   if (!window.Ufficio3D) return;
   Ufficio3D.provaCantiere(1); Ufficio3D.caffeSubito(); Ufficio3D.provaPostino(0);
+  Ufficio3D.provaDivertenti();
 };
 vista3d.onchange = () => {
   try { localStorage.setItem("vista3d", vista3d.checked ? "1" : "0"); } catch (e) {}
