@@ -212,19 +212,45 @@
     return g;
   }
   // omino originale: testa tonda e grande, corpo a pillola, mani a pallina, faccia che cambia con lo stato
-  function omino(s, padre, x, z, capo) {
-    const h = U.hash(s.id);
-    const pelle = U.PELLE[h % U.PELLE.length], capelli = U.CAPELLI[(h >> 4) % U.CAPELLI.length];
-    const maglia = PASTELLI[(h >> 8) % PASTELLI.length];
+  // ruolo: "capo" (vestito da re), "resp" (giacca e cravatta / tailleur con gonna), "dip" (casual, gonna per le donne)
+  const COMPLETI = ["#2f3b55", "#3a3f47", "#46506a", "#5b4a3f"];
+  const JEANS = ["#4a6fa5", "#5a7fb5", "#3d5a8a"];
+  function omino(s, padre, x, z, ruolo) {
+    const h = U.hash(s.id), capo = ruolo === "capo", resp = ruolo === "resp";
+    const donna = !capo && ((h >>> 12) & 1) === 1;
+    const pelle = U.PELLE[h % U.PELLE.length], capelli = U.CAPELLI[(h >>> 4) % U.CAPELLI.length];
+    const maglia = capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
+    const pantaloni = capo ? "#7a1426" : resp ? maglia : donna ? pelle : JEANS[(h >>> 9) % JEANS.length];
+    const scarpe = capo ? "#e3b23c" : resp ? "#1f1f26" : donna ? ["#ef7f9f", "#2b2b33", "#ffffff"][(h >>> 10) % 3] : "#ffffff";
     const g = new T.Group(); g.position.set(x, 0, z); g.rotation.y = Math.PI; padre.add(g);
     const corpo = new T.Group(); g.add(corpo);
     palla(0.26, maglia, 0, 0.78, 0, corpo, 1, 1.3, 0.85);                 // busto a pillola
-    const sedute = [palla(0.11, "#5f6f8f", -0.12, 0.47, -0.2, corpo, 1, 0.9, 1.9),   // gambe sotto la scrivania (seduto)
-                    palla(0.11, "#5f6f8f", 0.12, 0.47, -0.2, corpo, 1, 0.9, 1.9)];
+    if (capo) {                                                          // re: mantello rosso con collo d'ermellino, bottoni d'oro
+      const mant = new T.Mesh(new T.CylinderGeometry(0.3, 0.42, 0.95, 20, 1, true, Math.PI * 0.62, Math.PI * 0.76), m("#9e1630", { side: T.DoubleSide }));
+      mant.position.set(0, 0.62, 0.02); mant.castShadow = true; corpo.add(mant);
+      const coll = new T.Mesh(new T.TorusGeometry(0.22, 0.07, 10, 24), m("#fbf7ee")); coll.rotation.x = Math.PI / 2; coll.position.y = 1.08; corpo.add(coll);
+      for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; palla(0.018, "#1f1f26", Math.sin(a) * 0.24, 1.1, Math.cos(a) * 0.24, corpo); }
+      for (const by of [0.95, 0.8, 0.65]) palla(0.03, "#e3b23c", 0, by, -0.225, corpo, 1, 1, 0.5, { metalness: 0.6 });
+      tondo(0.5, 0.06, 0.4, "#e3b23c", 0, 0.52, 0, corpo, 0.03, { metalness: 0.6, roughness: 0.3 });   // cintura d'oro
+    } else if (resp) {                                                   // camicia bianca a V, cravatta o collana
+      palla(0.12, "#ffffff", 0, 0.98, -0.18, corpo, 0.8, 1.1, 0.4);
+      if (donna) { const cl = new T.Mesh(new T.TorusGeometry(0.09, 0.012, 6, 20, Math.PI), m("#e3b23c", { metalness: 0.5 })); cl.rotation.set(-0.3, 0, Math.PI); cl.position.set(0, 1.02, -0.2); corpo.add(cl); }
+      else tondo(0.07, 0.3, 0.03, s.colore || "#c62828", 0, 0.68, -0.23, corpo, 0.015);
+      for (const by of [0.72, 0.6]) palla(0.022, "#1f1f26", 0.05, by, -0.215, corpo, 1, 1, 0.5);
+    } else if (!donna && (h >>> 13) & 1) {                                // felpa con cappuccio per qualcuno
+      palla(0.2, maglia, 0, 1.0, 0.16, corpo, 1.1, 0.6, 0.7);
+      for (const dx of [-0.06, 0.06]) tondo(0.015, 0.16, 0.015, "#ffffff", dx, 0.86, -0.22, corpo, 0.006);
+    }
+    if (donna) {                                                         // gonna a campana
+      const gonna = new T.Mesh(new T.CylinderGeometry(0.22, 0.32, 0.3, 20), m(resp ? maglia : PASTELLI[(h >>> 14) % PASTELLI.length]));
+      gonna.position.y = 0.46; gonna.castShadow = true; corpo.add(gonna);
+    }
+    const sedute = [palla(0.11, pantaloni, -0.12, 0.47, -0.2, corpo, 1, 0.9, 1.9),   // gambe sotto la scrivania (seduto)
+                    palla(0.11, pantaloni, 0.12, 0.47, -0.2, corpo, 1, 0.9, 1.9)];
     const gambe = [-0.11, 0.11].map(lx => {                              // gambe in piedi, con l'anca come perno
       const a = new T.Group(); a.position.set(lx, 0.56, 0); corpo.add(a);
-      const c = new T.Mesh(new T.CylinderGeometry(0.075, 0.07, 0.42, 10), m("#5f6f8f")); c.position.y = -0.24; c.castShadow = true; a.add(c);
-      palla(0.09, "#3c4658", 0, -0.47, -0.04, a, 1, 0.6, 1.4);            // scarpa
+      const c = new T.Mesh(new T.CylinderGeometry(donna ? 0.055 : 0.075, donna ? 0.05 : 0.07, 0.42, 10), m(pantaloni)); c.position.y = -0.24; c.castShadow = true; a.add(c);
+      palla(0.09, scarpe, 0, -0.47, -0.04, a, 1, 0.6, 1.4);               // scarpa
       a.visible = false; return a;
     });
     const testa = new T.Group(); testa.position.set(0, 1.33, 0); corpo.add(testa);
@@ -232,6 +258,10 @@
     // capelli: calotta sopra e dietro, con un ciuffo diverso per ognuno
     const cal = new T.Mesh(new T.SphereGeometry(0.29, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.42), m(capelli));
     cal.rotation.x = 0.35; cal.position.y = 0.02; cal.castShadow = true; testa.add(cal);
+    if (donna) {                                                         // capelli lunghi dietro e ai lati
+      palla(0.27, capelli, 0, -0.12, 0.08, testa, 1.08, 1.1, 0.85);
+      for (const sx of [-0.25, 0.25]) palla(0.09, capelli, sx, -0.12, 0.02, testa, 0.7, 1.9, 1);
+    }
     const ciuffo = h % 3;
     if (ciuffo === 0) palla(0.11, capelli, -0.1, 0.2, -0.17, testa, 1.3, 0.7, 0.8);
     if (ciuffo === 1) { palla(0.09, capelli, -0.24, 0.0, 0.02, testa, 0.6, 1.4, 1); palla(0.09, capelli, 0.24, 0.0, 0.02, testa, 0.6, 1.4, 1); }
@@ -256,7 +286,6 @@
         p.position.set(Math.sin(a) * 0.16, 0.38, Math.cos(a) * 0.16); testa.add(p);
         palla(0.02, "#ff6b8a", Math.sin(a) * 0.16, 0.43, Math.cos(a) * 0.16, testa);
       }
-      tondo(0.07, 0.26, 0.03, "#e05a6a", 0, 0.62, -0.22, corpo, 0.015);
     }
     const braccio = dx => {                                              // spalla come perno
       const b = new T.Group(); b.position.set(dx, 1.0, 0); corpo.add(b);
@@ -332,7 +361,7 @@
       const nome = capo ? "CAPO" : pulito(U.nomeIsola(gr));
       const scr = scrivania(0, capo ? 0.35 : 0.3, g, s, capo ? "capo" : "resp", nome);
       sedia(0, capo ? -0.75 : -0.65, g, gr.colore, capo);
-      const capoOm = omino(s, g, 0, capo ? -0.6 : -0.5, capo);
+      const capoOm = omino(s, g, 0, capo ? -0.6 : -0.5, capo ? "capo" : "resp");
       animati.push(capoOm);
       if (stato === "aspetta") {                                         // ti sta chiamando: in piedi con la cornetta, avanti e indietro
         const zc = capo ? -1.45 : -1.15, lx = LW / 2 - 0.9;
@@ -374,7 +403,7 @@
           const scr = scrivania(x, z0, mondo, s, "", pulito(U.targa(s)).replace(/\s*❌\d*$/, ""));
           sedia(x, z0 - 0.95, mondo);
           const presente = U.PRESENTI.includes(s.stato);
-          const om = presente ? omino(s, mondo, x, z0 - 0.8, false) : null;
+          const om = presente ? omino(s, mondo, x, z0 - 0.8, "dip") : null;
           if (om) { animati.push(om); camminatori.push(om); om.userData.corridoio = z0 - 1.75; }
           schermi.push({ mesh: scr.userData.schermo, s: presente ? s : { stato: "spento" } });
           const apri = () => s.link ? apriLink(s.link) : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
