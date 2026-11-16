@@ -327,6 +327,9 @@
       gruppi.get(k).link = rsp.link;
       gruppi.get(k).scheda = rsp.scheda;
       gruppi.get(k).nome = rsp.nome;
+      // il thread del responsabile sta nel suo ufficio a vetri, non nell'open space
+      if (rsp.thread) for (const q of gruppi.get(k).sessioni)
+        q.inUfficio = (q.thread || "").toLowerCase() === rsp.thread.toLowerCase();
     });
     const lista = [...gruppi.values()];
     for (const gr of lista) gr.sessioni.sort((a, b) => arrivo.get(a.id) - arrivo.get(b.id));
@@ -453,7 +456,8 @@
     capi.forEach((gr, i) => {
       const ux = MARGINE + (i % perFila) * (UFF_W + GAP), uy = y + Math.floor(i / perFila) * (UFF_H + ISOLA_H + RIEP);
       uffici.push({ gr, x: ux, y: uy, colore: gr.colore,
-                    s: { id: "capo:" + gr.chiave, stato: "supervisore", colore: gr.colore, capo: gr.chiave === "r:capo" } });
+                    s: { id: "capo:" + gr.chiave, colore: gr.colore, capo: gr.chiave === "r:capo",
+                         stato: gr.sessioni.some(q => q.inUfficio && q.stato === "aspetta") ? "aspetta" : "supervisore" } });
     });
     if (capi.length) y += Math.ceil(capi.length / perFila) * (UFF_H + ISOLA_H + RIEP);
     const corridoio = y;
@@ -463,13 +467,14 @@
     let x = MARGINE, hRiga = 0;
     const largMax = colonne * SLOT_W + (colonne - 1) * GAP;
     for (const gr of gruppi) {
-      if (!gr.sessioni.length) continue;             // ufficio senza nessuno al lavoro: niente isola
-      const perRiga = Math.min(colonne, gr.sessioni.length);
-      const righe = Math.ceil(gr.sessioni.length / perRiga);
+      const fuori = gr.sessioni.filter(q => !q.inUfficio);
+      if (!fuori.length) continue;                   // nessuno nell'open space per questo responsabile
+      const perRiga = Math.min(colonne, fuori.length);
+      const righe = Math.ceil(fuori.length / perRiga);
       const w = perRiga * SLOT_W, h = ISO + righe * SLOT_H;
       if (x > MARGINE && x + w > MARGINE + largMax) { x = MARGINE; y += hRiga + 4; hRiga = 0; }
       aree.push({ gr, x, y, w, h });
-      gr.sessioni.forEach((s, i) => pos.set(s.id, {
+      fuori.forEach((s, i) => pos.set(s.id, {
         x: x + (i % perRiga) * SLOT_W, y: y + ISO + Math.floor(i / perRiga) * SLOT_H }));
       x += w + GAP; hRiga = Math.max(hRiga, h);
     }
@@ -508,7 +513,7 @@
       strato.append(porta);
     }
     for (const a of aree) cartello(a.gr, a.x, a.y + 3, a.w, scala, false);
-    const scelte = gruppi.flatMap(gr => gr.sessioni);
+    const scelte = gruppi.flatMap(gr => gr.sessioni.filter(q => !q.inUfficio));
 
     posti = [];
     const visti = new Set();
