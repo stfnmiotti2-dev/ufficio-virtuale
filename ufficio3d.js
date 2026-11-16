@@ -91,29 +91,120 @@
   }
 
   // ---------- pezzi d'arredo ----------
-  function scrivania(x, z, padre, s) {
-    const g = new T.Group(); g.position.set(x, 0, z); padre.add(g);
-    tondo(1.8, 0.09, 0.9, "#e2b880", 0, 0.72, 0, g, 0.04);                // piano in legno chiaro
-    for (const dx of [-0.78, 0.78]) tondo(0.1, 0.72, 0.8, "#e9edf2", dx, 0, 0, g, 0.04);   // fianchi
-    tondo(1.5, 0.36, 0.06, "#e9edf2", 0, 0.32, 0.38, g, 0.03);          // pannello davanti
-    tondo(0.1, 0.26, 0.1, "#f5f6f8", 0, 0.8, 0.2, g, 0.04);             // monitor bianco, visto da dietro
-    tondo(0.8, 0.5, 0.07, "#f5f6f8", 0, 1.02, 0.2, g, 0.035);
-    const schermo = new T.Mesh(geoTondo(0.7, 0.4, 0.012, 0.005), new T.MeshBasicMaterial({ color: new T.Color("#2a2e3a").convertSRGBToLinear() }));
-    schermo.position.set(0, 1.27, 0.163); g.add(schermo);
-    tondo(0.52, 0.03, 0.18, "#ffffff", 0, 0.81, -0.15, g, 0.012);        // tastiera
-    const tz = ["#f29fb5", "#7fb3e8", "#f5c26b"][U.hash(s.id) % 3];
-    tondo(0.12, 0.13, 0.12, tz, 0.65, 0.81, 0.05, g, 0.05);              // tazza
-    if (s.commessa) tondo(0.4, 0.11, 0.03, "#f5c26b", 0, 0.42, 0.42, g, 0.02);   // targhetta della commessa
-    if (s.cloud) {                                                       // lavora nel cloud: nuvoletta
-      const n = new T.Group(); n.position.set(0, 1.6, 0.2); g.add(n);
-      for (const [dx, dy, r] of [[-0.15, 0, 0.13], [0.03, 0.06, 0.17], [0.2, 0, 0.12]]) palla(r, "#ffffff", dx, dy, 0, n);
-      g.userData.nuvola = n;
+  // targhetta con testo (commessa) disegnata su una texture, messa sul pannello davanti della scrivania
+  const texCache = {};
+  function testoTex(testo, fondo, inchiostro, bordo) {
+    const k = [testo, fondo, inchiostro, bordo].join("|");
+    if (texCache[k]) return texCache[k];
+    const c = document.createElement("canvas"); c.width = 512; c.height = 96;
+    const x = c.getContext("2d");
+    x.fillStyle = fondo; x.fillRect(0, 0, 512, 96);
+    if (bordo) { x.strokeStyle = bordo; x.lineWidth = 8; x.strokeRect(6, 6, 500, 84); }
+    x.fillStyle = inchiostro; x.textAlign = "center"; x.textBaseline = "middle";
+    let fs = 58; x.font = `700 ${fs}px "Segoe UI", system-ui, sans-serif`;
+    while (x.measureText(testo).width > 470 && fs > 22) { fs -= 2; x.font = `700 ${fs}px "Segoe UI", system-ui, sans-serif`; }
+    x.fillText(testo, 256, 50);
+    const tx = new T.CanvasTexture(c); tx.encoding = T.sRGBEncoding; tx.anisotropy = 4;
+    return (texCache[k] = tx);
+  }
+  function targhetta(testo, w, h, x, y, z, padre, fondo, inchiostro, bordo) {
+    if (!testo) return;
+    const p = new T.Mesh(new T.PlaneGeometry(w, h), new T.MeshStandardMaterial({ map: testoTex(testo, fondo, inchiostro, bordo), roughness: 0.4, metalness: bordo ? 0.25 : 0 }));
+    p.position.set(x, y, z); padre.add(p);
+    return p;
+  }
+  // tappeto persiano disegnato al volo (motivo originale: cornice, medaglione centrale, angoli, frange)
+  let tappetoTex = null;
+  function texTappeto() {
+    if (tappetoTex) return tappetoTex;
+    const c = document.createElement("canvas"); c.width = 640; c.height = 420;
+    const x = c.getContext("2d"), W = 640, H = 420;
+    x.fillStyle = "#f3ead6"; x.fillRect(0, 0, W, H);                           // frange
+    x.fillStyle = "#1f2e5c"; x.fillRect(24, 0, W - 48, H);                     // bordo blu
+    x.fillStyle = "#f0dca8"; x.fillRect(44, 20, W - 88, H - 40);
+    x.fillStyle = "#8e1f2a"; x.fillRect(54, 30, W - 108, H - 60);              // campo rosso
+    x.strokeStyle = "#e9c46a"; x.lineWidth = 3; x.strokeRect(66, 42, W - 132, H - 84);
+    for (let i = 0; i < 26; i++) {                                              // motivo sul bordo
+      const px = 60 + i * ((W - 120) / 25);
+      for (const py of [12, H - 12]) { x.fillStyle = i % 2 ? "#e9c46a" : "#c4473e"; x.beginPath(); x.arc(px, py, 5, 0, 7); x.fill(); }
     }
+    x.fillStyle = "rgba(233,196,106,.35)";                                      // puntini sul campo
+    for (let i = 80; i < W - 80; i += 28) for (let j = 56; j < H - 56; j += 28) { x.beginPath(); x.arc(i, j, 2.5, 0, 7); x.fill(); }
+    const losanga = (cx, cy, rx, ry, col) => { x.fillStyle = col; x.beginPath(); x.moveTo(cx - rx, cy); x.lineTo(cx, cy - ry); x.lineTo(cx + rx, cy); x.lineTo(cx, cy + ry); x.closePath(); x.fill(); };
+    losanga(W / 2, H / 2, 170, 120, "#1f2e5c");                                 // medaglione
+    losanga(W / 2, H / 2, 150, 104, "#e9c46a");
+    losanga(W / 2, H / 2, 128, 88, "#b8323a");
+    x.fillStyle = "#f3ead6"; x.beginPath(); x.ellipse(W / 2, H / 2, 58, 40, 0, 0, 7); x.fill();
+    x.fillStyle = "#1f2e5c"; x.beginPath(); x.ellipse(W / 2, H / 2, 30, 20, 0, 0, 7); x.fill();
+    for (let a = 0; a < 8; a++) { x.fillStyle = "#e9c46a"; x.beginPath(); x.arc(W / 2 + Math.cos(a * Math.PI / 4) * 44, H / 2 + Math.sin(a * Math.PI / 4) * 30, 6, 0, 7); x.fill(); }
+    for (const [cx, cy, sx, sy] of [[66, 42, 1, 1], [W - 66, 42, -1, 1], [66, H - 42, 1, -1], [W - 66, H - 42, -1, -1]]) {   // angoli
+      x.fillStyle = "#1f2e5c"; x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + 90 * sx, cy); x.lineTo(cx, cy + 70 * sy); x.closePath(); x.fill();
+      x.fillStyle = "#e9c46a"; x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + 54 * sx, cy); x.lineTo(cx, cy + 42 * sy); x.closePath(); x.fill();
+    }
+    x.strokeStyle = "#ddd2bb"; x.lineWidth = 2;                                 // fili delle frange
+    for (let j = 4; j < H; j += 8) for (const [a, b] of [[0, 24], [W - 24, W]]) { x.beginPath(); x.moveTo(a, j); x.lineTo(b, j); x.stroke(); }
+    tappetoTex = new T.CanvasTexture(c); tappetoTex.encoding = T.sRGBEncoding; tappetoTex.anisotropy = 4;
+    return tappetoTex;
+  }
+  function lampada(x, z, padre, col) {
+    palla(0.1, col, x, 0.82, z, padre, 1, 0.3, 1);
+    tondo(0.03, 0.38, 0.03, col, x, 0.82, z, padre, 0.012);
+    palla(0.11, col, x + 0.06, 1.22, z, padre, 1, 0.7, 1, { emissive: "#fff2c0", emissiveIntensity: 0.2 });
+  }
+
+  // ---------- pezzi d'arredo ----------
+  // tipo: "capo" (scrivania di lusso), "resp" (bella, in legno), altrimenti quella normale
+  function scrivania(x, z, padre, s, tipo, nome) {
+    const g = new T.Group(); g.position.set(x, 0, z); padre.add(g);
+    const capo = tipo === "capo", resp = tipo === "resp";
+    const W = capo ? 2.7 : resp ? 2.0 : 1.8, D = capo ? 1.15 : resp ? 0.95 : 0.9;
+    if (capo) {                                                          // noce scuro con finiture d'oro
+      tondo(W, 0.11, D, "#6b3d22", 0, 0.72, 0, g, 0.04);
+      tondo(W + 0.04, 0.03, D + 0.04, "#e3b23c", 0, 0.7, 0, g, 0.015, { metalness: 0.6, roughness: 0.3 });
+      tondo(W - 0.2, 0.012, D - 0.25, "#1d4a3a", 0, 0.83, -0.02, g, 0.006);       // piano in pelle verde
+      for (const dx of [-W / 2 + 0.3, W / 2 - 0.3]) tondo(0.55, 0.7, D - 0.08, "#7a4528", dx, 0, 0, g, 0.04);   // cassettiere
+      tondo(W - 0.1, 0.62, 0.06, "#7a4528", 0, 0.06, D / 2 - 0.05, g, 0.03);       // pannello davanti
+      for (const dx of [-W / 2 + 0.3, W / 2 - 0.3]) for (const dy of [0.2, 0.45]) palla(0.03, "#e3b23c", dx, dy, D / 2 - 0.0, g, 1, 1, 0.6, { metalness: 0.6 });
+      targhetta(nome || "CAPO", 1.3, 0.26, 0, 0.4, D / 2 - 0.01, g, "#e3b23c", "#3a2208", "#fff2b0");
+      lampada(-W / 2 + 0.3, -0.15, g, "#e3b23c");
+      palla(0.13, "#4f8fd6", W / 2 - 0.3, 1.0, -0.1, g, 1, 1, 1);                   // mappamondo
+      tondo(0.03, 0.12, 0.03, "#e3b23c", W / 2 - 0.3, 0.83, -0.1, g, 0.01);
+      tondo(0.12, 0.18, 0.12, "#2b2b33", W / 2 - 0.65, 0.83, 0.15, g, 0.04);       // portapenne
+    } else if (resp) {                                                   // legno caldo, lampada
+      tondo(W, 0.1, D, "#c08850", 0, 0.72, 0, g, 0.045);
+      for (const dx of [-W / 2 + 0.07, W / 2 - 0.07]) tondo(0.12, 0.72, D - 0.1, "#a8743f", dx, 0, 0, g, 0.04);
+      tondo(W - 0.3, 0.42, 0.06, "#a8743f", 0, 0.28, D / 2 - 0.06, g, 0.03);
+      targhetta(nome, 1.5, 0.27, 0, 0.47, D / 2 - 0.02, g, "#fbf3e2", "#5a3a1a", "#d9b27a");
+      lampada(-W / 2 + 0.25, -0.15, g, "#3c4658");
+      tondo(0.3, 0.06, 0.22, "#e9edf2", W / 2 - 0.35, 0.83, 0.05, g, 0.02);         // pila di fogli
+    } else {
+      tondo(1.8, 0.09, 0.9, "#e2b880", 0, 0.72, 0, g, 0.04);                // piano in legno chiaro
+      for (const dx of [-0.78, 0.78]) tondo(0.1, 0.72, 0.8, "#e9edf2", dx, 0, 0, g, 0.04);   // fianchi
+      tondo(1.5, 0.36, 0.06, "#e9edf2", 0, 0.32, 0.38, g, 0.03);          // pannello davanti
+      targhetta(nome, 1.4, 0.27, 0, 0.5, 0.415, g, "#ffffff", "#2a3142", "#f2b443");
+      const tz = ["#f29fb5", "#7fb3e8", "#f5c26b"][U.hash(s.id) % 3];
+      tondo(0.12, 0.13, 0.12, tz, 0.65, 0.81, 0.05, g, 0.05);              // tazza
+    }
+    const ym = capo ? 0.83 : 0.8;
+    tondo(0.1, 0.26, 0.1, "#f5f6f8", 0, ym, 0.2, g, 0.04);             // monitor bianco, visto da dietro
+    tondo(0.8, 0.5, 0.07, capo ? "#2b2b33" : "#f5f6f8", 0, ym + 0.22, 0.2, g, 0.035);
+    const schermo = new T.Mesh(geoTondo(0.7, 0.4, 0.012, 0.005), new T.MeshBasicMaterial({ color: new T.Color("#2a2e3a").convertSRGBToLinear() }));
+    schermo.position.set(0, ym + 0.47, 0.163); g.add(schermo);
+    tondo(0.52, 0.03, 0.18, "#ffffff", 0, ym + 0.01, -0.15, g, 0.012);        // tastiera
     g.userData.schermo = schermo;
     return g;
   }
-  function sedia(x, z, padre, colore) {
+  function sedia(x, z, padre, colore, capo) {
     const g = new T.Group(); g.position.set(x, 0, z); padre.add(g);
+    if (capo) {                                                          // poltrona alta in pelle bordeaux
+      tondo(0.78, 0.16, 0.7, "#7d2433", 0, 0.4, 0, g, 0.07);
+      tondo(0.8, 1.15, 0.18, "#7d2433", 0, 0.48, -0.36, g, 0.09);
+      for (const dx of [-0.42, 0.42]) tondo(0.1, 0.12, 0.6, "#5e1a26", dx, 0.62, 0.02, g, 0.05);
+      for (let i = 0; i < 4; i++) palla(0.025, "#e3b23c", -0.27 + i * 0.18, 1.5, -0.26, g, 1, 1, 0.6);
+      tondo(0.08, 0.4, 0.08, "#e3b23c", 0, 0, 0, g, 0.03);
+      palla(0.28, "#2b2b33", 0, 0.03, 0, g, 1, 0.15, 1);
+      return g;
+    }
     tondo(0.6, 0.12, 0.58, colore || "#9fb4d6", 0, 0.42, 0, g, 0.06);
     tondo(0.58, 0.62, 0.12, colore || "#9fb4d6", 0, 0.5, -0.3, g, 0.06);
     tondo(0.08, 0.42, 0.08, "#d5dae2", 0, 0, 0, g, 0.03);
@@ -192,37 +283,58 @@
     const gruppi = U.prepara(sessioni, extra);
     const capi = gruppi.filter(U.haUfficio);
     const UFF = 3.6, PASSO = 2.2;
-    // 1) uffici a vetri in fila in fondo
+    // 1) uffici a vetri in fila in fondo; quello del capo e' piu' grande, con tappeto persiano e finiture d'oro
+    const dim = gr => gr.chiave === "r:capo" ? [5.6, 4.6] : [UFF, UFF];
+    const pulito = s => (s || "").replace(/^\S*[^\w\s]\S*\s+/u, "").replace(/\s*\(.*\)$/, "");   // toglie l'emoji iniziale
+    let xc = 0, profMax = UFF;
     capi.forEach((gr, i) => {
-      const x = i * (UFF + 0.6), z = 0;
+      const [LW, LD] = dim(gr), capo = gr.chiave === "r:capo";
+      profMax = Math.max(profMax, LD);
+      const x = xc + LW / 2, z = 0;
+      xc += LW + 0.6;
       const g = new T.Group(); g.position.set(x, 0, z); mondo.add(g);
-      tondo(UFF, 0.03, UFF, "#dfe7f1", 0, 0, 0, g, 0.01);                   // pavimento chiaro dell'ufficio
-      const pv = new T.MeshStandardMaterial({ transparent: true, opacity: 0.16, color: new T.Color("#bfe3fb").convertSRGBToLinear(), roughness: 0.1 });
-      for (const [w, d, px, pz] of [[UFF, 0.05, 0, -UFF / 2], [0.05, UFF, -UFF / 2, 0], [0.05, UFF, UFF / 2, 0], [UFF * 0.62, 0.05, -UFF * 0.19, UFF / 2]]) {
-        const v = new T.Mesh(geo, pv); v.scale.set(w, 2.2, d); v.position.set(px, 1.1, pz); g.add(v);
-        tondo(w + 0.04, 0.07, d + 0.04, "#ffffff", px, 2.2, pz, g, 0.025); // telaio bianco in alto
+      tondo(LW, 0.03, LD, capo ? "#efe6d6" : "#dfe7f1", 0, 0, 0, g, 0.01);         // pavimento dell'ufficio
+      if (capo) {
+        const tp = new T.Mesh(new T.PlaneGeometry(3.9, 2.6), new T.MeshStandardMaterial({ map: texTappeto(), roughness: 0.9 }));
+        tp.rotation.x = -Math.PI / 2; tp.position.set(0, 0.04, 0.15); tp.receiveShadow = true; g.add(tp);
       }
-      tondo(UFF, 0.14, 0.1, gr.colore, 0, 2.27, -UFF / 2, g, 0.05, { emissive: gr.colore, emissiveIntensity: 0.25 });
-      tondo(0.42, 0.45, 0.42, "#f3f0ea", UFF / 2 - 0.45, 0, -UFF / 2 + 0.45, g, 0.12);   // pianta in vaso bianco
-      palla(0.3, "#7cc98a", UFF / 2 - 0.45, 0.72, -UFF / 2 + 0.45, g, 1, 1.15, 1);
-      palla(0.2, "#93d6a0", UFF / 2 - 0.35, 0.95, -UFF / 2 + 0.38, g);
+      const HV = capo ? 2.5 : 2.2, telaio = capo ? "#e3b23c" : "#ffffff";
+      const pv = new T.MeshStandardMaterial({ transparent: true, opacity: 0.16, color: new T.Color("#bfe3fb").convertSRGBToLinear(), roughness: 0.1 });
+      for (const [w, d, px, pz] of [[LW, 0.05, 0, -LD / 2], [0.05, LD, -LW / 2, 0], [0.05, LD, LW / 2, 0], [LW * 0.62, 0.05, -LW * 0.19, LD / 2]]) {
+        const v = new T.Mesh(geo, pv); v.scale.set(w, HV, d); v.position.set(px, HV / 2, pz); g.add(v);
+        tondo(w + 0.04, 0.07, d + 0.04, telaio, px, HV, pz, g, 0.025, capo ? { metalness: 0.6, roughness: 0.3 } : undefined);
+      }
+      tondo(LW, 0.14, 0.1, capo ? "#e3b23c" : gr.colore, 0, HV + 0.07, -LD / 2, g, 0.05,
+        capo ? { metalness: 0.6, roughness: 0.3, emissive: "#6a4a00", emissiveIntensity: 0.3 } : { emissive: gr.colore, emissiveIntensity: 0.25 });
+      const piante = capo ? [[LW / 2 - 0.45, -LD / 2 + 0.45], [-LW / 2 + 0.45, -LD / 2 + 0.45]] : [[LW / 2 - 0.45, -LD / 2 + 0.45]];
+      for (const [px, pz] of piante) {
+        tondo(0.42, 0.45, 0.42, capo ? "#2b2b33" : "#f3f0ea", px, 0, pz, g, 0.12);   // pianta in vaso
+        palla(0.3, "#7cc98a", px, 0.72, pz, g, 1, 1.15, 1);
+        palla(0.2, "#93d6a0", px + 0.1, 0.95, pz - 0.07, g);
+      }
+      if (capo) {                                                        // tavolino con coppa d'oro
+        tondo(0.5, 0.5, 0.5, "#6b3d22", -LW / 2 + 0.5, 0, LD / 2 - 0.9, g, 0.06);
+        palla(0.1, "#e3b23c", -LW / 2 + 0.5, 0.68, LD / 2 - 0.9, g, 1, 1, 1, { metalness: 0.7, roughness: 0.25 });
+        tondo(0.05, 0.12, 0.05, "#e3b23c", -LW / 2 + 0.5, 0.5, LD / 2 - 0.9, g, 0.02, { metalness: 0.7 });
+      }
       const nelVetro = gr.sessioni.filter(q => q.inUfficio);
       const stato = nelVetro.some(q => q.stato === "aspetta") ? "aspetta" : "supervisore";
       const s = { id: "capo:" + gr.chiave, stato, colore: gr.colore };
-      const scr = scrivania(0, 0.3, g, s);
-      sedia(0, -0.65, g, gr.colore);
-      animati.push(omino(s, g, 0, -0.5, gr.chiave === "r:capo"));
+      const nome = capo ? "CAPO" : pulito(U.nomeIsola(gr));
+      const scr = scrivania(0, capo ? 0.35 : 0.3, g, s, capo ? "capo" : "resp", nome);
+      sedia(0, capo ? -0.75 : -0.65, g, gr.colore, capo);
+      animati.push(omino(s, g, 0, capo ? -0.6 : -0.5, capo));
       schermi.push({ mesh: scr.userData.schermo, s });
       const link = gr.link || (gr.s0 && gr.s0.link);
       cliccabili.push({ obj: g, apri: () => link && apriLink(link) });
       const sc = gr.scheda;
-      marcati.push(etichetta("nome uff", U.nomeIsola(gr), new T.Vector3(x, 2.75, z - UFF / 2)));
-      marcati.push(etichetta("riep" + (stato === "aspetta" ? " chiama" : ""), U.riepilogo(gr), new T.Vector3(x, 0.05, z + UFF / 2 + 0.9),
+      marcati.push(etichetta("nome uff", U.nomeIsola(gr), new T.Vector3(x, HV + 0.55, z - LD / 2)));
+      marcati.push(etichetta("riep" + (stato === "aspetta" ? " chiama" : ""), U.riepilogo(gr), new T.Vector3(x, 0.05, z + LD / 2 + 0.9),
         sc ? [sc.fatto && "Fatto: " + sc.fatto, sc.in_corso && "In corso: " + sc.in_corso, sc.aspetta && "Aspetta: " + sc.aspetta].filter(Boolean).join("\n\n") : ""));
     });
     // 2) open space davanti: un'isola per gruppo, scrivanie in fila; ogni fila centrata sotto gli uffici
     const isole = gruppi.map(gr => ({ gr, fuori: gr.sessioni.filter(q => !q.inUfficio) })).filter(q => q.fuori.length);
-    const largUffici = Math.max(1, capi.length) * (UFF + 0.6) - 0.6, mezzo = (largUffici - UFF) / 2;
+    const largUffici = Math.max(UFF, xc - 0.6), mezzo = largUffici / 2;
     const rigaMax = Math.max(4, Math.floor(largUffici / PASSO));
     const file = [[]];
     let usate = 0;
@@ -230,7 +342,7 @@
       if (usate && usate + q.fuori.length > rigaMax) { file.push([]); usate = 0; }
       file[file.length - 1].push(q); usate += q.fuori.length;
     }
-    let z0 = UFF / 2 + 4.6;
+    let z0 = profMax / 2 + 4.6;
     for (const fila of file) {
       if (!fila.length) continue;
       const w = fila.reduce((n, q) => n + q.fuori.length * PASSO, 0) + (fila.length - 1) * 0.8;
@@ -242,18 +354,17 @@
         marcati.push(etichetta("nome", U.nomeIsola(gr), new T.Vector3(x0 + wi / 2, 0.05, z0 + 2.35)));
         fuori.forEach((s, i) => {
           const x = x0 + PASSO / 2 + i * PASSO;
-          const scr = scrivania(x, z0, mondo, s);
+          const scr = scrivania(x, z0, mondo, s, "", pulito(U.targa(s)).replace(/\s*❌\d*$/, ""));
           sedia(x, z0 - 0.95, mondo);
           const presente = U.PRESENTI.includes(s.stato);
           if (presente) animati.push(omino(s, mondo, x, z0 - 0.8, false));
           schermi.push({ mesh: scr.userData.schermo, s: presente ? s : { stato: "spento" } });
-          if (scr.userData.nuvola) animati.push({ nuvola: scr.userData.nuvola, fase: i });
           const apri = () => s.link ? apriLink(s.link) : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
           cliccabili.push({ obj: scr, apri });
           if (presente) {
             const [ic, testo] = U.testoFumetto(s);
             marcati.push(etichetta("f3d st-" + (s.download ? "allarme" : s.stato.replace("?", "")),
-              ic + " " + U.corto(testo, s.stato === "aspetta" ? 52 : 34), new T.Vector3(x, 2.0, z0 - 0.8), s.titolo));
+              ic + " " + U.corto(testo, s.stato === "aspetta" ? 52 : 34), new T.Vector3(x, 1.95, z0 - 0.8), s.titolo));
           }
           const tg = U.targa(s) || U.corto((s.titolo || "").replace(/^.*?›\s*/, ""), 18);
           if (tg) marcati.push(etichetta("tg3d", (s.cloud ? "☁️ " : "") + tg, new T.Vector3(x, 0.05, z0 + 1.5), s.titolo));
@@ -298,7 +409,6 @@
     if (!attivo || document.hidden || ms - ultimo < 1000 / 24) return;   // 24 fotogrammi al secondo bastano
     ultimo = ms; t = ms / 1000;
     for (const a of animati) {
-      if (a.nuvola) { a.nuvola.position.y = 1.55 + Math.sin(t * 1.5 + a.fase) * 0.04; continue; }
       const u = a.userData, { corpo, testa, sx, dx, s, fase } = u;
       const k = t + fase;
       if (u.stato !== s.stato) { u.stato = s.stato; u.salto = t; }     // saltello quando cambia stato
