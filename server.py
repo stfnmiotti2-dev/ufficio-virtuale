@@ -28,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 7.8"
+VERSIONE = "task 7.9"
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
 
@@ -347,15 +347,16 @@ def _extra(sessions):
             "cloud_aggiornato": _iso(cloud.get("aggiornato_utc")) if cloud else None}
 
 
-def _diagnosi(sessions):
-    """Riassunto per capire da fuori cosa vede il server (niente testo delle chat)."""
-    campi = ("id", "stato", "remoto", "thread", "thread_titolo", "responsabile", "commessa",
-             "progetto_claude", "progetto_tia", "titolo", "modificato")
+def _diagnosi(sessions, extra=None):
+    """Quello che vede la pagina (sessioni + dati dell'ufficio), per rifare la stessa schermata
+    da fuori senza screenshot. Niente percorsi dei file e niente dettagli dei comandi."""
     try:
         (HERE / "diagnosi-sessioni.json").write_text(json.dumps(
-            {"nomi_isole": len(_nomi_isole()), "sessioni": [{k: s.get(k) for k in campi} for s in sessions]},
+            {"nomi_isole": len(_nomi_isole()), "scritto": time.time(),
+             "extra": json.loads(extra) if extra else None,
+             "sessioni": [{k: v for k, v in s.items() if k not in ("file", "dettaglio")} for s in sessions]},
             ensure_ascii=False, indent=1), encoding="utf-8")
-    except OSError:
+    except (OSError, ValueError):
         pass
 
 
@@ -369,7 +370,7 @@ def _watcher(hours):
             with _cond:
                 if data != _snapshot["json"] or extra != _snapshot.get("extra"):
                     _snapshot.update(versione=_snapshot["versione"] + 1, sessioni=sessions, json=data, extra=extra)
-                    _diagnosi(sessions)
+                    _diagnosi(sessions, extra)
                     _cond.notify_all()
         except Exception as exc:  # non deve mai fermarsi
             print("errore durante la scansione:", exc, file=sys.stderr)
