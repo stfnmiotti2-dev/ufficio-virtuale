@@ -123,6 +123,7 @@ MIN_TITLE = 15            # un messaggio piu' corto ("Ora", "pc on") non fa da t
 _PROJECT = re.compile(rb'<project id=\\?"(chan_[A-Za-z0-9]{10,})\\?"[^>]*?name=\\?"([^"\\]+)')
 _PROJECT_CTX = re.compile(rb'Project: \\"([^"\\]+)\\" \(id: `(chan_[A-Za-z0-9]{10,})`\)')
 _THREAD = re.compile(rb'<thread ts=\\?"(cmsg_[A-Za-z0-9]{10,})')
+_RESPONSABILE = re.compile(r"^[ \t*_]*Thread[ \t]*:[ \t]*[«\"']?(.+?)[»\"']?[ \t*_]*$", re.M | re.I)
 _COMMESSA = re.compile(r"(?<![\w])(\d{2}_\d{3})(?![\w])")    # es. 24_247
 
 
@@ -140,7 +141,7 @@ def session_meta(path, max_bytes=32 * 1024 * 1024):
     - commessa: il primo codice tipo 24_247 nei messaggi della persona.
     Legge riga per riga: le righe possono essere enormi (screenshot in base64)."""
     meta = {"cwd": None, "titolo": None, "progetto_claude": None, "chan": None,
-            "thread": None, "commessa": None}
+            "thread": None, "commessa": None, "responsabile": None}
     first, title, thread_title, read = None, None, None, 0
     with open(path, "rb") as f:
         for raw in f:
@@ -168,7 +169,8 @@ def session_meta(path, max_bytes=32 * 1024 * 1024):
                 m = _THREAD.search(raw)
                 if m:
                     meta["thread"] = m.group(1).decode()
-            done = (thread_title or title) and meta["chan"] and meta["thread"] and meta["commessa"]
+            done = (thread_title or title) and meta["chan"] and meta["thread"] and meta["commessa"] \
+                and meta["responsabile"]
             if done:
                 break
             if b'"type":"user"' not in raw and b'"type": "user"' not in raw and meta["cwd"] is not None:
@@ -184,6 +186,14 @@ def session_meta(path, max_bytes=32 * 1024 * 1024):
             t = _title_from(_text_of(rec.get("message", {}).get("content")))
             if not t or t.startswith("Caveat:"):
                 continue
+            # riga "Thread: 24_247 op20" messa dal thread che ha aperto la sessione
+            m = _RESPONSABILE.search(t)
+            if m:
+                if meta["responsabile"] is None:
+                    meta["responsabile"] = _short(m.group(1), 60)
+                t = _RESPONSABILE.sub("", t).strip()
+                if not t:
+                    continue
             if meta["commessa"] is None:
                 m = _COMMESSA.search(t)
                 if m:
@@ -265,6 +275,11 @@ def analyze(path):
     info["progetto_claude"] = meta["progetto_claude"]
     info["commessa"] = meta["commessa"]
     info["link"] = meta.get("link")
+    info["thread"], info["chan"] = meta["thread"], meta["chan"]
+    info["responsabile"] = meta["responsabile"]
+    m = _COMMESSA.search(meta["responsabile"] or "")
+    if m:                                   # la commessa del responsabile vince
+        info["commessa"] = m.group(1)
     # titoli espliciti (rinomina della sessione o riassunto), se presenti
     for rec in head + tail:
         if rec.get("type") in ("custom-title", "ai-title") and rec.get(rec["type"].replace("-t", "T")):

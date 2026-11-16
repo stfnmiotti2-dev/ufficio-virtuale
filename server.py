@@ -8,6 +8,7 @@ con scanner.py, non chiama nessuna AI e non scrive nulla.
 """
 import argparse
 import json
+import re
 import os
 import socket
 import subprocess
@@ -27,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 7"
+VERSIONE = "task 7.1"
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
 
@@ -76,10 +77,44 @@ def _scan(hours):
     return out
 
 
+NOMI_FILE = HERE / "nomi-isole.json"     # thread -> nome del responsabile, scritto dalla pagina
+_nomi = {"mtime": None, "dati": {}}
+_THREAD_ID = re.compile(r"^cmsg_[A-Za-z0-9]{10,}$")
+
+
+def _nomi_isole():
+    try:
+        mt = NOMI_FILE.stat().st_mtime
+    except OSError:
+        return {}
+    if mt != _nomi["mtime"]:
+        try:
+            dati = json.loads(NOMI_FILE.read_text(encoding="utf-8"))
+            _nomi.update(mtime=mt, dati=dati if isinstance(dati, dict) else {})
+        except (OSError, ValueError):
+            pass
+    return _nomi["dati"]
+
+
+def _con_nomi(sessions):
+    """Aggiunge il responsabile dato a mano dalla pagina, se la sessione non lo dice da sola."""
+    nomi = _nomi_isole()
+    out = []
+    for s in sessions:
+        s = dict(s)
+        if not s.get("responsabile") and s.get("thread") in nomi:
+            s["responsabile"] = str(nomi[s["thread"]])[:60]
+            m = scanner._COMMESSA.search(s["responsabile"])
+            if m:
+                s["commessa"] = m.group(1)
+        out.append(s)
+    return out
+
+
 def _watcher(hours):
     while True:
         try:
-            sessions = _scan(hours)
+            sessions = _con_nomi(_scan(hours))
             data = json.dumps(sessions, ensure_ascii=False).encode("utf-8")
             with _cond:
                 if data != _snapshot["json"]:
@@ -131,6 +166,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, body, "application/json; charset=utf-8")
         if path == "/api/chat":
             return self._chat()
+        if path == "/api/nome-isola":       # ?thread=cmsg_...&nome=24_247 op20 (nome vuoto = cancella)
+            q = parse_qs(urlparse(self.path).query)
+            thread, nome = q.get("thread", [""])[0], q.get("nome", [""])[0].strip()[:60]
+            if not _THREAD_ID.match(thread):
+                return self._send(400, b'{"errore": "thread non valido"}', "application/json")
+            nomi = dict(_nomi_isole())
+            if nome:
+                nomi[thread] = nome
+            else:
+                nomi.pop(thread, None)
+            NOMI_FILE.write_text(json.dumps(nomi, ensure_ascii=False, indent=1), encoding="utf-8")
+            return self._send(200, b'{"ok": true}', "application/json")
         if path == "/api/riavvia":          # usato da avvio.pyw dopo un aggiornamento
             self._send(200, b'{"ok": true}', "application/json")
             if _SERVER:

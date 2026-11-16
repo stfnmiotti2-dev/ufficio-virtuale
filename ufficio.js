@@ -21,7 +21,9 @@
   let posti = [];                                      // [{x, y, s, h}] da animare
   let W = 0, H = 0, finestre = [];
   let t = 0;                                           // fotogramma corrente
-  const assegnati = new Map();                         // id sessione -> numero della scrivania (non cambia)
+  const arrivo = new Map();                            // id sessione -> ordine di arrivo (posto stabile nell'isola)
+  let nArrivi = 0;
+  const ISOLA_H = 14;                                  // spazio per il cartello sopra ogni isola
   const zone = new Map();                              // id sessione -> div cliccabile con fumetto
 
   function hash(s) {
@@ -203,34 +205,95 @@
   }
   function corto(t, n) { return t.length > n ? t.slice(0, n - 1) + "…" : t; }
 
-  function scegli(sessioni) {
-    // le prime MAX_POSTI per importanza, ma ognuno resta sempre alla sua scrivania
-    const ordine = sessioni.filter(s => s.stato === "aspetta")
+  function chiaveIsola(s) {
+    if (s.responsabile) return "r:" + s.responsabile.toLowerCase();
+    if (s.thread) return "t:" + s.thread;
+    return "altro";
+  }
+
+  // isole: una per responsabile (o per thread senza nome); il capo davanti, poi chi aspetta te
+  function isole(sessioni) {
+    const scelte = sessioni.filter(s => s.stato === "aspetta")
       .concat(sessioni.filter(s => PRESENTI.includes(s.stato) && s.stato !== "aspetta"))
       .concat(sessioni.filter(s => !PRESENTI.includes(s.stato)))
       .slice(0, MAX_POSTI);
-    const ids = new Set(ordine.map(s => s.id));
-    for (const id of [...assegnati.keys()]) if (!ids.has(id)) assegnati.delete(id);
-    const occupati = new Set(assegnati.values());
-    for (const s of ordine) {
-      if (assegnati.has(s.id)) continue;
-      let n = 0;
-      while (occupati.has(n)) n++;
-      assegnati.set(s.id, n); occupati.add(n);
+    for (const s of scelte) if (!arrivo.has(s.id)) arrivo.set(s.id, nArrivi++);
+    const gruppi = new Map();
+    scelte.forEach((s, i) => {
+      const k = chiaveIsola(s);
+      if (!gruppi.has(k)) gruppi.set(k, { chiave: k, sessioni: [], prima: i, s0: s });
+      gruppi.get(k).sessioni.push(s);
+    });
+    const lista = [...gruppi.values()];
+    for (const gr of lista) gr.sessioni.sort((a, b) => arrivo.get(a.id) - arrivo.get(b.id));
+    const peso = gr => gr.chiave === "r:capo" ? 0 : gr.chiave === "altro" ? 3 :
+      gr.sessioni.some(s => s.stato === "aspetta") ? 1 : 2;
+    lista.sort((a, b) => peso(a) - peso(b) || a.prima - b.prima);
+    return lista;
+  }
+
+  function nomeIsola(gr) {
+    const s = gr.s0;
+    if (gr.chiave === "r:capo") return "👑 Capo";
+    if (s.responsabile) return "📌 " + s.responsabile;
+    if (s.thread) return "🧵 senza nome";
+    return "🗂️ Altre sessioni";
+  }
+
+  function cartello(gr, x, y, w, scala) {
+    const c = document.createElement("div");
+    c.className = "cartello";
+    Object.assign(c.style, { left: x * scala + "px", top: y * scala + "px", width: w * scala + "px" });
+    c.append(document.createTextNode(nomeIsola(gr)));
+    const s = gr.s0;
+    const link = gr.chiave === "r:capo" && s.chan ? "https://claude.ai/code/project/" + s.chan : (s.thread ? s.link : null);
+    if (link) {
+      const a = document.createElement("a");
+      a.href = link; a.target = "_blank"; a.rel = "noopener";
+      a.textContent = "↗";
+      a.title = gr.chiave === "r:capo" ? "Apri la chat principale del progetto" : "Apri la chat del responsabile";
+      c.append(a);
     }
-    return ordine;
+    if (s.thread && gr.chiave !== "r:capo") {
+      const b = document.createElement("button");
+      b.textContent = "✏️";
+      b.title = "Dai un nome a questo responsabile (es. 24_247 op20)";
+      b.onclick = async () => {
+        const nome = prompt("Nome del responsabile di queste sessioni (es. 24_247 op20).\nLascia vuoto per toglierlo.", s.responsabile || "");
+        if (nome === null) return;
+        try {
+          await fetch("/api/nome-isola?thread=" + encodeURIComponent(s.thread) + "&nome=" + encodeURIComponent(nome.trim()));
+        } catch (e) {}
+      };
+      c.append(b);
+    }
+    strato.append(c);
   }
 
   function disegna(sessioni) {
     ultime = sessioni;
-    const scelte = scegli(sessioni);
+    const gruppi = isole(sessioni);
     const disp = (wrap.clientWidth || 1000) - 40;   // tolgo il padding laterale
     const scala = Math.max(2, Math.min(3, Math.floor(disp / (4 * SLOT_W + 2 * MARGINE))));
-    const colonne = Math.max(2, Math.min(6, Math.floor((disp / scala - 2 * MARGINE) / SLOT_W)));
-    const ultimo = Math.max(-1, ...assegnati.values());
-    const righe = Math.max(1, Math.ceil((ultimo + 1) / colonne));
-    W = colonne * SLOT_W + 2 * MARGINE;
-    H = MURO + 18 + righe * SLOT_H + 6;
+    const colonne = Math.max(2, Math.min(6, Math.floor((disp / scala - 2 * MARGINE + 8) / (SLOT_W + 8))));
+    // posizioni: le isole si affiancano finche' c'e' posto, poi vanno a capo
+    const GAP = 8;
+    const pos = new Map(), aree = [];
+    let y = MURO + 8, x = MARGINE, hRiga = 0;
+    const largMax = colonne * SLOT_W + (colonne - 1) * GAP;
+    for (const gr of gruppi) {
+      const perRiga = Math.min(colonne, gr.sessioni.length);
+      const righe = Math.ceil(gr.sessioni.length / perRiga);
+      const w = perRiga * SLOT_W, h = ISOLA_H + righe * SLOT_H;
+      if (x > MARGINE && x + w > MARGINE + largMax) { x = MARGINE; y += hRiga + 4; hRiga = 0; }
+      aree.push({ gr, x, y, w, h });
+      gr.sessioni.forEach((s, i) => pos.set(s.id, {
+        x: x + (i % perRiga) * SLOT_W, y: y + ISOLA_H + Math.floor(i / perRiga) * SLOT_H }));
+      x += w + GAP; hRiga = Math.max(hRiga, h);
+    }
+    y += hRiga + 4;
+    W = colonne * SLOT_W + (colonne - 1) * GAP + 2 * MARGINE;
+    H = Math.max(y, MURO + 8 + ISOLA_H + SLOT_H) + 4;
     if (canvas.width !== W || canvas.height !== H) {
       canvas.width = W; canvas.height = H;
     }
@@ -239,14 +302,20 @@
     sfondo.width = W; sfondo.height = H;
     ctx = sfondo.getContext("2d");
     stanza(W, H);
+    for (const a of aree) {                         // tappeto colorato sotto ogni isola
+      const capo = a.gr.chiave === "r:capo";
+      r(a.x - 2, a.y + 2, a.w + 4, a.h - 2, capo ? "rgba(214,170,60,.28)" : "rgba(60,90,140,.22)");
+      r(a.x - 2, a.y + 2, a.w + 4, 1, capo ? "rgba(255,215,110,.5)" : "rgba(140,170,220,.35)");
+    }
     ctx = g;
+    for (const c of strato.querySelectorAll(".cartello")) c.remove();
+    for (const a of aree) cartello(a.gr, a.x, a.y + 3, a.w, scala);
+    const scelte = gruppi.flatMap(gr => gr.sessioni);
 
     posti = [];
     const visti = new Set();
     for (const s of scelte) {
-      const i = assegnati.get(s.id);
-      const x = MARGINE + (i % colonne) * SLOT_W;
-      const y = MURO + 18 + Math.floor(i / colonne) * SLOT_H;
+      const { x, y } = pos.get(s.id);
       posti.push({ x, y, s, h: hash(s.id) });
       visti.add(s.id);
       let zona = zone.get(s.id);
@@ -273,7 +342,8 @@
         f.style.display = presente ? "" : "none";
         if (presente) { f.classList.remove("pop"); void f.offsetWidth; f.classList.add("pop"); }
       }
-      zona.lastChild.textContent = corto(s.commessa ? "📌 " + s.commessa : (s.progetto_tia || s.titolo || s.progetto || ""), 22);
+      zona.lastChild.textContent = corto((s.commessa && !s.responsabile ? "📌 " + s.commessa + " " : "") + (s.progetto_tia ? "🧩 " + s.progetto_tia : (s.titolo || s.progetto || "")), 22)
+        + (s.sotto_agenti ? " 👥" + s.sotto_agenti : "");
     }
     for (const [id, zona] of zone) if (!visti.has(id)) { zona.remove(); zone.delete(id); }
     let v = strato.querySelector(".ufficio-vuoto");
