@@ -3,7 +3,7 @@
 1. scarica l'ultima versione dal repo GitHub, se c'e';
 2. avvia il server senza finestra, se non e' gia' acceso;
 3. apre l'ufficio in una finestra tutta sua, senza barre del browser
-   (Edge o Chrome in modalita' app; se non ci sono, il browser normale).
+   (Chrome, o Edge se manca, in modalita' app; se non ci sono, il browser normale).
 Si lancia dall'icona "Ufficio virtuale" sul desktop.
 L'estensione .pyw lo fa girare con pythonw, cioe' senza finestra nera.
 """
@@ -76,7 +76,7 @@ def apri_finestra():
     """Finestra 'app': niente schede, indirizzo o pulsanti del browser intorno all'ufficio."""
     if sys.platform == "win32":
         cartelle = [os.environ.get(k, "") for k in ("ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA")]
-        for rel in (r"Microsoft\Edge\Application\msedge.exe", r"Google\Chrome\Application\chrome.exe"):
+        for rel in (r"Google\Chrome\Application\chrome.exe", r"Microsoft\Edge\Application\msedge.exe"):   # prima Chrome
             for c in cartelle:
                 exe = Path(c) / rel
                 if c and exe.exists():
