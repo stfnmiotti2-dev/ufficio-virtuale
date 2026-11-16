@@ -468,7 +468,7 @@
   }
   // sala riunioni: colleghi seduti al tavolo che discutono, proiettore sul tavolo che proietta lo schizzo della dashboard;
   // cliccando lo schizzo (o il proiettore) si aprono le dashboard in alto nella pagina
-  let riunione = [];
+  let riunione = [], fascio = null, raggi = null;
   function salaRiunioni(x, z) {
     const LW = 5.6, LD = 4.2, HV = 2.2;
     const g = new T.Group(); g.position.set(x, 0, z); mondo.add(g);
@@ -487,17 +487,29 @@
     tondo(0.16, 0.7, 0.16, "#8a5a2b", 0, 0, 0.35, g, 0.05);
     const pr = tondo(0.42, 0.18, 0.36, "#e9edf2", 0, 0.78, 0.35, g, 0.05);
     palla(0.07, "#2b2b33", 0, 0.87, 0.17, g, 1, 1, 0.5, { emissive: "#bfe3ff", emissiveIntensity: 0.9 });
-    const lungh = LD / 2 + 0.17;                                                    // fascio di luce dal proiettore al muro
-    const cono = new T.Mesh(new T.CylinderGeometry(0.04, 1.75, lungh, 4, 1, true),
-      new T.MeshBasicMaterial({ color: lin("#fffbe6"), transparent: true, opacity: 0.1, depthWrite: false, side: T.DoubleSide }));
-    cono.rotation.set(-Math.PI / 2, Math.PI / 4, 0); cono.scale.set(1, 1, 0.42);
-    cono.position.set(0, 1.15, 0.17 - lungh / 2); g.add(cono);
+    // fascio del proiettore: piramide di luce dalla lente agli angoli dello schizzo, con i bordi dei raggi ben visibili
+    const lente = [0, 0.87, 0.15], tw = 3.4 / 2, th = 3.4 * 400 / 1024 / 2, zt = -LD / 2 + 0.09;
+    const ang = [[-tw, 1.45 - th], [tw, 1.45 - th], [tw, 1.45 + th], [-tw, 1.45 + th]].map(([ax, ay]) => [ax, ay, zt]);
+    const v = [];
+    for (const i of [0, 1, 3]) v.push(...lente, ...ang[i], ...ang[(i + 1) % 4]);        // senza la faccia di sopra, che coprirebbe lo schizzo
+    const sfuma = n => { const c = []; for (let i = 0; i < n; i++) c.push(...(i % (n === 9 ? 3 : 2) ? [0.05, 0.045, 0.03] : [1, 0.95, 0.75])); return c; };
+    const gf = new T.BufferGeometry(); gf.setAttribute("position", new T.Float32BufferAttribute(v, 3));
+    gf.setAttribute("color", new T.Float32BufferAttribute(sfuma(9), 3));          // luce forte alla lente, sfuma verso il muro
+    fascio = new T.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.35, depthWrite: false,
+      side: T.DoubleSide, blending: T.AdditiveBlending, toneMapped: false });
+    g.add(new T.Mesh(gf, fascio));
+    const lv = []; for (const c of ang) lv.push(...lente, ...c);
+    const gl = new T.BufferGeometry(); gl.setAttribute("position", new T.Float32BufferAttribute(lv, 3));
+    gl.setAttribute("color", new T.Float32BufferAttribute(sfuma(8), 3));
+    raggi = new T.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, blending: T.AdditiveBlending, toneMapped: false });
+    g.add(new T.LineSegments(gl, raggi));
+    palla(0.11, "#fff8d8", ...lente, g, 1, 1, 0.4, { emissive: "#fff3b0", emissiveIntensity: 1.6 });   // lente accesa
     // quattro colleghi seduti intorno al tavolo
     riunione = [];
     [[-0.75, -0.45, Math.PI], [0.75, -0.45, Math.PI], [-0.75, 1.2, 0], [0.75, 1.2, 0]].forEach(([sx_, sz_, r], i) => {
       const sd = sedia(sx_, sz_ + (r ? -0.15 : 0.15), g, ["#a283e3", "#4fc1bd", "#f08a5d", "#5c9ee6"][i]);
       sd.rotation.y = r ? 0 : Math.PI;
-      const o = omino({ id: "riunione" + i }, g, sx_, sz_, i % 2 ? "resp" : "dip");
+      const o = omino({ id: "riunione" + i }, g, sx_, sz_, "resp");                 // tutti eleganti: giacca e cravatta (tailleur le donne)
       o.rotation.y = r; riunione.push(o);
     });
     const apri = () => window.apriDashboard && window.apriDashboard(!document.body.classList.contains("dash"));   // apre o richiude
@@ -625,7 +637,7 @@
     // 2) open space davanti: un'isola per gruppo, scrivanie in fila; ogni fila centrata sotto gli uffici
     const isole = gruppi.map(gr => ({ gr, fuori: gr.sessioni.filter(q => !q.inUfficio) })).filter(q => q.fuori.length);
     const largUffici = Math.max(UFF, xc - 0.6), mezzo = largUffici / 2;
-    salaRiunioni(xc + 2.8, 0);
+    salaRiunioni(-0.6 - 2.8, 0);                                         // a sinistra dell'ufficio del capo
     const rigaMax = Math.max(4, Math.floor(largUffici / PASSO));
     const file = [[]];
     let usate = 0;
@@ -973,6 +985,7 @@
     }
     capoInGiro = capoVisto;
     const parla = Math.floor(t / 3.2) % 4;
+    if (fascio) { const f = 0.9 + Math.sin(t * 7) * 0.05 + Math.sin(t * 13.3) * 0.05; fascio.opacity = 0.35 * f; raggi.opacity = 0.9 * f; }
     riunione.forEach((o, i) => {
       const u = o.userData, k = t + u.fase;
       for (const oc of u.occhi) oc.scale.y = (k % 4) < 0.12 ? 0.25 : 1.5;
