@@ -265,9 +265,17 @@
   function omino(s, padre, x, z, ruolo) {
     const h = U.hash(s.id), capo = ruolo === "capo", resp = ruolo === "resp";
     const postino = ruolo === "postino", operaio = ruolo === "operaio";
-    const donna = !capo && !postino && !operaio && ((h >>> 12) & 1) === 1;
-    const pelle = U.PELLE[h % U.PELLE.length], capelli = U.CAPELLI[(h >>> 4) % U.CAPELLI.length];
-    const maglia = operaio ? "#f28c28" : postino ? "#3b6fc4" : capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
+    const donna = !capo && !resp && !postino && !operaio && ((h >>> 12) & 1) === 1;   // i capi commessa sono tutti uomini (come nelle foto)
+    // aspetto ispirato alla squadra: capelli scuri o brizzolati, teste rasate, barbe, occhiali; il re ha barba scura e occhiali blu
+    const PELLI = ["#f1c7a5", "#e8b896", "#d9a27c", "#c68a62"], CAPI = ["#1c1714", "#2b1d14", "#3b2a1e", "#5a3a22", "#8d8d96", "#b9b9c2"];
+    const pelle = PELLI[h % PELLI.length];
+    const capelli = capo ? "#1c1714" : donna ? ["#2b1d14", "#a8743c", "#5a3a22", "#1c1714"][(h >>> 4) % 4] : CAPI[(h >>> 4) % CAPI.length];
+    const calvo = !capo && !donna && !postino && !operaio && (h >>> 17) % (resp ? 3 : 4) === 0;
+    const barba = capo ? 3 : donna || postino ? 0 : resp ? [1, 2, 3, 3, 2][(h >>> 19) % 5] : (h >>> 19) % 4;   // 0 niente, 1 accenno, 2 pizzetto, 3 piena
+    const occhiali = capo ? "#1f3a8a" : !postino && !operaio && (h >>> 21) % (resp ? 2 : 3) === 0 ? ["#1c1c22", "#3b2a1e", "#1f3a8a"][(h >>> 23) % 3] : null;
+    const ricci = donna && (h >>> 24) % 2 === 0;
+    const divisa = ruolo === "dip" && !donna ? ((h >>> 25) % 5 < 3 ? "polo" : (h >>> 25) % 5 === 3 ? "camicia" : null) : null;
+    const maglia = divisa === "polo" ? "#1f1f24" : divisa === "camicia" ? "#f4f4f2" : operaio ? "#f28c28" : postino ? "#3b6fc4" : capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
     const pantaloni = operaio ? "#3d4a5c" : postino ? "#2a3f6b" : capo ? "#7a1426" : resp ? maglia : donna ? pelle : JEANS[(h >>> 9) % JEANS.length];
     const scarpe = capo ? "#e3b23c" : resp ? "#1f1f26" : donna ? ["#ef7f9f", "#2b2b33", "#ffffff"][(h >>> 10) % 3] : "#ffffff";
     const g = new T.Group(); g.position.set(x, 0, z); g.rotation.y = Math.PI; padre.add(g);
@@ -290,6 +298,15 @@
     } else if (postino) {                                                // borsa a tracolla
       tondo(0.3, 0.24, 0.12, "#8a5a2b", 0.2, 0.55, -0.12, corpo, 0.04);
       const tr = new T.Mesh(new T.TorusGeometry(0.3, 0.02, 6, 24), m("#6b4420")); tr.rotation.set(0, Math.PI / 2, 0.7); tr.position.set(0, 0.85, 0); corpo.add(tr);
+    } else if (divisa === "polo") {                                     // polo nera con il logo arancione e il cordino
+      box(0.12, 0.05, 0.02, "#f28c28", 0.1, 0.92, -0.23, corpo);
+      tondo(0.14, 0.04, 0.02, "#1f1f24", 0, 1.05, -0.2, corpo, 0.01);
+      const cord = new T.Mesh(new T.TorusGeometry(0.17, 0.014, 6, 20, Math.PI * 1.1), m("#f28c28"));
+      cord.rotation.set(0.25, 0, Math.PI * 0.95); cord.position.set(0, 0.92, -0.17); corpo.add(cord);
+      box(0.08, 0.1, 0.02, "#ffffff", 0, 0.68, -0.235, corpo);
+    } else if (divisa === "camicia") {                                  // camicia bianca con il colletto
+      for (const sx of [-0.06, 0.06]) palla(0.06, "#ffffff", sx, 1.06, -0.16, corpo, 1, 0.5, 0.6);
+      for (const by of [0.95, 0.82, 0.69]) palla(0.015, "#c9c9c9", 0, by, -0.225, corpo, 1, 1, 0.5);
     } else if (!donna && (h >>> 13) & 1) {                                // felpa con cappuccio per qualcuno
       palla(0.2, maglia, 0, 1.0, 0.16, corpo, 1.1, 0.6, 0.7);
       for (const dx of [-0.06, 0.06]) tondo(0.015, 0.16, 0.015, "#ffffff", dx, 0.86, -0.22, corpo, 0.006);
@@ -312,6 +329,11 @@
     // capelli: calotta sopra e dietro, con un ciuffo diverso per ognuno
     const cal = new T.Mesh(new T.SphereGeometry(0.29, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.42), m(capelli));
     cal.rotation.x = 0.35; cal.position.y = 0.02; cal.castShadow = true; testa.add(cal);
+    if (calvo) { cal.material = m(pelle, { roughness: 0.35 }); palla(0.275, capelli, 0, -0.04, 0.05, testa, 1.02, 0.6, 1, { transparent: true, opacity: 0.35 }); }   // testa rasata
+    if (ricci) for (let i = 0; i < 14; i++) {                            // capelli ricci e voluminosi
+      const a = i / 14 * Math.PI * 2, r = 0.27 + (i % 2) * 0.04;
+      palla(0.1, capelli, Math.cos(a) * r, -0.05 + Math.sin(i * 1.7) * 0.18, 0.05 + Math.sin(a) * 0.2, testa);
+    }
     if (donna) {                                                         // capelli lunghi dietro e ai lati
       palla(0.27, capelli, 0, -0.12, 0.08, testa, 1.08, 1.1, 0.85);
       for (const sx of [-0.25, 0.25]) palla(0.09, capelli, sx, -0.12, 0.02, testa, 0.7, 1.9, 1);
@@ -326,7 +348,7 @@
       tondo(0.3, 0.025, 0.16, "#1c2f5c", 0, 0.14, -0.27, testa, 0.01);
       palla(0.035, "#f2b443", 0, 0.22, -0.28, testa, 1, 1, 0.4, { metalness: 0.5 });
     }
-    const ciuffo = postino || operaio ? -1 : h % 3;
+    const ciuffo = postino || operaio || calvo ? -1 : h % 3;
     if (ciuffo === 0) palla(0.11, capelli, -0.1, 0.2, -0.17, testa, 1.3, 0.7, 0.8);
     if (ciuffo === 1) { palla(0.09, capelli, -0.24, 0.0, 0.02, testa, 0.6, 1.4, 1); palla(0.09, capelli, 0.24, 0.0, 0.02, testa, 0.6, 1.4, 1); }
     if (ciuffo === 2) palla(0.14, capelli, 0, 0.26, 0.05, testa, 1, 0.6, 1);
@@ -340,6 +362,24 @@
     sorriso.position.set(0, -0.08, -0.255); sorriso.rotation.set(0, 0, Math.PI); testa.add(sorriso);
     const bocca_o = palla(0.03, "#8a3b3b", 0, -0.1, -0.25, testa, 1, 1.2, 0.5);
     const linea = tondo(0.07, 0.014, 0.02, "#8a3b3b", 0, -0.11, -0.255, testa, 0.006);
+    const cBarba = capelli === "#b9b9c2" || capelli === "#8d8d96" ? "#6d6d75" : capelli;
+    if (barba === 3) {                                                   // barba piena e baffi; la bocca resta davanti
+      palla(0.22, cBarba, 0, -0.15, -0.08, testa, 1.15, 0.72, 1);
+      tondo(0.16, 0.035, 0.04, cBarba, 0, -0.055, -0.285, testa, 0.015);
+      for (const q of [sorriso, bocca_o, linea]) q.position.z -= 0.06;
+    } else if (barba === 2) {                                            // pizzetto
+      palla(0.06, cBarba, 0, -0.17, -0.24, testa, 1, 1.2, 0.7);
+      tondo(0.12, 0.03, 0.03, cBarba, 0, -0.06, -0.27, testa, 0.012);
+      for (const q of [sorriso, bocca_o, linea]) q.position.z -= 0.02;
+    } else if (barba === 1) palla(0.24, cBarba, 0, -0.1, -0.05, testa, 1.12, 0.7, 1.06, { transparent: true, opacity: 0.28 });   // barba di qualche giorno
+    if (occhiali) {                                                      // occhiali rettangolari
+      for (const sx of [-0.095, 0.095]) {
+        const l = new T.Mesh(new T.TorusGeometry(0.065, 0.013, 6, 4), m(occhiali)); l.rotation.z = Math.PI / 4; l.scale.set(1.25, 0.85, 1);
+        l.position.set(sx, 0.03, -0.29); testa.add(l);
+      }
+      box(0.05, 0.015, 0.015, occhiali, 0, 0.04, -0.29, testa);
+      for (const sx of [-0.18, 0.18]) box(0.015, 0.015, 0.2, occhiali, sx, 0.04, -0.2, testa);
+    }
     if (capo) {                                                          // corona e cravatta
       const oro = { color: new T.Color("#f0c040").convertSRGBToLinear(), roughness: 0.3, metalness: 0.4, emissive: new T.Color("#4a3000").convertSRGBToLinear() };
       const anello = new T.Mesh(new T.CylinderGeometry(0.17, 0.17, 0.08, 20, 1, true), new T.MeshStandardMaterial(Object.assign({ side: T.DoubleSide }, oro)));
