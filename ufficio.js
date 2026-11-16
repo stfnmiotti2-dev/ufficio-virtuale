@@ -247,6 +247,8 @@
 
   function chiaveIsola(s) {
     if (s.responsabile) return "r:" + s.responsabile.toLowerCase();
+    if (s.commessa) return "c:" + s.commessa;                 // senza responsabile: per commessa
+    if (s.progetto_claude) return "p:" + s.progetto_claude.toLowerCase();   // poi per progetto claude.ai
     if (s.thread) return "t:" + s.thread;
     return "altro";
   }
@@ -281,6 +283,8 @@
     const s = gr.s0;
     if (gr.chiave === "r:capo") return "👑 Capo";
     if (s.responsabile) return "📌 " + s.responsabile;
+    if (gr.chiave.startsWith("c:")) return "📌 " + s.commessa;
+    if (gr.chiave.startsWith("p:")) return "🗂️ " + s.progetto_claude;
     if (s.thread) return "🧵 da assegnare";
     return "🗂️ Sessioni aperte sul PC";
   }
@@ -311,7 +315,9 @@
       strato.append(c);
       return;
     }
-    const link = gr.chiave === "r:capo" && s.chan ? "https://claude.ai/code/project/" + s.chan : (s.thread ? s.link : null);
+    const link = gr.chiave === "r:capo" && s.chan ? "https://claude.ai/code/project/" + s.chan :
+      gr.chiave.startsWith("p:") && s.chan ? "https://claude.ai/code/project/" + s.chan :
+      (s.thread && (gr.chiave.startsWith("t:") || gr.chiave.startsWith("r:")) ? s.link : null);
     if (link) {
       const a = document.createElement("a");
       a.href = link; a.target = "_blank"; a.rel = "noopener";
@@ -328,7 +334,7 @@
       if (gr.sessioni.some(q => q.stato === "aspetta")) st.classList.add("chiama");
       strato.append(st);
     }
-    if (s.thread && gr.chiave !== "r:capo") {
+    if (s.thread && gr.chiave !== "r:capo" && gr.sessioni.length === 1) {   // il nome vale per un thread
       const b = document.createElement("button");
       b.textContent = "✏️";
       b.title = "Dai un nome a questo responsabile (es. 24_247 op20)";
@@ -448,7 +454,7 @@
         f.style.display = presente ? "" : "none";
         if (presente) { f.classList.remove("pop"); void f.offsetWidth; f.classList.add("pop"); }
       }
-      zona.lastChild.textContent = corto((s.commessa && !s.responsabile ? "📌 " + s.commessa + " " : "") + (s.progetto_tia ? "🧩 " + s.progetto_tia : (s.titolo || s.progetto || "")), 30)
+      zona.lastChild.textContent = corto((s.progetto_tia ? "🧩 " + s.progetto_tia : (s.titolo || s.progetto || "")), 30)
         + (s.sotto_agenti ? " 👥" + s.sotto_agenti : "");
     }
     for (const [id, zona] of zone) if (!visti.has(id)) { zona.remove(); zone.delete(id); }

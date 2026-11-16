@@ -86,6 +86,14 @@ def clean_text(text):
 
 
 def _title_from(text):
+    """Come clean_text, ma per il titolo nelle buste remote preferisco le istruzioni
+    (<note>) e il messaggio (<message>) alla risposta citata della persona (<cited>),
+    che spesso e' corta: "\\pc on", "fatto", "vai"."""
+    pulito = _NOISE.sub(" ", text or "")
+    for tag in ("note", "message"):
+        parts = [p for t, p in _TAGGED.findall(pulito) if t == tag and re.sub(r"<[^>]+>", "", p).strip()]
+        if parts:
+            return clean_text("\n\n".join(parts)) or None
     t = clean_text(text)
     return t or None
 
@@ -141,7 +149,7 @@ def session_meta(path, max_bytes=32 * 1024 * 1024):
     - commessa: il primo codice tipo 24_247 nei messaggi della persona.
     Legge riga per riga: le righe possono essere enormi (screenshot in base64)."""
     meta = {"cwd": None, "titolo": None, "progetto_claude": None, "chan": None,
-            "thread": None, "commessa": None, "responsabile": None}
+            "thread": None, "commessa": None, "responsabile": None, "remoto": False}
     first, title, thread_title, read = None, None, None, 0
     with open(path, "rb") as f:
         for raw in f:
@@ -183,6 +191,8 @@ def session_meta(path, max_bytes=32 * 1024 * 1024):
                 meta["cwd"] = rec["cwd"]
             if rec.get("type") != "user" or rec.get("isMeta") or rec.get("isSidechain"):
                 continue
+            if first is None and re.match(r"\s*<(wake|relay|coordinator-relay)\b", _text_of(rec.get("message", {}).get("content"))):
+                meta["remoto"] = True        # aperta da un thread di claude.ai: risponde a lui, non a te
             t = _title_from(_text_of(rec.get("message", {}).get("content")))
             if not t or t.startswith("Caveat:"):
                 continue
@@ -277,6 +287,7 @@ def analyze(path):
     info["link"] = meta.get("link")
     info["thread"], info["chan"] = meta["thread"], meta["chan"]
     info["responsabile"] = meta["responsabile"]
+    info["remoto"] = meta["remoto"]
     m = _COMMESSA.search(meta["responsabile"] or "")
     if m:                                   # la commessa del responsabile vince
         info["commessa"] = m.group(1)
@@ -312,7 +323,7 @@ def analyze(path):
                 # nelle sessioni avviate da claude.ai la persona vede solo i messaggi
                 # mandati con lo strumento, non il testo libero dell'agente
                 if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip() \
-                        and not usa_messaggi:
+                        and not usa_messaggi and not meta["remoto"]:
                     domanda = _domanda(b["text"])
                 if isinstance(b, dict) and b.get("type") == "tool_use":
                     tipo, testo = _domanda_da_strumento(b)
