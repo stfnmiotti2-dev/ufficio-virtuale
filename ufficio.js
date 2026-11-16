@@ -253,6 +253,11 @@
 
   // isole: una per responsabile (o per thread senza nome); il capo davanti, poi chi aspetta te
   function isole(sessioni) {
+    // nell'ufficio solo cio' che conta adesso: chi ha finito da piu' di 3 ore o e' ferma
+    // da piu' di un'ora va a casa (resta nelle schede sotto)
+    const ora = Date.now() / 1000;
+    sessioni = sessioni.filter(s => PRESENTI.includes(s.stato) && s.stato !== "finito" ||
+      (s.stato === "finito" && ora - s.modificato < 3 * 3600) || ora - s.modificato < 3600);
     const scelte = sessioni.filter(s => s.stato === "aspetta")
       .concat(sessioni.filter(s => PRESENTI.includes(s.stato) && s.stato !== "aspetta"))
       .concat(sessioni.filter(s => !PRESENTI.includes(s.stato)))
@@ -276,8 +281,20 @@
     const s = gr.s0;
     if (gr.chiave === "r:capo") return "👑 Capo";
     if (s.responsabile) return "📌 " + s.responsabile;
-    if (s.thread) return "🧵 senza nome";
-    return "🗂️ Altre sessioni";
+    if (s.thread) return "🧵 da assegnare";
+    return "🗂️ Sessioni aperte sul PC";
+  }
+
+  function haUfficio(gr) { return gr.chiave.startsWith("r:"); }
+
+  function riepilogo(gr) {                            // es. "✋ 1 · ⚙️ 2 · 💤 1"
+    const n = st => gr.sessioni.filter(s => st.includes(s.stato)).length;
+    const parti = [];
+    if (n(["aspetta"])) parti.push("✋ " + n(["aspetta"]));
+    if (n(["lavora", "pensa"])) parti.push("⚙️ " + n(["lavora", "pensa"]));
+    if (n(["ferma?"])) parti.push("⏳ " + n(["ferma?"]));
+    if (n(["finito", "inattiva", "vuota"])) parti.push("💤 " + n(["finito", "inattiva", "vuota"]));
+    return parti.join(" · ");
   }
 
   function cartello(gr, x, y, w, scala, ufficio) {
@@ -289,6 +306,11 @@
     Object.assign(c.style, { left: x * scala + "px", top: y * scala + "px", width: w * scala + "px" });
     c.append(document.createTextNode(nomeIsola(gr)));
     const s = gr.s0;
+    if (!ufficio && haUfficio(gr)) {                  // nell'open space basta il nome: i comandi sono sull'ufficio
+      c.title = "Lavorano per " + nomeIsola(gr).replace(/^\S+ /, "");
+      strato.append(c);
+      return;
+    }
     const link = gr.chiave === "r:capo" && s.chan ? "https://claude.ai/code/project/" + s.chan : (s.thread ? s.link : null);
     if (link) {
       const a = document.createElement("a");
@@ -296,6 +318,15 @@
       a.textContent = "↗";
       a.title = gr.chiave === "r:capo" ? "Apri la chat principale del progetto" : "Apri la chat del responsabile";
       c.append(a);
+    }
+    if (ufficio) {
+      const st = document.createElement("div");
+      st.className = "riepilogo";
+      st.textContent = riepilogo(gr);
+      st.title = "✋ ti aspettano · ⚙️ lavorano · ⏳ fermi da un po' · 💤 hanno finito";
+      Object.assign(st.style, { left: x * scala + "px", top: (y + ISOLA_H + UFF_H - 4) * scala + "px", width: w * scala + "px" });
+      if (gr.sessioni.some(q => q.stato === "aspetta")) st.classList.add("chiama");
+      strato.append(st);
     }
     if (s.thread && gr.chiave !== "r:capo") {
       const b = document.createElement("button");
@@ -324,7 +355,7 @@
     for (const gr of gruppi) gr.colore = gr.chiave === "r:capo" ? ORO : gr.chiave === "altro" ? "#8b90a3" : COLORI_ISOLE[ci++ % COLORI_ISOLE.length];
     // 1) direzione: uffici a vetri in fila sotto il muro (capo e responsabili)
     const GAP = 8;
-    const capi = gruppi.filter(gr => gr.chiave !== "altro");
+    const capi = gruppi.filter(haUfficio);
     const perFila = Math.max(1, Math.floor((colonne * SLOT_W + (colonne - 1) * GAP + GAP) / (UFF_W + GAP)));
     uffici = [];
     let y = MURO + 14;
@@ -371,7 +402,7 @@
       ctx.globalAlpha = .6; r(a.x - 2, a.y + 2, a.w + 4, 1, a.gr.colore); ctx.globalAlpha = 1;
     }
     ctx = g;
-    for (const c of strato.querySelectorAll(".cartello, .cartello-click")) c.remove();
+    for (const c of strato.querySelectorAll(".cartello, .cartello-click, .riepilogo")) c.remove();
     for (const u of uffici) {
       cartello(u.gr, u.x, u.y + 2, UFF_W, scala, true);
       const s0 = u.gr.s0;
@@ -409,7 +440,7 @@
       zona.title = (s.titolo || "(senza titolo)") + "\nClic: apri la chat";
       const f = zona.firstChild;
       const [ic, testo] = presente ? testoFumetto(s) : ["", ""];
-      const nuovo = presente ? ic + " " + corto(testo, s.stato === "aspetta" ? 32 : 34) : "";
+      const nuovo = presente ? ic + " " + corto(testo, s.stato === "aspetta" ? 52 : 34) : "";
       if (f.dataset.testo !== nuovo) {                // il fumetto "salta fuori" solo quando cambia
         f.dataset.testo = nuovo;
         f.textContent = nuovo;
@@ -417,7 +448,7 @@
         f.style.display = presente ? "" : "none";
         if (presente) { f.classList.remove("pop"); void f.offsetWidth; f.classList.add("pop"); }
       }
-      zona.lastChild.textContent = corto((s.commessa && !s.responsabile ? "📌 " + s.commessa + " " : "") + (s.progetto_tia ? "🧩 " + s.progetto_tia : (s.titolo || s.progetto || "")), 22)
+      zona.lastChild.textContent = corto((s.commessa && !s.responsabile ? "📌 " + s.commessa + " " : "") + (s.progetto_tia ? "🧩 " + s.progetto_tia : (s.titolo || s.progetto || "")), 30)
         + (s.sotto_agenti ? " 👥" + s.sotto_agenti : "");
     }
     for (const [id, zona] of zone) if (!visti.has(id)) { zona.remove(); zone.delete(id); }
@@ -438,7 +469,8 @@
     nuvoleEOrologio();
     for (const u of uffici) {
       posto(u.x + 4, u.y + ISOLA_H + 6, u.s);
-      vetrate(u.x, u.y + ISOLA_H, u.colore);
+      const chiama = u.gr.sessioni.some(q => q.stato === "aspetta") && Math.floor(t / 4) % 2;
+      vetrate(u.x, u.y + ISOLA_H, chiama ? "#ff5d5d" : u.colore);
     }
     for (const p of posti) posto(p.x, p.y, p.s);
   }
