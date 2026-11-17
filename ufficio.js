@@ -269,7 +269,11 @@
 
   // ---------- fumetti ed etichette ----------
   function testoFumetto(s) {
-    if (s.stato === "aspetta") return ["✋", s.attivita || "Aspetta te"];
+    if (s.stato === "aspetta") {                       // da quanto aspetta (campo di Agente TIA, se c'e')
+      const da = s.aspetta_dal || s.modificato, min = da ? Math.max(1, Math.round((Date.now() / 1000 - da) / 60)) : 0;
+      const quanto = !min ? "" : (min < 60 ? min + "'" : Math.floor(min / 60) + "h" + (min % 60 ? String(min % 60).padStart(2, "0") : "")) + " · ";
+      return ["✋", quanto + (s.attivita || "Aspetta te")];
+    }
     if (s.stato === "pensa") return ["💭", "Sta pensando…"];
     if (s.stato === "finito") return ["✅", "Ha finito"];
     if (s.download) return ["🚨", "DOWNLOAD SUL PLC: anomalia!"];
@@ -284,9 +288,12 @@
     const parti = [];
     if (s.commessa) parti.push("📌 " + s.commessa + (st ? " " + st[1].toUpperCase().replace(/\s/, "") : ""));
     else if (s.progetto_tia) parti.push("🧩 " + corto(s.progetto_tia, 20));
+    else if (s.versione) parti.push(corto(s.versione, 16));
     else return "";
     const c = s.compilazione;
+    if (s.versione && parti[0].startsWith("📌")) parti.push("· " + corto(s.versione.replace(/^\s*OP\s?\d+\s+(?=V)/i, st ? "" : "$&"), 18));
     if (c && c.errori !== 0 && c.errori != null) parti.push("❌" + (c.errori > 0 ? c.errori : ""));
+    if (s.priorita === "alta") parti.unshift("🔥");
     return parti.join(" ");
   }
   function corto(t, n) { return t.length > n ? t.slice(0, n - 1) + "…" : t; }
@@ -360,8 +367,9 @@
     const sc = gr.scheda;
     if (sc) {                                         // la scheda della dashboard Commesse PLC
       const n = gr.sessioni.filter(s => ["lavora", "pensa"].includes(s.stato)).length;
-      return (STATI_COMMESSA[sc.stato] || sc.stato) + (n ? " · ⚙️ " + n : "") +
-        (sc.progetto_tia ? "\n🧩 " + corto(sc.progetto_tia, 26) : "");
+      return (sc.priorita && /^(alt|urg)/i.test(sc.priorita) ? "🔥 " : "") + (STATI_COMMESSA[sc.stato] || sc.stato) + (n ? " · ⚙️ " + n : "") +
+        (sc.versione ? "\n🧩 " + corto(String(sc.versione), 20) : sc.progetto_tia ? "\n🧩 " + corto(sc.progetto_tia, 26) : "") +
+        (sc.aspetta ? "\n🔜 " + corto(String(sc.aspetta), 20) : "");
     }
     const n = st => gr.sessioni.filter(s => st.includes(s.stato)).length;
     const parti = [];

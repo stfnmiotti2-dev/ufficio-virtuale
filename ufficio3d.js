@@ -1032,7 +1032,13 @@
               ic + " " + U.corto(testo, s.stato === "aspetta" ? 40 : 30), om.userData.etichettaPos = new T.Vector3(x, 1.95, z0 - 0.8), s.titolo));
           }
           const tg = U.targa(s) || U.corto((s.titolo || "").replace(/^.*?›\s*/, ""), 18);
-          if (tg) marcati.push(etichetta("tg3d", (s.cloud ? "☁️ " : "") + tg, new T.Vector3(x, 0.05, z0 + 1.5), s.titolo));
+          if (tg) {
+            const et = etichetta("tg3d", (s.cloud ? "☁️ " : "") + tg, new T.Vector3(x, 0.05, z0 + 1.5), s.titolo + (s.prossimo ? "\n➡️ " + s.prossimo : ""));
+            if (s.prossimo && s.stato !== "finito") {                   // prossimo passo, scritto da Agente TIA, sotto la targa
+              const d = document.createElement("div"); d.className = "pross"; d.textContent = "➡️ " + U.corto(s.prossimo, 40); et.e.append(d);
+            }
+            marcati.push(et);
+          }
         });
         x0 += wi + 0.8;
       }

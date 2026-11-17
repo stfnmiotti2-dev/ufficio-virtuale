@@ -305,8 +305,34 @@ def _sessioni_cloud(locali):
             "link": t.get("link") if str(t.get("link") or "").startswith("https://claude.ai/") else
                     (f"https://claude.ai/code/project/{chan}?thread={t['id']}" if chan else None),
             "voce_cloud_resp": t.get("responsabile"),
+            **_info_extra(t, stato),
         })
         out += _sottoagenti_interni(t, ts, out[-1]["link"], chan)
+    return out
+
+
+def _info_extra(t, stato):
+    """Campi facoltativi scritti da Agente TIA (Messaggio 28): versione, prossimo passo,
+    compilazione solo se KO, da quando aspetta, priorita'."""
+    out = {}
+    if t.get("versione"):
+        out["versione"] = str(t["versione"])[:40]
+    if t.get("prossimo"):
+        out["prossimo"] = str(t["prossimo"])[:80]
+    c = t.get("compilazione")
+    n = c.get("errori") if isinstance(c, dict) else c
+    if isinstance(n, str):
+        m = re.search(r"\d+", n)
+        n = int(m.group(0)) if m else (1 if re.search(r"ko|error", n, re.I) else 0)
+    if isinstance(n, (int, float)) and not isinstance(n, bool) and n > 0:
+        out["compilazione"] = {"errori": int(n)}
+    if stato == "aspetta" and _iso(t.get("aspetta_dal_utc")):
+        out["aspetta_dal"] = _iso(t.get("aspetta_dal_utc"))
+    p = str(t.get("priorita") or "").lower()
+    if p.startswith(("alt", "urg")):
+        out["priorita"] = "alta"
+    elif p.startswith("bass"):
+        out["priorita"] = "bassa"
     return out
 
 
@@ -438,6 +464,7 @@ def _schede():
         out.append({"nome": txt("nome")[:60], "thread": txt("thread"), "stato": stato,
                     "colore": COLORI_COMMESSA.get(stato, "#8b90a3"), "progetto_tia": txt("progetto_tia")[:120],
                     "fatto": txt("fatto"), "in_corso": txt("in_corso"), "aspetta": txt("aspetta"), "testo": txt("testo"),
+                    "versione": txt("versione")[:40], "priorita": txt("priorita")[:20],
                     "domande": [str(d)[:300] for d in (c.get("domande") or []) if d][:8],
                     "link": link if link.startswith("https://claude.ai/") else None})
     return out
