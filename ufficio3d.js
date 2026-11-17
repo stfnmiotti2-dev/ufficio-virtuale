@@ -877,7 +877,8 @@
       for (const u of dips) {                                             // dietro le sedie di ogni fila
         const [x] = u.casa, gx = x - PASSO / 2;
         if (u.corridoio !== zc) { const ul = punti[punti.length - 1]; punti.push([gx, ul[1], 0], [gx, u.corridoio, 0]); zc = u.corridoio; }
-        punti.push([x + 0.45, u.corridoio, 3.2, "sgrida", Math.PI]);       // si ferma accanto e gli fa la ramanzina
+        const sx_ = x + 0.6, sz_ = u.corridoio + 0.5;                       // accanto alla sedia, girato verso di lui
+        punti.push([sx_, u.corridoio, 0], [sx_, sz_, 3.2, "sgrida", Math.atan2(-(u.casa[0] - sx_), -(u.casa[1] - sz_))], [sx_, u.corridoio, 0]);
       }
       const ul = punti[punti.length - 1];
       punti.push([ul[0] + PASSO / 2, ul[1], 0], [ul[0] + PASSO / 2, zp, 0]);
