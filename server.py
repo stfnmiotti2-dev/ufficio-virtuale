@@ -31,7 +31,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/ufficio3d.js": ("ufficio3d.js", "text/javascript; charset=utf-8"),
           "/lib/three.min.js": ("lib/three.min.js", "text/javascript; charset=utf-8"),
           "/lib/OrbitControls.js": ("lib/OrbitControls.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.31 (sottoagenti in polo nera o bianca)"
+VERSIONE = "task 9.32 (sottoagenti interni dei thread)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
@@ -305,6 +305,43 @@ def _sessioni_cloud(locali):
             "link": t.get("link") if str(t.get("link") or "").startswith("https://claude.ai/") else
                     (f"https://claude.ai/code/project/{chan}?thread={t['id']}" if chan else None),
             "voce_cloud_resp": t.get("responsabile"),
+        })
+        out += _sottoagenti_interni(t, ts, out[-1]["link"], chan)
+    return out
+
+
+def _sottoagenti_interni(t, ts, link, chan):
+    """Sottoagenti lanciati DENTRO un thread (campo "sottoagenti" di stato-thread.json):
+    una figura temporanea ciascuno, nell'isola del thread. Quando finiscono spariscono
+    (l'ufficio li fa uscire dalla porta)."""
+    sub = t.get("sottoagenti")
+    if isinstance(sub, int):
+        sub = [{"nome": f"Sottoagente {i + 1}", "stato": "lavora"} for i in range(max(0, min(sub, 8)))]
+    if not isinstance(sub, list):
+        return []
+    base = str(t.get("titolo") or "")
+    if _BOSS.search(base):
+        isola = _senza_boss(base)
+    else:
+        parti = _SEPARATORE.split(base, 1)
+        resp = str(t.get("responsabile") or "")
+        isola = _senza_boss(parti[0]) if len(parti) == 2 else (resp if resp and not resp.startswith("(") else "Capo")
+    out = []
+    for i, a in enumerate(sub[:8]):
+        a = {"nome": a} if isinstance(a, str) else a
+        if not isinstance(a, dict):
+            continue
+        nome = str(a.get("nome") or f"Sottoagente {i + 1}").strip()[:40]
+        st = str(a.get("stato") or "lavora").lower()
+        if st.startswith(("finit", "fatto", "chius")):
+            continue
+        out.append({
+            "id": "cloud:" + str(t["id"]) + ":sub:" + re.sub(r"[^a-z0-9]+", "-", nome.lower()).strip("-"),
+            "cloud": True, "thread": None, "sottoagente": True,
+            "thread_titolo": f"{isola} › {nome}", "titolo": f"{isola} › {nome}",
+            "responsabile": None, "stato": "aspetta" if st.startswith("aspetta") else "lavora", "modificato": ts,
+            "icona": "🧩", "attivita": nome, "progetto": "cloud", "progetto_claude": "Agente Tia portal", "chan": chan,
+            "link": link, "voce_cloud_resp": None,
         })
     return out
 
