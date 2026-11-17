@@ -872,17 +872,18 @@
       const punti = [[xm + 1, zp, 0]];
       for (const [, uf] of [...uffici].sort((a, b) => a[1].gx - b[1].gx))    // davanti a ogni ufficio
         punti.push([uf.gx, zp, 0], [uf.gx, uf.gz + uf.LD / 2 + 0.5, 1.6, "guarda", 0]);
-      const dips = camminatori.map(c => c.userData).filter(u => u.corridoio != null).sort((a, b) => a.corridoio - b.corridoio || a.casa[0] - b.casa[0]);
+      const dips = animati.map(c => c.userData).filter(u => u.corridoio != null && u.caffe).sort((a, b) => a.corridoio - b.corridoio || a.casa[0] - b.casa[0]);
       let zc = null;
       for (const u of dips) {                                             // dietro le sedie di ogni fila
         const [x] = u.casa, gx = x - PASSO / 2;
         if (u.corridoio !== zc) { const ul = punti[punti.length - 1]; punti.push([gx, ul[1], 0], [gx, u.corridoio, 0]); zc = u.corridoio; }
-        punti.push([x, u.corridoio, 1.3, "guarda", Math.PI]);
+        punti.push([x + 0.45, u.corridoio, 3.2, "sgrida", Math.PI]);       // si ferma accanto e gli fa la ramanzina
       }
       const ul = punti[punti.length - 1];
       punti.push([ul[0] + PASSO / 2, ul[1], 0], [ul[0] + PASSO / 2, zp, 0]);
       const ritorno = punti.slice(1, -1).reverse().map(p => [p[0], p[1], 0]);
       ispettore = { o, punti: [...punti, ...ritorno, [xm + 1, zp, 0]] };
+      ispettore.nuvola = etichetta("f3d", "X#?%$£!!!", new T.Vector3()); ispettore.nuvola.e.style.visibility = "hidden"; marcati.push(ispettore.nuvola);
       ispettore.durata = durata(ispettore.punti, 1.3);
     }
     for (const p of postini) creaPostino(p);                               // quelli gia' in cammino continuano
@@ -1327,7 +1328,7 @@
     });
     ordini = ordini.filter(o => t < o.fine + 1);
     if (ispettore) {                                                       // giro di controllo continuo, mani dietro la schiena
-      const { o, punti } = ispettore, u = o.userData, pos = lungo(punti, t % ispettore.durata, 1.3);
+      const { o, punti } = ispettore, u = o.userData, pos = lungo(punti, (t + (ispettore.anticipo || 0)) % ispettore.durata, 1.3);
       o.visible = pcLuce > 0.5;
       o.position.set(pos.x, 0, pos.z);
       const fermo = !pos.dir;
@@ -1341,6 +1342,15 @@
       if (fermo) u.corpo.rotation.x = 0.08;
       else u.corpo.rotation.x = 0;
       for (const oc of u.occhi) oc.scale.y = (t % 3.5) < 0.12 ? 0.25 : 1.5;
+      const sgrida = fermo && pos.azione === "sgrida";
+      if (sgrida) {                                                      // gesticola arrabbiato con la nuvoletta di parolacce
+        u.sx.rotation.set(1.5 + Math.sin(t * 10) * 1.1, 0, 0.5 + Math.sin(t * 6) * 0.4);
+        u.dx.rotation.set(1.7 + Math.cos(t * 9) * 1.2, 0, -0.5 + Math.cos(t * 7) * 0.4);
+        u.testa.rotation.set(Math.sin(t * 8) * 0.15, 0, Math.sin(t * 4) * 0.12);
+        u.corpo.position.y = Math.abs(Math.sin(t * 5)) * 0.05; u.corpo.rotation.x = 0.12;
+        o.getWorldPosition(ispettore.nuvola.pos); ispettore.nuvola.pos.y = 2.45;
+      }
+      ispettore.nuvola.e.style.visibility = sgrida && o.visible ? "" : "hidden";
     }
     if (orologio) { const d = new Date(); orologio.userData.lancetta.rotation.z = -(d.getMinutes() / 60) * Math.PI * 2; }   // la lancetta dei minuti gira davvero
     if (porta) {                                                          // la porta si apre quando qualcuno ci passa vicino
@@ -1494,6 +1504,7 @@
       setTimeout(() => { forzaSera = t + 60; }, 12000);
       for (const a of lav) a.userData.prossimoT = 0;
     },
+    provaSgrida() { if (!ispettore) return; const i = ispettore.punti.findIndex(p => p[3] === "sgrida"); const d = durata(ispettore.punti.slice(0, i + 1), 1.3) - (ispettore.punti[i][2] || 0) - 0.5; ispettore.anticipo = ((d - t) % ispettore.durata + ispettore.durata) % ispettore.durata; },
     provaPc(stato) { impostaPc(stato, false); },
     provaChiusura(n) { const ids = [...ultimeSessioni.keys()].filter(id => bersagli.has(id) && !chiusi.has(id)); const id = ids[ids.length - 1 - (n || 0)]; if (!id) return; chiudi(id, ultimeSessioni.get(id)); if (ultimiDati) costruisci(...ultimiDati); },
     provaCantiere(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); arrivoFatto.delete(ids[n || 0]); cantieri.set(ids[n || 0], performance.now() / 1000); const uf = [...bersagli.keys()].filter(k => k.startsWith("capo:") && k !== "capo:r:capo"); if (uf.length) { arrivoFatto.delete(uf[uf.length - 1]); cantieri.set(uf[uf.length - 1], performance.now() / 1000); } if (ultimiDati) costruisci(...ultimiDati); },

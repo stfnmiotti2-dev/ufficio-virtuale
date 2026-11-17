@@ -414,6 +414,12 @@ window.apriDashboard = si => {
 };
 document.getElementById("chiudiDash").onclick = () => apriDashboard(false);
 // schermo intero: il pulsante cambia icona e lo stesso pulsante riporta alla finestra
+// una sola finestra dell'ufficio: quando se ne apre un'altra, la vecchia si chiude (resta la nuova)
+try {
+  const canale = new BroadcastChannel("ufficio-virtuale"), mio = Date.now() + Math.random();
+  canale.onmessage = e => { if (e.data && e.data.nuova && e.data.id !== mio) { canale.close(); window.close(); } };
+  canale.postMessage({ nuova: true, id: mio });
+} catch (e) { /* browser vecchio: pazienza */ }
 const btnIntero = document.getElementById("schermoIntero");
 btnIntero.onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {});
 document.addEventListener("fullscreenchange", () => {

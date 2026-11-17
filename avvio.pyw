@@ -4,6 +4,7 @@
 2. avvia il server senza finestra, se non e' gia' acceso;
 3. apre l'ufficio in una finestra tutta sua, senza barre del browser
    (Chrome, o Edge se manca, in modalita' app; se non ci sono, il browser normale).
+   Se e' gia' aperto non ne apre un'altra: riporta davanti quella che c'e'.
 Si lancia dall'icona "Ufficio virtuale" sul desktop.
 L'estensione .pyw lo fa girare con pythonw, cioe' senza finestra nera.
 """
@@ -69,7 +70,41 @@ def main():
             if server_acceso():
                 break
             time.sleep(0.25)
-    apri_finestra()
+    if not porta_davanti():
+        apri_finestra()
+
+
+def porta_davanti():
+    """Se l'ufficio e' gia' aperto in una finestra, la riporta davanti invece di aprirne un'altra."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+        u32 = ctypes.windll.user32
+        trovate = []
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def guarda(hwnd, _):
+            n = u32.GetWindowTextLengthW(hwnd)
+            if n and u32.IsWindowVisible(hwnd):
+                buf = ctypes.create_unicode_buffer(n + 1)
+                u32.GetWindowTextW(hwnd, buf, n + 1)
+                t = buf.value
+                if t.endswith("Ufficio virtuale") or "Ufficio virtuale - " in t:
+                    trovate.append(hwnd)
+            return True
+
+        u32.EnumWindows(guarda, 0)
+        if not trovate:
+            return False
+        h = trovate[0]
+        if u32.IsIconic(h):
+            u32.ShowWindow(h, 9)          # SW_RESTORE: era iconizzata
+        u32.SetForegroundWindow(h)
+        return True
+    except Exception:
+        return False
 
 
 def apri_finestra():
