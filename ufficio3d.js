@@ -531,9 +531,9 @@
   // la segretaria del capo: anima gli scambi tra Claude e TIA Portal (progetti aperti, compilazioni KO, download, TIA aperti)
   let segr = null, segrCoda = [], tiaPrima = new Map(), downPrima = new Set();
   function creaSegretaria() {
-    const uf = uffici.get("r:capo"); if (!uf) { segr = null; return; }
-    const dx_ = uf.gx + uf.LW * 0.32 + 1.15, dz_ = uf.gz + uf.LD / 2 + 1.0, via = uf.gz + uf.LD / 2 + 2.2;
-    const sc = new T.Group(); sc.position.set(dx_, 0, dz_); mondo.add(sc);
+    const uf = uffici.get("r:capo"); if (!uf || !SC) { segr = null; return; }
+    const dx_ = uf.gx - 0.6, dz_ = uf.gz + uf.LD / 2 + 0.85, via = SC.zp, H = SC.H;
+    const sc = new T.Group(); sc.position.set(dx_, H, dz_); mondo.add(sc);
     tondo(1.1, 0.7, 0.5, "#f4f1ea", 0, 0, 0, sc, 0.04);                    // scrivanietta bianca
     tondo(1.16, 0.05, 0.56, "#c9a27a", 0, 0.7, 0, sc, 0.02);
     tondo(0.3, 0.05, 0.22, "#1c1c22", -0.3, 0.75, 0.02, sc, 0.02);        // telefono
@@ -545,12 +545,13 @@
     lav.position.set(0.0, 0.98, 0.18); lav.rotation.y = Math.PI; sc.add(lav);
     const lav2 = lav.clone(); lav2.rotation.y = 0; lav2.position.z = 0.21; sc.add(lav2);
     tondo(0.5, 0.27, 0.03, "#7a4a20", 0, 0.835, 0.185, sc, 0.01);
-    sedia(dx_, dz_ - 0.75, mondo);
+    sedia(dx_, dz_ - 0.75, mondo).position.y = H;
     const g = omino({ id: "segretaria" }, mondo, dx_, dz_ - 0.6, "segretaria"), u = g.userData;
+    g.position.y = H;
     const cart = tondo(0.3, 0.03, 0.24, "#3b82f6", 0, -0.46, -0.12, u.dx, 0.01); cart.visible = false;   // cartellina in mano
     const limetta = tondo(0.02, 0.14, 0.02, "#e8c9a0", 0, -0.5, -0.08, u.dx, 0.006); limetta.visible = false;
     const tazza = tondo(0.1, 0.12, 0.1, "#ffffff", 0, -0.55, -0.06, u.sx, 0.04); tazza.visible = false;
-    const pos = new T.Vector3(dx_, 2.0, dz_ - 0.6), et = etichetta("f3d", "", pos); et.e.style.visibility = "hidden"; marcati.push(et);
+    const pos = new T.Vector3(dx_, 2.0 + H, dz_ - 0.6), et = etichetta("f3d", "", pos); et.e.style.visibility = "hidden"; marcati.push(et);
     segr = { g, u, casa: [dx_, dz_ - 0.6], via, cart, limetta, tazza, pos, et, cv, tx, corn, prossimoCaffe: segr ? segr.prossimoCaffe : null };
     disegnaLavagna();
   }
@@ -569,19 +570,26 @@
   function incarico(tipo, id, testo, colore) {                          // mette in coda una commissione della segretaria
     if (!segr) return;
     const b = id ? bersagli.get(id) : null, capoB = bersagli.get("capo:r:capo");
-    const [sx0, sz0] = segr.casa, via = segr.via; let punti, verso = 0;
+    const [sx0, sz0] = segr.casa; let punti, verso = 0;
+    // dalla scrivania sul balcone: gira attorno alla scrivania, poi lungo il balcone (e giu' per la scala se deve scendere)
+    const fuori = [[sx0, sz0, 0.5], [sx0 - 0.85, sz0, 0], [sx0 - 0.85, SC.zb, 0]], giu = giuScala().slice(0, -1).concat([[SC.xb, SC.zp, 0]]);
+    const torna = a => [...a.slice().reverse().map(q => [q[0], q[1], 0]), [sx0, sz0, 0.3]];
+    const d = b && !b.ufficio ? b : !b ? capoB : null;
     if (b && b.ufficio) {                                                // sottoagente: accanto alla sua sedia
       const c = b.dz - 0.95, sx_ = b.dx + 0.6, sz_ = c + 0.5;
-      punti = [[sx0, sz0, 0.5], [sx0, via, 0], [sx0, c, 0], [sx_, c, 0], [sx_, sz_, tipo === "ko" ? 2.4 : 2.0, tipo], [sx_, c, 0], [sx0, c, 0], [sx0, via, 0], [sx0, sz0, 0.3]];
+      const via = [...fuori, ...giu, [SC.xb, c, 0], [sx_, c, 0]];
+      punti = [...via, [sx_, sz_, tipo === "ko" ? 2.4 : 2.0, tipo], ...torna(via).slice(0, -1).concat([[sx0, sz0, 0.3]])];
       verso = Math.atan2(-(b.dx - sx_), -(b.dz - sz_));
     } else {
-      const d = b || capoB; if (!d) return;
-      punti = [[sx0, sz0, 0.5], [sx0, via, 0], [d.x, via, 0], [d.x, d.z, tipo === "allarme" ? 4 : 2.6, tipo], [d.x, via, 0], [sx0, via, 0], [sx0, sz0, 0.3]];
+      if (!d) return;
+      const via = d.scala ? [...fuori, [d.x, SC.zb, 0]] : [...fuori, ...giu, [d.x, SC.zp, 0]];
+      punti = [...via, [d.x, d.z, tipo === "allarme" ? 4 : 2.6, tipo], ...torna(via)];
       verso = d.verso || 0;
     }
     const vel = tipo === "allarme" ? 3.2 : 1.7;
     const ora = performance.now() / 1000, inizio = segrCoda.reduce((a, q) => Math.max(a, q.fine), ora);
-    segrCoda.push({ tipo, id, testo, colore, punti, verso, vel, inizio, fine: inizio + durata(punti, vel) });
+    const iAz = punti.findIndex(q => q[3] === tipo);
+    segrCoda.push({ tipo, id, testo, colore, punti, verso, vel, iAz, inizio, fine: inizio + durata(punti, vel) });
   }
   function chiacchieraGioc() {                                            // ogni tanto va a fare due chiacchiere con un collega
     const dip = animati.filter(a => a.userData.caffe && a.visible && a.userData.corridoio != null);
@@ -593,6 +601,70 @@
     return { punti, inizio: t, fine: t + durata(punti, 1.6), verso: Math.atan2(-(u.casa[0] - sx_), -(u.casa[1] - sz_)), frase: FRASI[Math.floor(Math.random() * FRASI.length)] };
   }
   let ordini = [], uffici = new Map();
+  // ---------- soppalco: capo, sala riunioni e ufficio del controllore stanno al piano di sopra ----------
+  let SC = null;                                                       // { H, zb, zs, xl, xt, xb, zp, x0, x1, z0, z1 }
+  function quota(x, z) {                                               // altezza del pavimento in quel punto
+    if (!SC) return 0;
+    const { H, zs, xt, xb, x0, x1, z0, z1 } = SC;
+    if (x >= xb - 0.05 && x <= xt && Math.abs(z - zs) <= 0.45) return H * Math.max(0, (x - xb) / (xt - xb));   // scala
+    if (x >= x0 && x <= x1 && z >= z0 && z <= z1 + 0.02) return H;
+    if (x >= xt && x <= xt + 0.95 && z > z1 && z <= zs + 0.48) return H;                                     // pianerottolo
+    return 0;
+  }
+  let ufficioCtrl = null;
+  function soppalco() {
+    const { H, x0, x1, z0, z1, xt, xb, zs } = SC, zl = zs + 0.45, xr = xt + 0.95;
+    box(x1 - x0, 0.16, z1 - z0, "#cdb79a", (x0 + x1) / 2, H - 0.16, (z0 + z1) / 2, mondo, { roughness: 0.6 });   // solaio in legno
+    box(xr - xt, 0.16, zl - z1, "#cdb79a", (xt + xr) / 2, H - 0.16, (z1 + zl) / 2, mondo, { roughness: 0.6 });   // pianerottolo
+    box(x1 - x0, 0.1, 0.06, "#e3b23c", (x0 + x1) / 2, H - 0.2, z1 + 0.03, mondo, { metalness: 0.5, roughness: 0.35 });   // bordo d'oro
+    for (let x = x0 + 0.25; x < x1; x += 3.85) for (const zc of [z0 + 0.25, z1 - 0.25]) tondo(0.22, H - 0.16, 0.22, "#8a94a6", x, 0, zc, mondo, 0.06);
+    tondo(0.22, H - 0.16, 0.22, "#8a94a6", xr - 0.12, 0, zl - 0.12, mondo, 0.06);
+    tondo(0.22, H - 0.16, 0.22, "#8a94a6", x1 - 0.12, 0, z1 - 0.25, mondo, 0.06);
+    const vetro = new T.MeshStandardMaterial({ transparent: true, opacity: 0.2, color: lin("#bfe3fb"), roughness: 0.1 });
+    const ring = (xa, za, xb_, zb_) => {                                 // parapetto di vetro con corrimano
+      const w = Math.max(0.04, Math.abs(xb_ - xa)), d = Math.max(0.04, Math.abs(zb_ - za)), px = (xa + xb_) / 2, pz = (za + zb_) / 2;
+      const v = new T.Mesh(geo, vetro); v.scale.set(w, 0.85, d); v.position.set(px, H + 0.425, pz); mondo.add(v);
+      tondo(w + 0.03, 0.05, d + 0.03, "#9aa3b2", px, H + 0.85, pz, mondo, 0.02, { metalness: 0.5, roughness: 0.3 });
+    };
+    ring(x0, z1, xt, z1); ring(xr, z1, x1, z1); ring(xt, zl, xr, zl); ring(xr, z1, xr, zl);
+    ring(x1, z0, x1, z1); ring(x0, z0, x0, z1); ring(x0, z0, x1, z0);
+    const n = 10, run = (xt - xb) / n;                                   // scala: dieci gradini verso sinistra
+    for (let i = 0; i < n; i++) box(run + 0.01, (i + 1) * H / n, 0.86, i % 2 ? "#b89a74" : "#c8a982", xb + run * (i + 0.5), 0, zs, mondo);
+    const lr = Math.hypot(xt - xb, H), an = Math.atan2(H, xt - xb);
+    for (const zc of [zs + 0.45, zs - 0.45]) {                           // corrimano inclinati
+      const c = new T.Mesh(geo, m("#9aa3b2", { metalness: 0.5, roughness: 0.3 })); c.scale.set(lr, 0.05, 0.05);
+      c.position.set((xb + xt) / 2, H / 2 + 0.85, zc); c.rotation.z = an; mondo.add(c);
+      for (let i = 0; i <= n; i += 2) { const x = xb + run * i; tondo(0.04, 0.85, 0.04, "#9aa3b2", x, H * i / n, zc, mondo, 0.015); }
+    }
+    // citofono ai piedi della scala: chi aspetta e non ha un responsabile suona qui
+    tondo(0.12, 1.25, 0.12, "#3c4658", xb - 0.55, 0, SC.zp - 1.0, mondo, 0.04);
+    tondo(0.26, 0.34, 0.08, "#e9edf2", xb - 0.55, 1.05, SC.zp - 0.94, mondo, 0.03);
+    palla(0.035, "#2fbf6d", xb - 0.55, 1.28, SC.zp - 0.89, mondo, 1, 1, 0.5, { emissive: "#2fbf6d", emissiveIntensity: 0.8 });
+    // l'ufficietto del controllore, a sinistra della sala riunioni
+    const LW = 2.8, LD = 3.6, gx = -6.8 - LW / 2 + 0.05, g = new T.Group(); g.position.set(gx, H, 0); mondo.add(g);
+    tondo(LW, 0.03, LD, "#e6dccb", 0, 0, 0, g, 0.01);
+    const pv = new T.MeshStandardMaterial({ transparent: true, opacity: 0.16, color: lin("#bfe3fb"), roughness: 0.1 });
+    for (const [w, d, px, pz] of [[LW, 0.05, 0, -LD / 2], [0.05, LD, -LW / 2, 0], [0.05, LD, LW / 2, 0], [LW * 0.55, 0.05, -LW * 0.225, LD / 2]]) {
+      const v = new T.Mesh(geo, pv); v.scale.set(w, 2.1, d); v.position.set(px, 1.05, pz); g.add(v);
+      tondo(w + 0.04, 0.07, d + 0.04, "#f28c28", px, 2.1, pz, g, 0.025);
+    }
+    tondo(1.3, 0.72, 0.6, "#5b4636", 0, 0, -0.5, g, 0.03);                 // scrivania scura
+    for (let i = 0; i < 3; i++) tondo(0.3, 0.05, 0.22, ["#e03131", "#f2c230", "#868e96"][i], -0.4 + i * 0.02, 0.72 + i * 0.05, -0.55, g, 0.01);   // pratiche
+    tondo(0.32, 0.02, 0.24, "#ffffff", 0.15, 0.73, -0.4, g, 0.005);       // il rapporto
+    tondo(0.5, 1.3, 0.35, "#8a94a6", -LW / 2 + 0.4, 0, -LD / 2 + 0.3, g, 0.03);   // schedario
+    palla(0.22, "#7cc98a", LW / 2 - 0.35, 0.55, -LD / 2 + 0.35, g, 1, 1.1, 1);
+    tondo(0.3, 0.42, 0.3, "#3c4658", LW / 2 - 0.35, 0, -LD / 2 + 0.35, g, 0.08);
+    ufficioCtrl = { x: gx, z: -0.5 + 0.55, porta: gx + LW * 0.22 };       // in piedi davanti alla scrivania, girato verso di lei
+    marcati.push(etichetta("nome uff", "🕵️ Controllore", new T.Vector3(gx, H + 2.6, -LD / 2)));
+  }
+  // dal balcone giu' fino al corridoio (coordinate del mondo, spostate di ox, oz)
+  const giuScala = (ox = 0, oz = 0) => SC ? [[SC.xl, SC.zb], [SC.xl, SC.zs], [SC.xb, SC.zs], [SC.xb, SC.zp]].map(([x, z]) => [x - ox, z - oz, 0]) : [];
+  const suScala = (ox = 0, oz = 0) => giuScala(ox, oz).reverse();
+  // da un punto del corridoio (x, via) fino a un bersaglio sul soppalco, e ritorno
+  function suDalCapo(x, via, b, pausa, azione) {
+    const su = [[SC.xb, via, 0], ...suScala().slice(1), [b.x, SC.zb, 0]];
+    return { andata: [[x, via, 0], ...su, [b.x, b.z, pausa, azione]], ritorno: [...su.slice().reverse(), [x, via, 0]] };
+  }
   // ---------- momenti divertenti ----------
   const momenti = new Map();                                             // id -> {tipo, inizio, fine}
   const compPrima = new Map(), schedePrima = new Map(), usciti = new Set();
@@ -696,7 +768,8 @@
   let riunione = [], fascio = null, raggi = null;
   function salaRiunioni(x, z) {
     const LW = 5.6, LD = 4.2, HV = 2.2;
-    const g = new T.Group(); g.position.set(x, 0, z); mondo.add(g);
+    const H = SC ? SC.H : 0;
+    const g = new T.Group(); g.position.set(x, H, z); mondo.add(g);
     tondo(LW, 0.03, LD, "#e7e2f3", 0, 0, 0, g, 0.01);                              // pavimento lilla chiaro
     const pv = new T.MeshStandardMaterial({ transparent: true, opacity: 0.16, color: lin("#bfe3fb"), roughness: 0.1 });
     for (const [w, d, px, pz] of [[0.05, LD, -LW / 2, 0], [0.05, LD, LW / 2, 0], [LW * 0.62, 0.05, -LW * 0.19, LD / 2]]) {
@@ -739,7 +812,7 @@
     });
     const apri = () => window.apriDashboard && window.apriDashboard(!document.body.classList.contains("dash"));   // apre o richiude
     cliccabili.push({ obj: tela, apri }, { obj: pr, apri });
-    marcati.push(etichetta("nome uff", "📽️ Sala riunioni · clicca lo schermo", new T.Vector3(x, HV + 0.55, z - LD / 2)));
+    marcati.push(etichetta("nome uff", "📽️ Sala riunioni · clicca lo schermo", new T.Vector3(x, HV + 0.55 + H, z - LD / 2)));
   }
   function brindisi(chiave) {
     momento("capo:" + chiave, "brindisi", 7);
@@ -787,15 +860,20 @@
       const c = b.dz - 0.95, sx_ = b.dx + 0.6, sz_ = c + 0.5;
       punti = [[lx, lz, 0.6], [lx, c, 0], [sx_, c, 0], [sx_, sz_, 3.0, "consegna"], [sx_, c, 0], [lx, c, 0], [lx, lz, 0.3]];
       verso = Math.atan2(-(b.dx - sx_), -(b.dz - sz_));
+    } else if (b.scala && SC) {                                          // il capo: su per la scala del soppalco
+      const r = suDalCapo(lx, b.via, b, 2.4, "consegna");
+      punti = [[lx, lz, 0.6], ...r.andata, ...r.ritorno, [lx, lz, 0.3]];
+      verso = b.verso;
     } else {                                                             // un responsabile: davanti al suo ufficio
       punti = [[lx, lz, 0.6], [lx, b.via, 0], [b.x, b.via, 0], [b.x, b.z, 2.4, "consegna"], [b.x, b.via, 0], [lx, b.via, 0], [lx, lz, 0.3]];
       verso = b.verso;
     }
     const ora = performance.now() / 1000, ultimo = postini.reduce((a, p) => Math.max(a, p.fine), 0);
     const inizio = Math.max(ora, ultimo, giocLibero);
-    const p = { id, punti, inizio, verso, fine: inizio + durata(punti, 1.6), auraT: inizio + durata(punti.slice(0, 4), 1.6) };
+    const iAz = punti.findIndex(q => q[3] === "consegna");
+    const p = { id, punti, inizio, verso, fine: inizio + durata(punti, 1.6), auraT: inizio + durata(punti.slice(0, iAz + 1), 1.6) };
     postini.push(p);
-    if (b.ufficio) avviaOrdine(b, inizio + durata(punti.slice(0, 5), 1.6));   // poi passa anche il suo responsabile
+    if (b.ufficio) avviaOrdine(b, inizio + durata(punti.slice(0, iAz + 2), 1.6));   // poi passa anche il suo responsabile
   }
   // il capo o il responsabile esce dall'ufficio, va accanto alla scrivania dell'omino, gesticola e torna a sedersi
   function avviaOrdine(dip, inizio) {
@@ -803,8 +881,10 @@
     if (!uf || ordini.some(o => o.chiave === dip.ufficio)) return;
     const { gx, gz, LW, LD, casa } = uf, porta = LW * 0.32, fuori = LD / 2 + 0.7;
     const tx = dip.dx - 1.15 - gx, tz = dip.dz - gz, via = dip.via - gz;
-    const andata = [[casa[0], casa[1], 0.7], [porta, casa[1], 0], [porta, fuori, 0], [tx, via, 0], [tx, tz, 3.4, "ordini"]];
-    const punti = andata.concat([[tx, via, 0], [porta, fuori, 0], [porta, casa[1], 0], [casa[0], casa[1], 0.4, "siede"]]);
+    const sc = dip.ufficio === "r:capo" && SC, bal = sc ? SC.zb - gz : fuori;   // il capo scende dal soppalco
+    const giu = sc ? giuScala(gx, gz) : [], su = giu.slice().reverse();
+    const andata = [[casa[0], casa[1], 0.7], [porta, casa[1], 0], [porta, bal, 0], ...giu, [tx, via, 0], [tx, tz, 3.4, "ordini"]];
+    const punti = andata.concat([[tx, via, 0], ...su, [porta, bal, 0], [porta, casa[1], 0], [casa[0], casa[1], 0.4, "siede"]]);
     ordini.push({ chiave: dip.ufficio, punti, inizio, fine: inizio + durata(punti, 1.1) });
   }
   let primaVolta = true, centro = new T.Vector3(), larg = 20, prof = 10;
@@ -813,7 +893,7 @@
     mondo.clear();
     etichette.replaceChildren();
     animati = []; marcati = []; cliccabili = []; schermi = []; camminatori = [];
-    bersagli = new Map(); uffici = new Map(); lavori = []; lampadine = []; lampadari = []; chiacchiere = []; gruppoDi = new Map();
+    SC = null; bersagli = new Map(); uffici = new Map(); lavori = []; lampadine = []; lampadari = []; chiacchiere = []; gruppoDi = new Map();
     for (const e of effetti) e.o.parent && e.o.parent.remove(e.o); effetti = [];
     const gruppi = U.prepara(sessioni, extra);
     impostaPc(extra.pc, pcPrimaVolta);                                   // all'apertura niente animazione: si parte gia' cosi'
@@ -836,12 +916,15 @@
     let nResp = 0;                                                       // ordine dei capi commessa: i primi cinque hanno l'aspetto scelto
     capi.forEach((gr, i) => {
       const [LW, LD] = dim(gr), capo = gr.chiave === "r:capo";
-      profMax = Math.max(profMax, LD);
+      profMax = Math.max(profMax, LD + (capo ? 1.6 : 0));                // davanti al capo c'e' il balcone del soppalco
       const x = xc + LW / 2, z = 0;
       porte[gr.chiave] = [x - LW * 0.15, z + LD / 2 + 0.45];               // davanti al vetro, accanto all'apertura
-      bersagli.set("capo:" + gr.chiave, { x: x + LW * 0.3, z: z + LD / 2 + 0.45, via: z + LD / 2 + 2.2, verso: 0 });
+      bersagli.set("capo:" + gr.chiave, { x: x + LW * 0.3, z: z + LD / 2 + 0.45, via: profMax / 2 + 2.2, verso: 0, scala: capo });
       xc += LW + 0.6;
-      const g = new T.Group(); g.position.set(x, 0, z); mondo.add(g);
+      if (capo) SC = { H: 2.0, zb: LD / 2 + 1.25, zs: LD / 2 + 1.9, xl: -0.15, xt: -0.6, xb: -3.4, zp: profMax / 2 + 2.2,
+                       x0: -9.9, x1: LW + 0.2, z0: -LD / 2 - 0.25, z1: LD / 2 + 1.5 };
+      const alto = capo ? SC.H : 0;
+      const g = new T.Group(); g.position.set(x, alto, z); mondo.add(g);
       tondo(LW, 0.03, LD, capo ? "#efe6d6" : "#dfe7f1", 0, 0, 0, g, 0.01);         // pavimento dell'ufficio
       if (capo) {
         const tp = new T.Mesh(new T.PlaneGeometry(3.9, 2.6), new T.MeshStandardMaterial({ map: texTappeto(), roughness: 0.9 }));
@@ -881,7 +964,7 @@
       if (stato === "aspetta") {                                         // ti sta chiamando: in piedi con la cornetta, avanti e indietro
         const zc = capo ? -1.45 : -1.15, lx = LW / 2 - 0.9;
         capoOm.userData.telefonata = { giro: [[0, zc, 0.6], [-lx, zc, 1.6], [lx, zc, 1.6], [0, zc, 0.4]] };
-        const pos = new T.Vector3(x, 1.85, z - 0.6);
+        const pos = new T.Vector3(x, 1.85 + alto, z - 0.6);
         capoOm.userData.etichetta = { pos, base: [x, z] };
         marcati.push(etichetta("f3d st-aspetta", "📞", pos, "Ti sta chiamando: aspetta una tua risposta"));
       }
@@ -889,14 +972,15 @@
       const link = gr.link || (gr.s0 && gr.s0.link);
       cliccabili.push({ obj: g, apri: () => link && apriLink(link) });
       const sc = gr.scheda;
-      marcati.push(etichetta("nome uff", U.nomeIsola(gr), new T.Vector3(x, HV + 0.55, z - LD / 2)));
-      marcati.push(etichetta("riep" + (stato === "aspetta" ? " chiama" : ""), U.riepilogo(gr), new T.Vector3(x, 0.05, z + LD / 2 + 0.9),
+      marcati.push(etichetta("nome uff", U.nomeIsola(gr), new T.Vector3(x, HV + 0.55 + alto, z - LD / 2)));
+      marcati.push(etichetta("riep" + (stato === "aspetta" ? " chiama" : ""), U.riepilogo(gr), new T.Vector3(x, 0.05 + alto, z + LD / 2 + (capo ? 0.3 : 0.9)),
         sc ? [sc.fatto && "Fatto: " + sc.fatto, sc.in_corso && "In corso: " + sc.in_corso, sc.aspetta && "Aspetta: " + sc.aspetta].filter(Boolean).join("\n\n") : ""));
     });
     // 2) open space davanti: un'isola per gruppo, scrivanie in fila; ogni fila centrata sotto gli uffici
     const isole = gruppi.map(gr => ({ gr, fuori: gr.sessioni.filter(q => !q.inUfficio) })).filter(q => q.fuori.length);
     const largUffici = Math.max(UFF, xc - 0.6), mezzo = largUffici / 2;
     salaRiunioni(-0.6 - 2.8, 0);                                         // a sinistra dell'ufficio del capo
+    if (SC) soppalco();
     const rigaMax = Math.max(4, Math.floor(largUffici / PASSO));
     const file = [[]];
     let usate = 0;
@@ -934,7 +1018,7 @@
           if (s.chiude != null) apriSmontaggio(s.id, [scr, sd], x, z0 - 0.3);
           if (om) {
             animati.push(om); camminatori.push(om); om.userData.corridoio = z0 - 1.75;
-            om.userData.porta = porte[gr.chiave] || porte["r:capo"] || null;   // i thread senza responsabile vanno dal capo
+            om.userData.porta = (gr.chiave === "r:capo" || !porte[gr.chiave]) && SC ? [SC.xb - 0.55, SC.zp - 0.45] : porte[gr.chiave] || porte["r:capo"] || null;   // i thread senza responsabile vanno dal capo
             gruppoDi.set(s.id, gr.chiave); om.userData.via = profMax / 2 + 2.2;
             bersagli.set(s.id, { dx: x, dz: z0 - 0.8, via: profMax / 2 + 2.2,
               ufficio: uffici.has(gr.chiave) ? gr.chiave : uffici.has("r:capo") ? "r:capo" : null });
@@ -1009,8 +1093,12 @@
       for (const l of o.userData.sedute) l.visible = false;
       for (const l of o.userData.gambe) l.visible = true;
       const punti = [[xm + 1, zp, 0]];
-      for (const [, uf] of [...uffici].sort((a, b) => a[1].gx - b[1].gx))    // davanti a ogni ufficio
-        punti.push([uf.gx, zp, 0], [uf.gx, uf.gz + uf.LD / 2 + 0.5, 1.6, "guarda", 0]);
+      if (SC && ufficioCtrl) {                                            // prima sale nel suo ufficietto a scrivere il rapporto
+        const su = [[SC.xb, zp, 0], ...suScala().slice(1)], c = ufficioCtrl, bal = [[c.porta, SC.zb, 0], [c.porta, c.z + 0.6, 0]];
+        punti.push(...su, ...bal, [c.x, c.z, 7, "scrive", 0], ...bal.slice().reverse(), ...su.slice().reverse());
+      }
+      for (const [k, uf] of [...uffici].sort((a, b) => a[1].gx - b[1].gx))    // davanti a ogni ufficio (quello del capo e' di sopra)
+        if (!(SC && k === "r:capo")) punti.push([uf.gx, zp, 0], [uf.gx, uf.gz + uf.LD / 2 + 0.5, 1.6, "guarda", 0]);
       const dips = animati.map(c => c.userData).filter(u => u.corridoio != null && u.caffe).sort((a, b) => a.corridoio - b.corridoio || a.casa[0] - b.casa[0]);
       let zc = null;
       for (const u of dips) {                                             // dietro le sedie di ogni fila
@@ -1021,7 +1109,8 @@
       }
       const ul = punti[punti.length - 1];
       punti.push([ul[0] + PASSO / 2, ul[1], 0], [ul[0] + PASSO / 2, zp, 0]);
-      const ritorno = punti.slice(1, -1).reverse().map(p => [p[0], p[1], 0]);
+      const iSc = punti.findIndex((p, i) => i > 1 && p[0] === SC?.xb && p[1] === zp);   // al ritorno non risale
+      const ritorno = punti.slice(iSc > 0 ? iSc + 1 : 1, -1).reverse().map(p => [p[0], p[1], 0]);
       ispettore = { o, punti: [...punti, ...ritorno, [xm + 1, zp, 0]] };
       ispettore.nuvola = etichetta("f3d", "X#?%$£!!!", new T.Vector3()); ispettore.nuvola.e.style.visibility = "hidden"; marcati.push(ispettore.nuvola);
       ispettore.durata = durata(ispettore.punti, 1.3);
@@ -1185,7 +1274,8 @@
     const pt = [L(ix, iz, 0)];
     if (conLuce && portaPos) pt.push(L(portaPos.x + 0.5, portaPos.z - 1.0, 1.8, "luce"));   // il primo accende la luce
     if (uf) { const { LW, LD, casa } = uf, px = LW * 0.32, fuori = LD / 2 + 0.7;
-      return [...pt, [px, fuori, 0], [px, casa[1], 0], [casa[0], casa[1], 0.6, "siede"]]; }
+      const sc = u.chiave === "r:capo" && SC;
+      return [...pt, ...(sc ? suScala(ox, oz) : []), [px, sc ? SC.zb - oz : fuori, 0], [px, casa[1], 0], [casa[0], casa[1], 0.6, "siede"]]; }
     const [x, z] = u.casa;
     return [...pt, [x, u.via, 0], [x, u.corridoio, 0], [x, z, 0.6, "siede"]];
   }
@@ -1200,9 +1290,11 @@
   function giroPasseggio(u) {                                        // il capo fa il giro dell'open space, mani dietro la schiena
     const uf = uffici.get(u.chiave); if (!uf) return null;
     const { gx, gz, LW, LD, casa } = uf, porta = LW * 0.32, fuori = LD / 2 + 0.7;
-    const c = corridoioPrimo - gz, xa = Math.max(porta, 0) , xb = xDestra + 1.2 - gx;
-    return [[casa[0], casa[1], 0.7], [porta, casa[1], 0], [porta, fuori, 0], [xa, c, 0], [xb, c, 1.5, "guarda"],
-            [xa, c, 0], [porta, fuori, 0], [porta, casa[1], 0], [casa[0], casa[1], 0.4, "siede"]];
+    const c = corridoioPrimo - gz, xb = xDestra + 1.2 - gx;
+    const sc = u.chiave === "r:capo" && SC, bal = sc ? SC.zb - gz : fuori, giu = sc ? giuScala(gx, gz) : [], su = giu.slice().reverse();
+    const xa = sc ? SC.xb - gx : Math.max(porta, 0);
+    return [[casa[0], casa[1], 0.7], [porta, casa[1], 0], [porta, bal, 0], ...giu, [xa, c, 0], [xb, c, 1.5, "guarda"],
+            [xa, c, 0], ...su, [porta, bal, 0], [porta, casa[1], 0], [casa[0], casa[1], 0.4, "siede"]];
   }
   function giroCaffe(u) {                                            // dalla sedia al caffe' e ritorno, passando dietro le sedie
     const [x, z] = u.casa, c = u.corridoio, [mx, mz] = u.caffe;
@@ -1303,6 +1395,7 @@
         inPiedi = !(pos.azione === "siede" || (pos.fermo && pos.x === u.casa[0] && pos.z === u.casa[1] && !u.telefonata && !pos.azione));
         cammina = !pos.fermo;
         a.position.x = pos.x; a.position.z = pos.z;
+        if (u.chiave === "r:capo" && SC) { const uf = uffici.get("r:capo"); a.position.y = quota(uf.gx + pos.x, uf.gz + pos.z) - SC.H; }
         if (pos.dir) a.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
         else if (["caffe", "bussa", "attende"].includes(pos.azione)) a.rotation.y = 0;      // verso la macchinetta o la porta
         else if (pos.azione === "guarda") a.rotation.y = Math.PI + Math.sin(k * 0.8) * 0.9;  // il capo controlla l'open space
@@ -1310,7 +1403,7 @@
         else if (pos.azione === "telefono") a.rotation.y = Math.PI + Math.sin(k) * 0.3;
         else a.rotation.y = Math.PI;
         if (pos.fermo && u.giro && t - u.giro.inizio < 0.7) inPiedi = true;   // si alza
-      } else { a.position.x = u.casa[0]; a.position.z = u.casa[1]; a.rotation.y = Math.PI; }
+      } else { a.position.x = u.casa[0]; a.position.z = u.casa[1]; a.position.y = 0; a.rotation.y = Math.PI; }
       for (const l of u.sedute) l.visible = !inPiedi;
       for (const l of u.gambe) { l.visible = inPiedi; l.rotation.x = 0; }
       if (inPiedi) {
@@ -1361,7 +1454,7 @@
             nv.giro = giro; const S = ["⚙️", "📐", "🔧", "⚡", "📊", "💡", "🔩", "📋", "🧮", "✏️", "#", "@", "%", "&"];
             nv.e.textContent = [0, 1, 2].map(j => S[(U.hash(s.id + giro + j) >>> 3) % S.length]).join(" ") + " ❗";
           }
-          a.getWorldPosition(nv.pos); nv.pos.y = 2.45; nv.e.style.visibility = "";
+          a.getWorldPosition(nv.pos); nv.pos.y += 2.45; nv.e.style.visibility = "";
         } else if (pos && pos.azione === "bussa") {                         // bussa sul vetro
           dx.rotation.set(1.9 + Math.max(0, Math.sin(k * 14)) * 0.35, 0, 0.15);
         } else if (pos && pos.azione === "attende") {
@@ -1445,6 +1538,8 @@
         u.rot += d * Math.min(1, dt * 9); a.rotation.y = u.rot;
       }
       if (u.etichettaPos) { u.etichettaPos.x = a.position.x; u.etichettaPos.z = a.position.z; }
+      if (u.etichetta && u.etichetta.y0 == null) u.etichetta.y0 = u.etichetta.pos.y;
+      if (u.etichetta) u.etichetta.pos.y = u.etichetta.y0 + a.position.y;
       if (u.etichetta) { u.etichetta.pos.x = u.etichetta.base[0] + a.position.x; u.etichetta.pos.z = u.etichetta.base[1] + a.position.z; }
     }
     capoInGiro = capoVisto;
@@ -1496,7 +1591,7 @@
     if (ispettore) {                                                       // giro di controllo continuo, mani dietro la schiena
       const { o, punti } = ispettore, u = o.userData, pos = lungo(punti, (t + (ispettore.anticipo || 0)) % ispettore.durata, 1.3);
       o.visible = pcLuce > 0.5;
-      o.position.set(pos.x, 0, pos.z);
+      o.position.set(pos.x, quota(pos.x, pos.z), pos.z);
       const fermo = !pos.dir;
       if (pos.dir) o.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
       else if (pos.azione === "guarda") { const pt = punti.find(p => p[0] === pos.x && p[1] === pos.z && p[3]); if (pt) o.rotation.y = pt[4]; }
@@ -1508,13 +1603,17 @@
       if (fermo) u.corpo.rotation.x = 0.08;
       else u.corpo.rotation.x = 0;
       for (const oc of u.occhi) oc.scale.y = (t % 3.5) < 0.12 ? 0.25 : 1.5;
+      if (fermo && pos.azione === "scrive") {                            // chino sulla scrivania a scrivere il rapporto
+        o.rotation.y = 0; u.sx.rotation.set(1.25, 0, 0.25); u.dx.rotation.set(1.3 + Math.sin(t * 18) * 0.12, 0, -0.2);
+        u.testa.rotation.set(0.45, 0, 0); u.corpo.rotation.x = 0.25;
+      }
       const sgrida = fermo && pos.azione === "sgrida";
       if (sgrida) {                                                      // gesticola arrabbiato con la nuvoletta di parolacce
         u.sx.rotation.set(1.5 + Math.sin(t * 10) * 1.1, 0, 0.5 + Math.sin(t * 6) * 0.4);
         u.dx.rotation.set(1.7 + Math.cos(t * 9) * 1.2, 0, -0.5 + Math.cos(t * 7) * 0.4);
         u.testa.rotation.set(Math.sin(t * 8) * 0.15, 0, Math.sin(t * 4) * 0.12);
         u.corpo.position.y = Math.abs(Math.sin(t * 5)) * 0.05; u.corpo.rotation.x = 0.12;
-        o.getWorldPosition(ispettore.nuvola.pos); ispettore.nuvola.pos.y = 2.45;
+        o.getWorldPosition(ispettore.nuvola.pos); ispettore.nuvola.pos.y += 2.45;
       }
       ispettore.nuvola.e.style.visibility = sgrida && o.visible ? "" : "hidden";
     }
@@ -1604,7 +1703,7 @@
       u.testa.rotation.set(0, 0, 0); u.corpo.rotation.set(0, 0, 0);
       if (giro) {
         const e = t - giro.inizio, pos = lungo(giro.punti, e, 1.6), o = Math.sin(e * 9);
-        g.position.set(pos.x, 0, pos.z); gioc.pos.set(pos.x, 2.0, pos.z);
+        const y = quota(pos.x, pos.z); g.position.set(pos.x, y, pos.z); gioc.pos.set(pos.x, 2.0 + y, pos.z);
         if (pos.dir) g.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
         else if (pos.azione) g.rotation.y = giro.verso;
         for (const l of u.sedute) l.visible = false;
@@ -1658,15 +1757,16 @@
       let testo = "", vis = false;
       if (q && t >= q.inizio) {
         const e = t - q.inizio, pos = lungo(q.punti, e, q.vel), o = Math.sin(e * (q.vel > 2 ? 14 : 9));
-        g.position.set(pos.x, 0, pos.z); segr.pos.set(pos.x, 2.0, pos.z);
+        const y = quota(pos.x, pos.z); g.position.set(pos.x, y, pos.z); segr.pos.set(pos.x, 2.0 + y, pos.z);
         if (pos.dir) g.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]); else if (pos.azione) g.rotation.y = q.verso; else g.rotation.y = Math.PI;
         for (const l of u.sedute) l.visible = false;
         for (const l of u.gambe) l.visible = true;
         u.gambe[0].rotation.x = pos.fermo ? 0 : o * 0.45; u.gambe[1].rotation.x = pos.fermo ? 0 : -o * 0.45;
         u.corpo.position.y = pos.fermo ? 0 : Math.abs(Math.cos(e * 9)) * 0.03;
         u.corpo.rotation.z = pos.fermo ? 0 : Math.sin(e * 9) * 0.06;       // cammina ancheggiando
-        const arrivata = pos.azione === q.tipo, dopo = e > durata(q.punti.slice(0, 5), q.vel);
-        const porta = q.tipo === "caffe" ? !dopo && !(arrivata && e - durata(q.punti.slice(0, 3), q.vel) > 0.9) : !dopo && !arrivata;
+        const tArr = durata(q.punti.slice(0, q.iAz + 1), q.vel) - (q.punti[q.iAz][2] || 0);   // quando arriva a destinazione
+        const arrivata = pos.azione === q.tipo, dopo = e > durata(q.punti.slice(0, q.iAz + 2), q.vel) - 0.01;
+        const porta = q.tipo === "caffe" ? !dopo && !(arrivata && e - tArr > 0.9) : !dopo && !arrivata;
         u.sx.rotation.set(pos.fermo ? 0.1 : -o * 0.4, 0, 0.12); u.dx.rotation.set(pos.fermo ? 0.1 : o * 0.4, 0, -0.12);
         if (q.tipo === "allarme") { u.telefono.visible = true; u.dx.rotation.set(0.15, 0, 3.0); segr.corn.visible = false; testo = q.testo; vis = true; }
         else if (q.tipo === "caffe") { segr.tazza.visible = porta; if (porta) u.sx.rotation.set(1.3, 0, 0.1); testo = q.testo; vis = arrivata; if (arrivata && !q.muscoli) { q.muscoli = true; momento("capo:r:capo", "muscoli", 3.5); } }
@@ -1675,7 +1775,7 @@
           segr.cart.material = m(q.colore || "#3b82f6");
           if (porta) u.dx.rotation.set(1.2, 0, -0.12);
           if (arrivata) {
-            const da = e - durata(q.punti.slice(0, 4), q.vel);
+            const da = e - tArr;
             if (q.tipo === "ko") { u.dx.rotation.set(da < 0.5 ? 2.3 - da * 3 : 0.6, 0, -0.12); segr.cart.visible = da < 0.6; testo = q.testo + " 😤"; }
             else { u.dx.rotation.set(1.5, 0, -0.12); segr.cart.visible = da < 1.2; testo = q.testo; }
             vis = true;
@@ -1684,7 +1784,7 @@
         }
       } else {                                                           // alla scrivania: unghie, telefono, tastiera
         const [x0, z0] = segr.casa;
-        g.position.set(x0, 0, z0); g.rotation.y = Math.PI; segr.pos.set(x0, 2.0, z0);
+        g.position.set(x0, SC.H, z0); g.rotation.y = Math.PI; segr.pos.set(x0, 2.0 + SC.H, z0);
         for (const l of u.sedute) l.visible = true;
         for (const l of u.gambe) l.visible = false;
         const fase = Math.floor(t / 9) % 3;
@@ -1767,6 +1867,9 @@
     provaPc(stato) { impostaPc(stato, false); },
     provaChiusura(n) { const ids = [...ultimeSessioni.keys()].filter(id => bersagli.has(id) && !chiusi.has(id)); const id = ids[ids.length - 1 - (n || 0)]; if (!id) return; chiudi(id, ultimeSessioni.get(id)); if (ultimiDati) costruisci(...ultimiDati); },
     provaCantiere(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); arrivoFatto.delete(ids[n || 0]); cantieri.set(ids[n || 0], performance.now() / 1000); const uf = [...bersagli.keys()].filter(k => k.startsWith("capo:") && k !== "capo:r:capo"); if (uf.length) { arrivoFatto.delete(uf[uf.length - 1]); cantieri.set(uf[uf.length - 1], performance.now() / 1000); } if (ultimiDati) costruisci(...ultimiDati); },
+    provaPasseggio() { passeggioSubito = true; },
+    provaPostinoCapo() { avviaPostino("capo:r:capo"); },
+    provaCtrl(az, prima) { if (!ispettore) return; const i = ispettore.punti.findIndex(p => p[3] === (az || "scrive")); const d = durata(ispettore.punti.slice(0, i), 1.3) - (prima || 3); ispettore.anticipo = ((d - t) % ispettore.durata + ispettore.durata) % ispettore.durata; },
     provaPostino(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); avviaPostino(ids[n || 0]); },
     get effetti() { return effetti.length; }, get ispettore() { return ispettore && ispettore.o.position; }, get dati() { return ultimiDati; }, get scrivanie() { return [...bersagli.keys()].filter(k => !k.startsWith("capo:")); }, get postini() { return postini.map(p => [p.id, p.inizio, p.fine]); }, get giocatore() { return gioc && gioc.g.position; },
     caffeSubito() { for (const a of animati) a.userData.prossimoT = 0; },   // per le prove
