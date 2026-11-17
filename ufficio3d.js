@@ -289,9 +289,14 @@
     const scarpe = capo ? "#e3b23c" : resp ? "#1f1f26" : donna ? ["#ef7f9f", "#2b2b33", "#ffffff"][(h >>> 10) % 3] : "#ffffff";
     const g = new T.Group(); g.position.set(x, 0, z); g.rotation.y = Math.PI; padre.add(g);
     const corpo = new T.Group(); g.add(corpo);
-    palla(0.26, maglia, 0, 0.78, 0, corpo, 1, 1.3, 0.85);                 // busto a pillola
+    const busto = palla(0.26, maglia, 0, 0.78, 0, corpo, 1, 1.3, 0.85);   // busto a pillola
+    if (capo) {                                                          // il capo e' palestrato: torace largo, spalle e pettorali
+      busto.scale.set(1.3, 1.3, 1.0);
+      for (const sx_ of [-0.12, 0.12]) palla(0.13, maglia, sx_, 0.9, -0.12, corpo, 1.1, 0.8, 0.7);
+      for (const sx_ of [-0.33, 0.33]) palla(0.14, maglia, sx_, 1.0, 0, corpo, 1, 0.85, 1);
+    }
     if (capo) {                                                          // re: mantello rosso con collo d'ermellino, bottoni d'oro
-      const mant = new T.Mesh(new T.CylinderGeometry(0.3, 0.42, 0.95, 20, 1, true, Math.PI * 0.62, Math.PI * 0.76), m("#9e1630", { side: T.DoubleSide }));
+      const mant = new T.Mesh(new T.CylinderGeometry(0.3, 0.42, 0.95, 20, 1, true, -Math.PI * 0.38, Math.PI * 0.76), m("#9e1630", { side: T.DoubleSide }));
       mant.position.set(0, 0.62, 0.02); mant.castShadow = true; corpo.add(mant);
       const coll = new T.Mesh(new T.TorusGeometry(0.22, 0.07, 10, 24), m("#fbf7ee")); coll.rotation.x = Math.PI / 2; coll.position.y = 1.08; corpo.add(coll);
       for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; palla(0.018, "#1f1f26", Math.sin(a) * 0.24, 1.1, Math.cos(a) * 0.24, corpo); }
@@ -430,9 +435,15 @@
       const c = new T.Mesh(new T.CylinderGeometry(0.065, 0.075, 0.36, 12), m(maglia));
       c.position.y = -0.18; c.castShadow = true; b.add(c);
       palla(0.085, pelle, 0, -0.4, 0, b);                                  // mano a pallina
+      if (capo) {                                                        // braccia grosse con i bicipiti
+        c.scale.set(1.7, 1, 1.7);
+        palla(0.12, maglia, 0, -0.14, -0.03, b, 1, 1.2, 1);
+        palla(0.12, pelle, 0, -0.42, 0, b);
+      }
       return b;
     };
-    const sx = braccio(-0.31), dx = braccio(0.31);
+    const sx = braccio(capo ? -0.42 : -0.31), dx = braccio(capo ? 0.42 : 0.31);
+    if (ctrl) g.scale.set(1.12, 1.25, 1.12);                             // il controllore e' piu' alto di tutti
     if (operaio) {                                                       // martello nella destra, scalpello nella sinistra
       tondo(0.08, 0.62, 0.08, "#b0703a", 0, -1.0, 0, dx, 0.03);                         // martellone: manico lungo
       tondo(0.22, 0.22, 0.5, "#3a3f4a", 0, -1.14, -0.08, dx, 0.05, { metalness: 0.7, roughness: 0.3 });   // testa enorme
