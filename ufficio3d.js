@@ -283,8 +283,8 @@
     if (modello === 2) { calvo = false; capelli = "#1c1714"; barba = 5; occhiali = null; orecchino = true; ciuffoFisso = 2; }
     if (modello === 3) { calvo = false; capelli = "#2b1d14"; barba = 4; occhiali = null; ciuffoFisso = 0; }
     if (modello === 4) { calvo = true; barba = 2; capelli = "#1c1714"; occhiali = null; }
-    const divisa = ruolo === "dip" && !donna ? ((h >>> 25) % 5 < 3 ? "polo" : (h >>> 25) % 5 === 3 ? "camicia" : null) : null;
-    const maglia = ctrl ? "#f07d1e" : divisa === "polo" ? "#1f1f24" : divisa === "camicia" ? "#f4f4f2" : operaio ? "#f28c28" : postino ? "#3b6fc4" : capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
+    const divisa = ruolo === "dip" ? ((h >>> 25) & 1 ? "polo" : "polo bianca") : null;   // tutti in polo aziendale, nera o bianca
+    const maglia = ctrl ? "#f07d1e" : divisa === "polo" ? "#1f1f24" : divisa === "polo bianca" ? "#f4f4f2" : operaio ? "#f28c28" : postino ? "#3b6fc4" : capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
     const pantaloni = operaio ? "#3d4a5c" : postino ? "#2a3f6b" : capo ? "#7a1426" : resp ? maglia : donna ? pelle : JEANS[(h >>> 9) % JEANS.length];
     const scarpe = capo ? "#e3b23c" : resp ? "#1f1f26" : donna ? ["#ef7f9f", "#2b2b33", "#ffffff"][(h >>> 10) % 3] : "#ffffff";
     const g = new T.Group(); g.position.set(x, 0, z); g.rotation.y = Math.PI; padre.add(g);
@@ -308,9 +308,10 @@
     } else if (postino) {                                                // borsa a tracolla
       tondo(0.3, 0.24, 0.12, "#8a5a2b", 0.2, 0.55, -0.12, corpo, 0.04);
       const tr = new T.Mesh(new T.TorusGeometry(0.3, 0.02, 6, 24), m("#6b4420")); tr.rotation.set(0, Math.PI / 2, 0.7); tr.position.set(0, 0.85, 0); corpo.add(tr);
-    } else if (divisa === "polo") {                                     // polo nera con il logo arancione e il cordino
-      box(0.12, 0.05, 0.02, "#f28c28", 0.1, 0.92, -0.23, corpo);
-      tondo(0.14, 0.04, 0.02, "#1f1f24", 0, 1.05, -0.2, corpo, 0.01);
+    } else if (divisa) {                                                 // polo nera o bianca: piccola scritta arancione sul taschino sinistro, cordino
+      box(0.09, 0.035, 0.02, "#f28c28", -0.11, 0.93, -0.225, corpo);
+      tondo(0.14, 0.04, 0.02, maglia, 0, 1.05, -0.2, corpo, 0.01);
+      for (const by of [0.98, 0.9]) palla(0.014, divisa === "polo" ? "#3a3a42" : "#c9c9c9", 0, by, -0.225, corpo, 1, 1, 0.5);   // bottoncini
       const cord = new T.Mesh(new T.TorusGeometry(0.17, 0.014, 6, 20, Math.PI * 1.1), m("#f28c28"));
       cord.rotation.set(0.25, 0, Math.PI * 0.95); cord.position.set(0, 0.92, -0.17); corpo.add(cord);
       box(0.08, 0.1, 0.02, "#ffffff", 0, 0.68, -0.235, corpo);
