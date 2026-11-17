@@ -265,16 +265,16 @@
   const JEANS = ["#4a6fa5", "#5a7fb5", "#3d5a8a"];
   function omino(s, padre, x, z, ruolo) {
     const h = U.hash(s.id), capo = ruolo === "capo", resp = ruolo === "resp";
-    const postino = ruolo === "postino", operaio = ruolo === "operaio", ctrl = ruolo === "controllore";
-    const donna = !capo && !resp && !postino && !operaio && ((h >>> 12) & 1) === 1;   // i capi commessa sono tutti uomini (come nelle foto)
+    const postino = ruolo === "postino", operaio = ruolo === "operaio", ctrl = ruolo === "controllore", segr = ruolo === "segretaria";
+    const donna = segr || !capo && !resp && !postino && !operaio && ((h >>> 12) & 1) === 1;   // i capi commessa sono tutti uomini (come nelle foto)
     // aspetto ispirato alla squadra: capelli scuri o brizzolati, teste rasate, barbe, occhiali; il re ha barba scura e occhiali blu
     const PELLI = ["#f1c7a5", "#e8b896", "#d9a27c", "#c68a62"], CAPI = ["#1c1714", "#2b1d14", "#3b2a1e", "#5a3a22", "#8d8d96", "#b9b9c2"];
     const pelle = PELLI[h % PELLI.length];
-    let capelli = capo ? "#1c1714" : donna ? ["#2b1d14", "#a8743c", "#5a3a22", "#1c1714"][(h >>> 4) % 4] : CAPI[(h >>> 4) % CAPI.length];
+    let capelli = segr ? "#3b2a1e" : postino ? "#5a3a22" : capo ? "#1c1714" : donna ? ["#2b1d14", "#a8743c", "#5a3a22", "#1c1714"][(h >>> 4) % 4] : CAPI[(h >>> 4) % CAPI.length];
     let calvo = ctrl || !capo && !donna && !postino && !operaio && (h >>> 17) % (resp ? 3 : 4) === 0;
-    let barba = ctrl ? 1 : capo ? 3 : donna || postino ? 0 : resp ? [1, 2, 3, 3, 2][(h >>> 19) % 5] : (h >>> 19) % 4;   // 0 niente, 1 accenno, 2 pizzetto, 3 piena
+    let barba = ctrl ? 1 : capo ? 3 : postino ? 6 : donna ? 0 : resp ? [1, 2, 3, 3, 2][(h >>> 19) % 5] : (h >>> 19) % 4;   // 0 niente, 1 accenno, 2 pizzetto, 3 piena
     let occhiali = ctrl ? null : capo ? "#1f3a8a" : !postino && !operaio && (h >>> 21) % (resp ? 2 : 3) === 0 ? ["#1c1c22", "#3b2a1e", "#1f3a8a"][(h >>> 23) % 3] : null;
-    const ricci = donna && (h >>> 24) % 2 === 0;
+    const ricci = !segr && donna && (h >>> 24) % 2 === 0;
     // i primi cinque capi commessa hanno l'aspetto scelto da Stefano, gli altri vengono dopo, a caso
     let rasatoCorto = false, orecchino = false, ciuffoFisso = null, coloreBarba = null;
     const modello = resp && s.modello != null ? s.modello : -1;
@@ -284,9 +284,9 @@
     if (modello === 3) { calvo = false; capelli = "#2b1d14"; barba = 4; occhiali = null; ciuffoFisso = 0; }
     if (modello === 4) { calvo = true; barba = 2; capelli = "#1c1714"; occhiali = null; }
     const divisa = ruolo === "dip" ? ((h >>> 25) & 1 ? "polo" : "polo bianca") : null;   // tutti in polo aziendale, nera o bianca
-    const maglia = ctrl ? "#f07d1e" : divisa === "polo" ? "#1f1f24" : divisa === "polo bianca" ? "#f4f4f2" : operaio ? "#f28c28" : postino ? "#3b6fc4" : capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
-    const pantaloni = operaio ? "#3d4a5c" : postino ? "#2a3f6b" : capo ? "#7a1426" : resp ? maglia : donna ? pelle : JEANS[(h >>> 9) % JEANS.length];
-    const scarpe = capo ? "#e3b23c" : resp ? "#1f1f26" : donna ? ["#ef7f9f", "#2b2b33", "#ffffff"][(h >>> 10) % 3] : "#ffffff";
+    const maglia = ctrl ? "#f07d1e" : divisa === "polo" ? "#1f1f24" : divisa === "polo bianca" ? "#f4f4f2" : operaio ? "#f28c28" : segr ? "#d0213a" : postino ? "#2f9e44" : capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
+    const pantaloni = operaio ? "#3d4a5c" : postino ? "#3d5a8a" : capo ? "#7a1426" : resp ? maglia : donna ? pelle : JEANS[(h >>> 9) % JEANS.length];
+    const scarpe = segr ? "#b5122b" : capo ? "#e3b23c" : resp ? "#1f1f26" : donna ? ["#ef7f9f", "#2b2b33", "#ffffff"][(h >>> 10) % 3] : "#ffffff";
     const g = new T.Group(); g.position.set(x, 0, z); g.rotation.y = Math.PI; padre.add(g);
     const corpo = new T.Group(); g.add(corpo);
     const busto = palla(0.26, maglia, 0, 0.78, 0, corpo, 1, 1.3, 0.85);   // busto a pillola
@@ -310,9 +310,15 @@
       box(0.1, 0.045, 0.02, "#f28c28", -0.13, 0.9, -0.2, corpo);          // logo arancione sul taschino della giacca
     } else if (operaio) {                                                // gilet con bande riflettenti
       for (const by of [0.66, 0.86]) { const b = new T.Mesh(new T.TorusGeometry(0.235, 0.022, 6, 24), m("#e8eef5", { emissive: "#ffffff", emissiveIntensity: 0.25 })); b.rotation.x = Math.PI / 2; b.position.y = by; b.scale.set(1, 0.78, 1); corpo.add(b); }
-    } else if (postino) {                                                // borsa a tracolla
-      tondo(0.3, 0.24, 0.12, "#8a5a2b", 0.2, 0.55, -0.12, corpo, 0.04);
-      const tr = new T.Mesh(new T.TorusGeometry(0.3, 0.02, 6, 24), m("#6b4420")); tr.rotation.set(0, Math.PI / 2, 0.7); tr.position.set(0, 0.85, 0); corpo.add(tr);
+    } else if (segr) {                                                   // vestito rosso corto, scollato davanti e dietro
+      palla(0.1, pelle, 0, 1.0, -0.19, corpo, 1.1, 0.75, 0.35);
+      palla(0.13, pelle, 0, 0.98, 0.18, corpo, 1.2, 0.9, 0.35);
+      tondo(0.42, 0.04, 0.34, "#9e1630", 0, 0.58, 0, corpo, 0.02);     // cinturina
+    } else if (postino) {                                                // felpa verde col cappuccio, un po' palestrato
+      busto.scale.set(1.12, 1.3, 0.9);
+      palla(0.2, maglia, 0, 1.0, 0.16, corpo, 1.15, 0.6, 0.7);
+      for (const dx_ of [-0.06, 0.06]) tondo(0.015, 0.16, 0.015, "#ffffff", dx_, 0.86, -0.235, corpo, 0.006);
+      tondo(0.3, 0.12, 0.03, "#278a3a", 0, 0.58, -0.225, corpo, 0.02);     // tascone davanti
     } else if (divisa) {                                                 // polo nera o bianca: piccola scritta arancione sul taschino sinistro, cordino
       box(0.09, 0.035, 0.02, "#f28c28", -0.11, 0.93, -0.225, corpo);
       tondo(0.14, 0.04, 0.02, maglia, 0, 1.05, -0.2, corpo, 0.01);
@@ -329,7 +335,7 @@
     }
     let gonna = null;
     if (donna) {                                                         // gonna a campana
-      gonna = new T.Mesh(new T.CylinderGeometry(0.22, 0.32, 0.3, 20), m(resp ? maglia : PASTELLI[(h >>> 14) % PASTELLI.length]));
+      gonna = new T.Mesh(new T.CylinderGeometry(0.22, segr ? 0.27 : 0.32, segr ? 0.24 : 0.3, 20), m(resp || segr ? maglia : PASTELLI[(h >>> 14) % PASTELLI.length]));
       gonna.position.y = 0.46; gonna.castShadow = true; corpo.add(gonna);
     }
     const sedute = [palla(0.11, pantaloni, -0.12, 0.47, -0.2, corpo, 1, 0.9, 1.9),   // gambe sotto la scrivania (seduto)
@@ -350,7 +356,10 @@
       const a = i / 14 * Math.PI * 2, r = 0.27 + (i % 2) * 0.04;
       palla(0.1, capelli, Math.cos(a) * r, -0.05 + Math.sin(i * 1.7) * 0.18, 0.05 + Math.sin(a) * 0.2, testa);
     }
-    if (donna) {                                                         // capelli lunghi dietro e ai lati
+    if (segr) {                                                          // capelli raccolti in uno chignon, orecchini
+      palla(0.13, capelli, 0, 0.12, 0.26, testa);
+      for (const sx_ of [-0.27, 0.27]) palla(0.025, "#e3b23c", sx_, -0.1, 0.0, testa, 1, 1, 1, { metalness: 0.6 });
+    } else if (donna) {                                                         // capelli lunghi dietro e ai lati
       palla(0.27, capelli, 0, -0.12, 0.08, testa, 1.08, 1.1, 0.85);
       for (const sx of [-0.25, 0.25]) palla(0.09, capelli, sx, -0.12, 0.02, testa, 0.7, 1.9, 1);
     }
@@ -359,13 +368,15 @@
       c.position.y = 0.06; testa.add(c);
       tondo(0.66, 0.025, 0.66, "#f5c518", 0, 0.06, 0, testa, 0.012);
     }
-    if (postino) {                                                       // berretto con visiera
-      const b = new T.Mesh(new T.CylinderGeometry(0.27, 0.29, 0.14, 20), m("#2a4f98")); b.position.y = 0.2; testa.add(b);
-      tondo(0.3, 0.025, 0.16, "#1c2f5c", 0, 0.14, -0.27, testa, 0.01);
-      palla(0.035, "#f2b443", 0, 0.22, -0.28, testa, 1, 1, 0.4, { metalness: 0.5 });
+    if (postino) {                                                       // cuffione da gamer
+      const arco = new T.Mesh(new T.TorusGeometry(0.3, 0.035, 8, 24, Math.PI), m("#1c1c22")); arco.position.y = 0.02; testa.add(arco);
+      for (const sx_ of [-0.3, 0.3]) {
+        const c = new T.Mesh(new T.CylinderGeometry(0.12, 0.12, 0.09, 18), m("#1c1c22")); c.rotation.z = Math.PI / 2; c.position.set(sx_, -0.02, 0); testa.add(c);
+        const l = new T.Mesh(new T.CylinderGeometry(0.07, 0.07, 0.095, 14), m("#2fe06b", { emissive: "#2fe06b", emissiveIntensity: 0.8 })); l.rotation.z = Math.PI / 2; l.position.set(sx_ * 1.04, -0.02, 0); testa.add(l);
+      }
     }
     if (rasatoCorto) cal.scale.set(0.97, 0.9, 0.97);
-    const ciuffo = postino || operaio || calvo || rasatoCorto ? -1 : ciuffoFisso != null ? ciuffoFisso : h % 3;
+    const ciuffo = postino ? 2 : operaio || calvo || rasatoCorto ? -1 : ciuffoFisso != null ? ciuffoFisso : h % 3;
     if (ciuffo === 0) palla(0.11, capelli, -0.1, 0.2, -0.17, testa, 1.3, 0.7, 0.8);
     if (ciuffo === 1) { palla(0.09, capelli, -0.24, 0.0, 0.02, testa, 0.6, 1.4, 1); palla(0.09, capelli, 0.24, 0.0, 0.02, testa, 0.6, 1.4, 1); }
     if (ciuffo === 2) palla(0.14, capelli, 0, 0.26, 0.05, testa, 1, 0.6, 1);
@@ -379,8 +390,14 @@
     sorriso.position.set(0, -0.08, -0.255); sorriso.rotation.set(0, 0, Math.PI); testa.add(sorriso);
     const bocca_o = palla(0.03, "#8a3b3b", 0, -0.1, -0.25, testa, 1, 1.2, 0.5);
     const linea = tondo(0.07, 0.014, 0.02, "#8a3b3b", 0, -0.11, -0.255, testa, 0.006);
+    if (segr) for (const q of [sorriso, bocca_o, linea]) q.material = m("#d0213a");      // rossetto
     const cBarba = coloreBarba || (capelli === "#b9b9c2" || capelli === "#8d8d96" ? "#6d6d75" : capelli);
-    if (barba === 5) {                                                   // barba lunga e piena
+    if (barba === 6) {                                                   // barba a punta
+      palla(0.2, cBarba, 0, -0.14, -0.1, testa, 1.1, 0.6, 1);
+      const pu = new T.Mesh(new T.ConeGeometry(0.1, 0.24, 12), m(cBarba)); pu.rotation.x = Math.PI; pu.position.set(0, -0.3, -0.2); testa.add(pu);
+      tondo(0.14, 0.03, 0.04, cBarba, 0, -0.055, -0.28, testa, 0.015);
+      for (const q of [sorriso, bocca_o, linea]) q.position.z -= 0.04;
+    } else if (barba === 5) {                                                   // barba lunga e piena
       palla(0.24, cBarba, 0, -0.2, -0.1, testa, 1.15, 0.95, 1);
       tondo(0.16, 0.035, 0.04, cBarba, 0, -0.055, -0.285, testa, 0.015);
       for (const q of [sorriso, bocca_o, linea]) q.position.z -= 0.07;
@@ -435,6 +452,7 @@
       const c = new T.Mesh(new T.CylinderGeometry(0.065, 0.075, 0.36, 12), m(maglia));
       c.position.y = -0.18; c.castShadow = true; b.add(c);
       palla(0.085, pelle, 0, -0.4, 0, b);                                  // mano a pallina
+      if (postino) c.scale.set(1.25, 1, 1.25);
       if (capo) {                                                        // braccia grosse con i bicipiti
         c.scale.set(1.7, 1, 1.7);
         palla(0.12, maglia, 0, -0.14, -0.03, b, 1, 1.2, 1);
@@ -489,15 +507,90 @@
   }
   const arrivi = new Map();                                              // id -> quando entra dalla porta (dopo il cantiere)
   let postini = [], bersagli = new Map(), ingresso = [-2.5, 6], ultimiDati = null;
-  function creaPostino(p) {
-    p.g = omino({ id: "postino" + p.id }, mondo, p.punti[0][0], p.punti[0][1], "postino");
-    for (const l of p.g.userData.sedute) l.visible = false;
-    for (const l of p.g.userData.gambe) l.visible = true;
-    const busta = tondo(0.26, 0.17, 0.03, "#fffaf0", 0, -0.45, -0.1, p.g.userData.dx, 0.01);
-    palla(0.035, "#d23c3c", 0, -0.45, -0.12, p.g.userData.dx, 1, 1, 0.4);
-    p.busta = busta;
-    p.pos = new T.Vector3(p.punti[0][0], 2.0, p.punti[0][1]);
-    marcati.push(etichetta("f3d", "✉️ Da Stefano", p.pos));
+  // il "postino" e' un ragazzo che gioca alla PlayStation in poltrona: quando Stefano risponde si alza e porta il messaggio
+  let gioc = null, giocLibero = 0;
+  function creaGiocatore(lx, lz) {
+    const an = new T.Group(); an.position.set(lx, 0, lz); mondo.add(an);
+    tondo(0.9, 0.42, 0.85, "#7a3b2e", 0, 0, 0, an, 0.12);                 // poltrona: seduta
+    tondo(0.24, 1.0, 0.9, "#6a3226", 0.42, 0, 0, an, 0.1);                // schienale (dietro = +x)
+    for (const sz of [-0.44, 0.44]) tondo(0.85, 0.62, 0.18, "#6a3226", 0.03, 0, sz, an, 0.08);   // braccioli
+    tondo(0.5, 0.5, 1.3, "#3c4658", -1.8, 0, 0, an, 0.05);                // mobiletto
+    tondo(0.08, 0.8, 1.36, "#15151a", -1.8, 0.55, 0, an, 0.03);           // televisore
+    const scr = new T.Mesh(new T.PlaneGeometry(1.2, 0.66), new T.MeshBasicMaterial({ color: 0x4dabf7 }));
+    scr.rotation.y = Math.PI / 2; scr.position.set(-1.75, 0.95, 0); an.add(scr);
+    tondo(0.32, 0.07, 0.24, "#f4f4f2", -1.8, 0.5, 0.42, an, 0.02);        // console
+    palla(0.02, "#4dabf7", -1.63, 0.535, 0.42, an, 1, 1, 1, { emissive: "#4dabf7", emissiveIntensity: 1 });
+    const g = omino({ id: "giocatore" }, mondo, lx, lz, "postino"), u = g.userData;
+    const pad = tondo(0.3, 0.06, 0.14, "#1c1c22", -0.15, -0.44, -0.1, u.dx, 0.03);   // joypad tra le mani
+    const busta = tondo(0.26, 0.17, 0.03, "#fffaf0", 0, -0.45, -0.1, u.dx, 0.01); busta.visible = false;
+    palla(0.035, "#d23c3c", 0, -0.45, -0.12, busta, 1, 1, 0.4);
+    const pos = new T.Vector3(lx, 2.0, lz), et = etichetta("f3d", "✉️ Da Stefano", pos);
+    et.e.style.visibility = "hidden"; marcati.push(et);
+    gioc = { g, u, casa: [lx, lz], scr, pad, busta, pos, et, prossima: gioc ? gioc.prossima : null, chat: gioc ? gioc.chat : null };
+  }
+  // la segretaria del capo: anima gli scambi tra Claude e TIA Portal (progetti aperti, compilazioni KO, download, TIA aperti)
+  let segr = null, segrCoda = [], tiaPrima = new Map(), downPrima = new Set();
+  function creaSegretaria() {
+    const uf = uffici.get("r:capo"); if (!uf) { segr = null; return; }
+    const dx_ = uf.gx + uf.LW * 0.32 + 1.15, dz_ = uf.gz + uf.LD / 2 + 1.0, via = uf.gz + uf.LD / 2 + 2.2;
+    const sc = new T.Group(); sc.position.set(dx_, 0, dz_); mondo.add(sc);
+    tondo(1.1, 0.7, 0.5, "#f4f1ea", 0, 0, 0, sc, 0.04);                    // scrivanietta bianca
+    tondo(1.16, 0.05, 0.56, "#c9a27a", 0, 0.7, 0, sc, 0.02);
+    tondo(0.3, 0.05, 0.22, "#1c1c22", -0.3, 0.75, 0.02, sc, 0.02);        // telefono
+    const corn = tondo(0.26, 0.06, 0.07, "#1c1c22", -0.3, 0.8, 0.02, sc, 0.03);
+    for (let i = 0; i < 3; i++) tondo(0.3, 0.03, 0.22, ["#3b82f6", "#e03131", "#f2c230"][i], 0.32, 0.75 + i * 0.035, 0.0, sc, 0.01);   // pila di cartelline
+    const cv = document.createElement("canvas"); cv.width = 128; cv.height = 64;
+    const tx = new T.CanvasTexture(cv);
+    const lav = new T.Mesh(new T.PlaneGeometry(0.46, 0.23), new T.MeshBasicMaterial({ map: tx }));   // lavagnetta "TIA aperti"
+    lav.position.set(0.0, 0.98, 0.18); lav.rotation.y = Math.PI; sc.add(lav);
+    const lav2 = lav.clone(); lav2.rotation.y = 0; lav2.position.z = 0.21; sc.add(lav2);
+    tondo(0.5, 0.27, 0.03, "#7a4a20", 0, 0.835, 0.185, sc, 0.01);
+    sedia(dx_, dz_ - 0.75, mondo);
+    const g = omino({ id: "segretaria" }, mondo, dx_, dz_ - 0.6, "segretaria"), u = g.userData;
+    const cart = tondo(0.3, 0.03, 0.24, "#3b82f6", 0, -0.46, -0.12, u.dx, 0.01); cart.visible = false;   // cartellina in mano
+    const limetta = tondo(0.02, 0.14, 0.02, "#e8c9a0", 0, -0.5, -0.08, u.dx, 0.006); limetta.visible = false;
+    const tazza = tondo(0.1, 0.12, 0.1, "#ffffff", 0, -0.55, -0.06, u.sx, 0.04); tazza.visible = false;
+    const pos = new T.Vector3(dx_, 2.0, dz_ - 0.6), et = etichetta("f3d", "", pos); et.e.style.visibility = "hidden"; marcati.push(et);
+    segr = { g, u, casa: [dx_, dz_ - 0.6], via, cart, limetta, tazza, pos, et, cv, tx, corn, prossimoCaffe: segr ? segr.prossimoCaffe : null };
+    disegnaLavagna();
+  }
+  function disegnaLavagna() {
+    if (!segr) return;
+    const lista = (ultimiDati && ultimiDati[1] && ultimiDati[1].tia) || [], per = {};
+    for (const q of lista) per[q.versione] = (per[q.versione] || 0) + 1;
+    segr.troppi = lista.length > 3 || Object.values(per).some(n => n > 2);
+    const c = segr.cv.getContext("2d");
+    c.fillStyle = "#1f3b2c"; c.fillRect(0, 0, 128, 64);
+    c.fillStyle = segr.troppi ? "#ff8787" : "#f4f1ea"; c.font = "bold 22px sans-serif"; c.textAlign = "center";
+    c.fillText("TIA " + lista.length + "/3", 64, 28);
+    c.font = "15px sans-serif"; c.fillText(Object.entries(per).map(([v, n]) => v + ":" + n).join(" ") || "nessuno", 64, 52);
+    segr.tx.needsUpdate = true;
+  }
+  function incarico(tipo, id, testo, colore) {                          // mette in coda una commissione della segretaria
+    if (!segr) return;
+    const b = id ? bersagli.get(id) : null, capoB = bersagli.get("capo:r:capo");
+    const [sx0, sz0] = segr.casa, via = segr.via; let punti, verso = 0;
+    if (b && b.ufficio) {                                                // sottoagente: accanto alla sua sedia
+      const c = b.dz - 0.95, sx_ = b.dx + 0.6, sz_ = c + 0.5;
+      punti = [[sx0, sz0, 0.5], [sx0, via, 0], [sx0, c, 0], [sx_, c, 0], [sx_, sz_, tipo === "ko" ? 2.4 : 2.0, tipo], [sx_, c, 0], [sx0, c, 0], [sx0, via, 0], [sx0, sz0, 0.3]];
+      verso = Math.atan2(-(b.dx - sx_), -(b.dz - sz_));
+    } else {
+      const d = b || capoB; if (!d) return;
+      punti = [[sx0, sz0, 0.5], [sx0, via, 0], [d.x, via, 0], [d.x, d.z, tipo === "allarme" ? 4 : 2.6, tipo], [d.x, via, 0], [sx0, via, 0], [sx0, sz0, 0.3]];
+      verso = d.verso || 0;
+    }
+    const vel = tipo === "allarme" ? 3.2 : 1.7;
+    const ora = performance.now() / 1000, inizio = segrCoda.reduce((a, q) => Math.max(a, q.fine), ora);
+    segrCoda.push({ tipo, id, testo, colore, punti, verso, vel, inizio, fine: inizio + durata(punti, vel) });
+  }
+  function chiacchieraGioc() {                                            // ogni tanto va a fare due chiacchiere con un collega
+    const dip = animati.filter(a => a.userData.caffe && a.visible && a.userData.corridoio != null);
+    if (!dip.length || !gioc) return null;
+    const u = dip[Math.floor(Math.random() * dip.length)].userData, [lx, lz] = gioc.casa;
+    const c = u.corridoio, sx_ = u.casa[0] + 0.6, sz_ = c + 0.5;
+    const punti = [[lx, lz, 0.6], [lx, c, 0], [sx_, c, 0], [sx_, sz_, 7, "chiacchiera"], [sx_, c, 0], [lx, c, 0], [lx, lz, 0.3]];
+    const FRASI = ["💬 Hai visto la partita?", "💬 Stasera calcetto?", "💬 Ho battuto il record!", "💬 Pausa caffè?"];
+    return { punti, inizio: t, fine: t + durata(punti, 1.6), verso: Math.atan2(-(u.casa[0] - sx_), -(u.casa[1] - sz_)), frase: FRASI[Math.floor(Math.random() * FRASI.length)] };
   }
   let ordini = [], uffici = new Map();
   // ---------- momenti divertenti ----------
@@ -509,6 +602,34 @@
   const ora_ = () => new Date();
   const sera = () => t < forzaSera || ora_().getHours() >= 19 || ora_().getHours() < 6;
   const venerdi = () => t < forzaVenerdi || (ora_().getDay() === 5 && ora_().getHours() >= 14);
+  const MAT_AURA = [new T.MeshBasicMaterial({ color: lin("#ff9a1a"), transparent: true, opacity: 0.5, depthWrite: false, side: T.DoubleSide }),
+                    new T.MeshBasicMaterial({ color: lin("#ffe14d"), transparent: true, opacity: 0.65, depthWrite: false, side: T.DoubleSide }),
+                    new T.MeshBasicMaterial({ color: lin("#ffc93c"), transparent: true, opacity: 0.16, depthWrite: false })];
+  const geoFiamma = new T.ConeGeometry(0.16, 0.9, 8, 1, true), geoAnello = new T.TorusGeometry(0.5, 0.05, 6, 32);
+  function creaAura(a) {
+    const g = new T.Group(); a.add(g);
+    const fiamme = [];
+    for (let i = 0; i < 14; i++) {                                       // lingue di fuoco tutto intorno, che salgono
+      const f = new T.Mesh(geoFiamma, MAT_AURA[i % 3 === 0 ? 1 : 0]), an = i / 14 * Math.PI * 2, r = 0.42 + (i % 2) * 0.1;
+      f.position.set(Math.cos(an) * r, 0.5 + (i % 3) * 0.35, Math.sin(an) * r); f.userData = { an, r, fase: i * 0.7, h: 0.5 + (i % 3) * 0.35 };
+      g.add(f); fiamme.push(f);
+    }
+    const guscio = new T.Mesh(new T.SphereGeometry(0.62, 16, 12), MAT_AURA[2]); guscio.scale.set(1, 1.8, 1); guscio.position.y = 1.0; g.add(guscio);
+    const anello = new T.Mesh(geoAnello, MAT_AURA[1].clone()); anello.rotation.x = Math.PI / 2; anello.position.y = 0.05; g.add(anello);
+    g.userData = { fiamme, guscio, anello }; g.visible = false;
+    return g;
+  }
+  function animaAura(g, fr) {
+    const { fiamme, guscio, anello } = g.userData, cresce = Math.min(1, fr / 0.5);
+    for (const f of fiamme) {
+      const d = f.userData, sale = (t * 1.6 + d.fase) % 1;
+      f.position.set(Math.cos(d.an + t * 0.8) * d.r, d.h + sale * 0.6, Math.sin(d.an + t * 0.8) * d.r);
+      f.scale.set(cresce, cresce * (0.8 + Math.sin(t * 17 + d.fase) * 0.35), cresce);
+    }
+    guscio.scale.set(cresce * (1 + Math.sin(t * 23) * 0.05), cresce * 1.8, cresce * (1 + Math.cos(t * 19) * 0.05));
+    const onda = (fr * 1.4) % 1;                                          // onde d'urto che si allargano a terra
+    anello.scale.setScalar(0.6 + onda * 2.2); anello.material.opacity = 0.7 * (1 - onda);
+  }
   function momento(id, tipo, durata) { const ini = performance.now() / 1000; momenti.set(id, { tipo, inizio: ini, fine: ini + durata }); }
   const MAT_COR = ["#ff5d8f", "#ffd43b", "#4dabf7", "#69db7c", "#b197fc", "#ff922b"].map(c => new T.MeshBasicMaterial({ color: lin(c), side: T.DoubleSide }));
   const geoCor = new T.PlaneGeometry(0.06, 0.04), geoFumo = new T.SphereGeometry(0.08, 8, 6), geoPallina = new T.IcosahedronGeometry(0.06, 0), geoPolvere = new T.IcosahedronGeometry(0.15, 1);
@@ -659,15 +780,22 @@
     lavori.push({ id, parti, om: null, operai, durata: 11, et, x, z, smonta: true });
   }
   function avviaPostino(id) {
-    let b = bersagli.get(id);
-    if (!b) return;
-    const dip = b.ufficio ? b : null;                                    // e' un dipendente: la busta va al suo capo/responsabile
-    if (dip) { b = bersagli.get("capo:" + dip.ufficio); if (!b) return; }
-    const [ix, iz] = ingresso, via = b.via;
-    const punti = [[ix, iz, 0], [b.x, via, 0], [b.x, b.z, 1.6, "consegna"], [b.x, via, 0], [ix, iz, 0]];
-    const p = { id, punti, inizio: performance.now() / 1000, verso: b.verso };
-    postini.push(p); creaPostino(p);
-    if (dip) avviaOrdine(dip, p.inizio + durata(punti.slice(0, 3), 1.6));
+    const b = bersagli.get(id);
+    if (!b || !gioc) return;
+    const [lx, lz] = gioc.casa; let punti, verso;
+    if (b.ufficio) {                                                     // un sottoagente: va proprio da lui, accanto alla sedia
+      const c = b.dz - 0.95, sx_ = b.dx + 0.6, sz_ = c + 0.5;
+      punti = [[lx, lz, 0.6], [lx, c, 0], [sx_, c, 0], [sx_, sz_, 3.0, "consegna"], [sx_, c, 0], [lx, c, 0], [lx, lz, 0.3]];
+      verso = Math.atan2(-(b.dx - sx_), -(b.dz - sz_));
+    } else {                                                             // un responsabile: davanti al suo ufficio
+      punti = [[lx, lz, 0.6], [lx, b.via, 0], [b.x, b.via, 0], [b.x, b.z, 2.4, "consegna"], [b.x, b.via, 0], [lx, b.via, 0], [lx, lz, 0.3]];
+      verso = b.verso;
+    }
+    const ora = performance.now() / 1000, ultimo = postini.reduce((a, p) => Math.max(a, p.fine), 0);
+    const inizio = Math.max(ora, ultimo, giocLibero);
+    const p = { id, punti, inizio, verso, fine: inizio + durata(punti, 1.6), auraT: inizio + durata(punti.slice(0, 4), 1.6) };
+    postini.push(p);
+    if (b.ufficio) avviaOrdine(b, inizio + durata(punti.slice(0, 5), 1.6));   // poi passa anche il suo responsabile
   }
   // il capo o il responsabile esce dall'ufficio, va accanto alla scrivania dell'omino, gesticola e torna a sedersi
   function avviaOrdine(dip, inizio) {
@@ -897,8 +1025,9 @@
       ispettore = { o, punti: [...punti, ...ritorno, [xm + 1, zp, 0]] };
       ispettore.nuvola = etichetta("f3d", "X#?%$£!!!", new T.Vector3()); ispettore.nuvola.e.style.visibility = "hidden"; marcati.push(ispettore.nuvola);
       ispettore.durata = durata(ispettore.punti, 1.3);
+      creaGiocatore(xm + 2.9, zp + 3.9);                                     // angolo PlayStation vicino all'ingresso
+      creaSegretaria();
     }
-    for (const p of postini) creaPostino(p);                               // quelli gia' in cammino continuano
     const ora = new Map(schermi.map(q => [q.s.id, q.s.stato]));
     const primaVoltaDati = statiPrima.size === 0;
     let nuovi = false;
@@ -920,6 +1049,16 @@
       const er = s.compilazione.errori;
       if (prima === undefined || prima === firma || primaVoltaDati || er == null) continue;
       momento(s.id, er === 0 ? "festa" : "disperazione", 4.5);
+      if (er > 0) incarico("ko", s.id, "❌ " + er + (er === 1 ? " errore" : " errori"), "#e03131");   // la segretaria porta la cartellina rossa
+    }
+    disegnaLavagna();
+    for (const { s } of schermi) {                                        // progetto TIA aperto da un agente: la segretaria gli porta la cartellina
+      if (!s.id || !s.progetto_tia) continue;
+      const prima = tiaPrima.get(s.id); tiaPrima.set(s.id, s.progetto_tia);
+      if (prima !== s.progetto_tia && !primaVoltaDati && bersagli.has(s.id))
+        incarico("cartellina", s.id, "📁 " + U.corto(String(s.progetto_tia).replace(/\.ap\d+$/i, ""), 22), "#3b82f6");
+      if (s.download && !downPrima.has(s.id) && !primaVoltaDati) incarico("allarme", null, "🚨 Download su PLC!", "#e03131");
+      if (s.download) downPrima.add(s.id); else downPrima.delete(s.id);
     }
     for (const [chiave, st] of schedePrimaOra) {                         // commessa passata a "fatto": brindisi e applauso del capo
       const prima = schedePrima.get(chiave);
@@ -1252,6 +1391,7 @@
                                                   a.position.z + (a.parent !== mondo ? a.parent.position.z : 0) + dz_);
       if (u.chiave === "r:capo" && u.giro && u.giro.passeggio) { capoMondo.copy(pw(0, 0, 0)); capoVisto = true; }
       const mo = momenti.get(s.id);
+      if (u.aura) u.aura.visible = !!(mo && mo.tipo === "aura" && t >= mo.inizio && t < mo.fine && !pos);
       if (mo && t >= mo.fine) momenti.delete(s.id);
       else if (mo && !pos && t >= mo.inizio) {
         const fr = t - mo.inizio, avanti = a.parent === mondo ? 1 : 1;
@@ -1263,6 +1403,20 @@
           if (!mo.fatto) { mo.fatto = true; fumo(pw(0, 0, 0).x, 1.45, pw(0, 0, 0).z + 1.0 * avanti); }
           sx.rotation.set(0.9, 0, -2.2); dx.rotation.set(0.9, 0, 2.2);
           testa.rotation.set(0, Math.sin(k * 9) * 0.35, 0); u.bocca_o.visible = true; u.sorriso.visible = u.linea.visible = false;
+        } else if (mo.tipo === "muscoli") {                              // il capo riceve il caffe' e fa i muscoli
+          sx.rotation.set(0, 0, -1.6); dx.rotation.set(0, 0, 1.6);
+          const fl = Math.abs(Math.sin(k * 5)); sx.rotation.x = -0.6 - fl * 0.8; dx.rotation.x = -0.6 - fl * 0.8;
+          corpo.position.y += 0.03; u.sorriso.visible = true; u.bocca_o.visible = u.linea.visible = false;
+        } else if (mo.tipo === "aura") {                                 // presa in carico: si trasforma con l'aura dorata fiammeggiante
+          if (!u.aura) u.aura = creaAura(a);
+          for (const l of u.sedute) l.visible = false;
+          for (const l of u.gambe) l.visible = true;
+          const tr = Math.sin(k * 40) * 0.015;                            // trema per la potenza
+          corpo.rotation.set(0, 0, 0); corpo.position.set(tr, 0.04 + Math.min(fr, 0.6) * 0.1, 0);
+          sx.rotation.set(0.15, 0, 0.55 + tr * 4); dx.rotation.set(0.15, 0, -0.55 - tr * 4);   // pugni stretti, braccia tese in basso
+          testa.rotation.set(-0.15, 0, 0);
+          u.bocca_o.visible = true; u.sorriso.visible = u.linea.visible = false;
+          animaAura(u.aura, fr);
         } else if (mo.tipo === "brindisi" || mo.tipo === "applauso") {   // commessa finita: in piedi a brindare, il capo applaude
           for (const l of u.sedute) l.visible = false;
           for (const l of u.gambe) l.visible = true;
@@ -1368,7 +1522,6 @@
     if (porta) {                                                          // la porta si apre quando qualcuno ci passa vicino
       let vicino = false; const w = new T.Vector3();
       for (const a of animati) { if (!a.visible || !a.userData.giro) continue; a.getWorldPosition(w); if (Math.hypot(w.x - portaPos.x, w.z - portaPos.z) < 2.2) { vicino = true; break; } }
-      if (!vicino) for (const q of postini) if (q.g && Math.hypot(q.g.position.x - portaPos.x, q.g.position.z - portaPos.z) < 2.2) { vicino = true; break; }
       portaAperta += ((vicino ? 1 : 0) - portaAperta) * Math.min(1, dt * 4);
       porta.rotation.y = portaAperta * 1.45;
     }
@@ -1436,22 +1589,114 @@
       }
       return true;
     });
-    postini = postini.filter(p => {
-      const e = t - p.inizio, pos = lungo(p.punti, e, 1.6);
-      if (pos.fine) { mondo.remove(p.g); const i = marcati.findIndex(q => q.pos === p.pos); if (i >= 0) { marcati[i].e.remove(); marcati.splice(i, 1); } return false; }
-      const u = p.g.userData, o = Math.sin(e * 9);
-      p.g.position.set(pos.x, 0, pos.z); p.pos.set(pos.x, 2.0, pos.z);
-      if (pos.dir) p.g.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
-      else p.g.rotation.y = p.verso;                                       // consegna: guarda l'omino o la porta
-      u.gambe[0].rotation.x = pos.fermo ? 0 : o * 0.5; u.gambe[1].rotation.x = pos.fermo ? 0 : -o * 0.5;
-      u.sx.rotation.set(pos.fermo ? 0.1 : -o * 0.5, 0, 0.12);
-      if (pos.azione === "consegna") { u.dx.rotation.set(1.5, 0, 0); if (!p.data) p.data = e; if (e - p.data > 0.8) p.busta.visible = false; }
-      else u.dx.rotation.set(p.busta.visible ? 1.2 : o * 0.5, 0, -0.12);
-      u.corpo.position.y = pos.fermo ? 0 : Math.abs(Math.cos(e * 9)) * 0.03;
-      for (const oc of u.occhi) oc.scale.y = (e % 3) < 0.12 ? 0.25 : 1.5;
+    if (gioc) {                                                          // il ragazzo della PlayStation
+      const { g, u } = gioc;
+      for (const p of postini) if (!p.aura && t > p.auraT) { p.aura = true; momento(p.id, "aura", 4.5); }   // ricevuto l'ordine: si trasforma
+      postini = postini.filter(p => t < p.fine + 0.5);
+      let giro = postini.find(p => t >= p.inizio && t < p.fine) || (gioc.chat && t < gioc.chat.fine ? gioc.chat : null);
+      if (!giro && !postini.length && pc !== "off") {
+        if (gioc.prossima == null) gioc.prossima = t + 60 + Math.random() * 60;
+        else if (t > gioc.prossima) { const c = chiacchieraGioc(); if (c) { gioc.chat = giro = c; giocLibero = c.fine; } gioc.prossima = t + 120 + Math.random() * 90; }
+      }
+      g.visible = pc !== "off" || pcLuce > 0.5;
+      for (const oc of u.occhi) oc.scale.y = (t % 3) < 0.12 ? 0.25 : 1.5;
       u.sorriso.visible = true; u.bocca_o.visible = u.linea.visible = false;
-      return true;
-    });
+      u.testa.rotation.set(0, 0, 0); u.corpo.rotation.set(0, 0, 0);
+      if (giro) {
+        const e = t - giro.inizio, pos = lungo(giro.punti, e, 1.6), o = Math.sin(e * 9);
+        g.position.set(pos.x, 0, pos.z); gioc.pos.set(pos.x, 2.0, pos.z);
+        if (pos.dir) g.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
+        else if (pos.azione) g.rotation.y = giro.verso;
+        for (const l of u.sedute) l.visible = false;
+        for (const l of u.gambe) l.visible = true;
+        u.gambe[0].rotation.x = pos.fermo ? 0 : o * 0.5; u.gambe[1].rotation.x = pos.fermo ? 0 : -o * 0.5;
+        u.corpo.position.y = pos.fermo ? 0 : Math.abs(Math.cos(e * 9)) * 0.03;
+        gioc.pad.visible = false;
+        const parla = pos.azione === "consegna" || pos.azione === "chiacchiera";
+        if (parla && gioc.inizioParla == null) gioc.inizioParla = t;
+        if (!parla) gioc.inizioParla = null;
+        const dp = parla ? t - gioc.inizioParla : 0;
+        gioc.busta.visible = !giro.frase && (pos.azione === "consegna" ? dp < 0.9 : e < durata(giro.punti.slice(0, 4), 1.6));
+        if (parla && !gioc.busta.visible) {                             // parla gesticolando
+          u.sx.rotation.set(1.2 + Math.sin(t * 8) * 0.6, 0, 0.4); u.dx.rotation.set(1.3 + Math.cos(t * 7) * 0.6, 0, -0.4);
+          u.testa.rotation.z = Math.sin(t * 3) * 0.1;
+        } else {
+          u.sx.rotation.set(pos.fermo ? 0.1 : -o * 0.5, 0, 0.12);
+          u.dx.rotation.set(gioc.busta.visible ? (pos.azione === "consegna" ? 1.5 : 1.2) : (pos.fermo ? 0.1 : o * 0.5), 0, -0.12);
+        }
+        const testo = giro.frase || "✉️ Da Stefano", vis = giro.frase ? pos.azione === "chiacchiera" : true;
+        if (gioc.et.e.textContent !== testo) gioc.et.e.textContent = testo;
+        gioc.et.e.style.visibility = vis && g.visible ? "" : "hidden";
+      } else {                                                           // in poltrona a giocare
+        const [lx, lz] = gioc.casa;
+        g.position.set(lx, 0, lz); g.rotation.y = Math.PI / 2; gioc.pos.set(lx, 2.0, lz);
+        for (const l of u.sedute) l.visible = true;
+        for (const l of u.gambe) l.visible = false;
+        gioc.pad.visible = true; gioc.busta.visible = false; gioc.inizioParla = null;
+        const sc = Math.sin(t * 23) * 0.06, foga = Math.max(0, Math.sin(t * 0.7)) ;   // a volte si agita
+        u.sx.rotation.set(1.15 + sc, 0, 0.35); u.dx.rotation.set(1.15 - sc, 0, -0.35);
+        u.corpo.position.y = Math.abs(Math.sin(t * 6)) * 0.02 * foga;
+        u.corpo.rotation.z = Math.sin(t * 1.3) * 0.12 * foga;            // si piega con la macchinina in curva
+        u.testa.rotation.x = 0.1;
+        gioc.et.e.style.visibility = "hidden";
+      }
+      if (segr && !giro) segr.giocVicino = false;
+      if (segr && giro) { const d = Math.hypot(g.position.x - segr.casa[0], g.position.z - segr.casa[1]); segr.giocVicino = d < 2.2; }
+      gioc.scr.material.color.setHSL((t * 0.15) % 1, 0.7, 0.55 + Math.sin(t * 9) * 0.08);   // il gioco sullo schermo
+    }
+    if (segr) {                                                          // la segretaria
+      const { g, u } = segr;
+      segrCoda = segrCoda.filter(q => t < q.fine + 0.5);
+      let q = segrCoda.find(q => t >= q.inizio && t < q.fine);
+      if (!q && !segrCoda.length && pc !== "off") {                        // ogni tanto porta il caffe' al capo
+        if (segr.prossimoCaffe == null) segr.prossimoCaffe = t + 150 + Math.random() * 90;
+        else if (t > segr.prossimoCaffe) { incarico("caffe", null, "☕ Il suo caffè, capo!", null); segr.prossimoCaffe = t + 200 + Math.random() * 120; q = segrCoda[0]; }
+      }
+      for (const oc of u.occhi) oc.scale.y = (t % 3.2) < 0.12 ? 0.25 : 1.5;
+      u.testa.rotation.set(0, 0, 0); u.corpo.rotation.set(0, 0, 0); u.corpo.position.y = 0;
+      segr.cart.visible = segr.limetta.visible = segr.tazza.visible = false; u.telefono.visible = false; segr.corn.visible = true;
+      let testo = "", vis = false;
+      if (q && t >= q.inizio) {
+        const e = t - q.inizio, pos = lungo(q.punti, e, q.vel), o = Math.sin(e * (q.vel > 2 ? 14 : 9));
+        g.position.set(pos.x, 0, pos.z); segr.pos.set(pos.x, 2.0, pos.z);
+        if (pos.dir) g.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]); else if (pos.azione) g.rotation.y = q.verso; else g.rotation.y = Math.PI;
+        for (const l of u.sedute) l.visible = false;
+        for (const l of u.gambe) l.visible = true;
+        u.gambe[0].rotation.x = pos.fermo ? 0 : o * 0.45; u.gambe[1].rotation.x = pos.fermo ? 0 : -o * 0.45;
+        u.corpo.position.y = pos.fermo ? 0 : Math.abs(Math.cos(e * 9)) * 0.03;
+        u.corpo.rotation.z = pos.fermo ? 0 : Math.sin(e * 9) * 0.06;       // cammina ancheggiando
+        const arrivata = pos.azione === q.tipo, dopo = e > durata(q.punti.slice(0, 5), q.vel);
+        const porta = q.tipo === "caffe" ? !dopo && !(arrivata && e - durata(q.punti.slice(0, 3), q.vel) > 0.9) : !dopo && !arrivata;
+        u.sx.rotation.set(pos.fermo ? 0.1 : -o * 0.4, 0, 0.12); u.dx.rotation.set(pos.fermo ? 0.1 : o * 0.4, 0, -0.12);
+        if (q.tipo === "allarme") { u.telefono.visible = true; u.dx.rotation.set(0.15, 0, 3.0); segr.corn.visible = false; testo = q.testo; vis = true; }
+        else if (q.tipo === "caffe") { segr.tazza.visible = porta; if (porta) u.sx.rotation.set(1.3, 0, 0.1); testo = q.testo; vis = arrivata; if (arrivata && !q.muscoli) { q.muscoli = true; momento("capo:r:capo", "muscoli", 3.5); } }
+        else {
+          segr.cart.visible = porta || (arrivata && t % 1 < 2);
+          segr.cart.material = m(q.colore || "#3b82f6");
+          if (porta) u.dx.rotation.set(1.2, 0, -0.12);
+          if (arrivata) {
+            const da = e - durata(q.punti.slice(0, 4), q.vel);
+            if (q.tipo === "ko") { u.dx.rotation.set(da < 0.5 ? 2.3 - da * 3 : 0.6, 0, -0.12); segr.cart.visible = da < 0.6; testo = q.testo + " 😤"; }
+            else { u.dx.rotation.set(1.5, 0, -0.12); segr.cart.visible = da < 1.2; testo = q.testo; }
+            vis = true;
+          }
+          if (dopo && q.tipo === "ko") u.testa.rotation.y = Math.sin(t * 9) * 0.35;   // torna via scuotendo la testa
+        }
+      } else {                                                           // alla scrivania: unghie, telefono, tastiera
+        const [x0, z0] = segr.casa;
+        g.position.set(x0, 0, z0); g.rotation.y = Math.PI; segr.pos.set(x0, 2.0, z0);
+        for (const l of u.sedute) l.visible = true;
+        for (const l of u.gambe) l.visible = false;
+        const fase = Math.floor(t / 9) % 3;
+        if (segr.giocVicino) { u.sx.rotation.set(1.6, 0, 0.1); u.dx.rotation.set(0.6, 0, -0.1); testo = "🤫 Shhh!"; vis = true; }
+        else if (fase === 0) { segr.limetta.visible = true; u.dx.rotation.set(1.3 + Math.sin(t * 14) * 0.12, 0, -0.5); u.sx.rotation.set(1.2, 0, 0.45); u.testa.rotation.x = 0.25; }
+        else if (fase === 1) { u.telefono.visible = true; segr.corn.visible = false; u.dx.rotation.set(0.15, 0, 3.0); u.sx.rotation.set(1.1, 0, 0.3); testo = "📞 Ufficio del capo, attenda…"; vis = (t % 9) < 4; u.testa.rotation.z = 0.15; }
+        else { const b = Math.sin(t * 26) * 0.1; u.sx.rotation.set(1.25 + b, 0, 0.2); u.dx.rotation.set(1.25 - b, 0, -0.2); }
+      }
+      if (segr.et.e.textContent !== testo) segr.et.e.textContent = testo;
+      segr.et.e.style.visibility = vis && testo && g.visible ? "" : "hidden";
+      g.visible = pc !== "off" || pcLuce > 0.5;
+    }
     for (const tx of texCodice) tx.offset.y = (tx.offset.y - 0.004) % 1;     // il codice scorre
     for (const { mesh, s: s0 } of schermi) {
       const s = spenti.has(s0.id) ? { ...s0, stato: "spento" } : s0;     // computer spento da chi va a casa
@@ -1517,11 +1762,13 @@
       for (const a of lav) a.userData.prossimoT = 0;
     },
     provaSgrida() { if (!ispettore) return; const i = ispettore.punti.findIndex(p => p[3] === "sgrida"); const d = durata(ispettore.punti.slice(0, i + 1), 1.3) - (ispettore.punti[i][2] || 0) - 0.5; ispettore.anticipo = ((d - t) % ispettore.durata + ispettore.durata) % ispettore.durata; },
+    provaAura(n) { const d = animati.filter(a => a.userData.caffe)[n || 0]; if (d) { momento(d.userData.s.id, "aura", 4.5); const w = new T.Vector3(); d.getWorldPosition(w); return [w.x, w.z]; } },
+    provaSegretaria(tipo, n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); incarico(tipo || "ko", tipo === "allarme" || tipo === "caffe" ? null : ids[n || 0], tipo === "cartellina" ? "📁 148_F2X_OP20 V8.6" : tipo === "allarme" ? "🚨 Download su PLC!" : tipo === "caffe" ? "☕ Il suo caffè, capo!" : "❌ 3 errori", tipo === "cartellina" ? "#3b82f6" : "#e03131"); return segr && segr.casa; },
     provaPc(stato) { impostaPc(stato, false); },
     provaChiusura(n) { const ids = [...ultimeSessioni.keys()].filter(id => bersagli.has(id) && !chiusi.has(id)); const id = ids[ids.length - 1 - (n || 0)]; if (!id) return; chiudi(id, ultimeSessioni.get(id)); if (ultimiDati) costruisci(...ultimiDati); },
     provaCantiere(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); arrivoFatto.delete(ids[n || 0]); cantieri.set(ids[n || 0], performance.now() / 1000); const uf = [...bersagli.keys()].filter(k => k.startsWith("capo:") && k !== "capo:r:capo"); if (uf.length) { arrivoFatto.delete(uf[uf.length - 1]); cantieri.set(uf[uf.length - 1], performance.now() / 1000); } if (ultimiDati) costruisci(...ultimiDati); },
     provaPostino(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); avviaPostino(ids[n || 0]); },
-    get effetti() { return effetti.length; }, get ispettore() { return ispettore && ispettore.o.position; }, get dati() { return ultimiDati; }, get scrivanie() { return [...bersagli.keys()].filter(k => !k.startsWith("capo:")); }, get postini() { return postini.map(p => [p.id, p.g && p.g.position.x, p.g && p.g.position.z, !!(p.g && p.g.parent)]); },
+    get effetti() { return effetti.length; }, get ispettore() { return ispettore && ispettore.o.position; }, get dati() { return ultimiDati; }, get scrivanie() { return [...bersagli.keys()].filter(k => !k.startsWith("capo:")); }, get postini() { return postini.map(p => [p.id, p.inizio, p.fine]); }, get giocatore() { return gioc && gioc.g.position; },
     caffeSubito() { for (const a of animati) a.userData.prossimoT = 0; },   // per le prove
   };
 })();
