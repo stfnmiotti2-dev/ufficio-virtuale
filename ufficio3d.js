@@ -263,6 +263,149 @@
   // ruolo: "capo" (vestito da re), "resp" (giacca e cravatta / tailleur con gonna), "dip" (casual, gonna per le donne)
   const COMPLETI = ["#2f3b55", "#3a3f47", "#46506a", "#5b4a3f"];
   const JEANS = ["#4a6fa5", "#5a7fb5", "#3d5a8a"];
+
+  // ---------- costumi da Comic-Con (chi lavora si traveste dietro il paravento) ----------
+  // personaggi generici o solo "ispirati": niente nomi, niente loghi originali
+  const COSTUMI = [
+    { nome: "eroe col mantello", c: "#2f5fd0", maniche: "#2f5fd0", guanti: "#c62828", gambe: "#2f5fd0", mantello: "#c62828", cintura: "#f2c230" },
+    { nome: "mago", c: "#5b3a9e", maniche: "#5b3a9e", guanti: null, gambe: "#5b3a9e" },
+    { nome: "astronauta", c: "#eef1f5", maniche: "#eef1f5", guanti: "#b9c0cc", gambe: "#eef1f5" },
+    { nome: "ninja", c: "#1b1b20", maniche: "#1b1b20", guanti: "#1b1b20", gambe: "#1b1b20", cintura: "#c62828" },
+    { nome: "robot", c: "#9aa4b2", maniche: "#9aa4b2", guanti: "#6b7482", gambe: "#9aa4b2" },
+    { nome: "pirata", c: "#f4f1e8", maniche: "#f4f1e8", guanti: null, gambe: "#2b2b33", cintura: "#7a4a20" },
+    { nome: "cavaliere", c: "#c4cad3", maniche: "#c4cad3", guanti: "#8d95a1", gambe: "#c4cad3", metallo: true },
+    { nome: "eroe ragnatela", c: "#d0202a", maniche: "#d0202a", guanti: "#d0202a", gambe: "#2346b8", fianchi: "#2346b8" },
+    { nome: "armatura rosso-oro", c: "#b3121c", maniche: "#b3121c", guanti: "#e0b23a", gambe: "#b3121c", metallo: true },
+    { nome: "cavaliere oscuro", c: "#33363d", maniche: "#33363d", guanti: "#1b1b20", gambe: "#33363d", mantello: "#15151a", cintura: "#e0b23a" },
+    { nome: "velocista", c: "#d0202a", maniche: "#d0202a", guanti: "#d0202a", gambe: "#d0202a", cintura: "#f2c230" },
+  ];
+  let costumeScelto = null;                                              // solo per le prove
+  function vestiCostume(h, corpo, testa, sx, dx, gambe, pelle, sedute) {
+    const k = COSTUMI[costumeScelto != null ? costumeScelto : (h >>> 3) % COSTUMI.length], ex = k.metallo ? { metalness: 0.55, roughness: 0.3 } : undefined;
+    const gC = new T.Group(), gT = new T.Group(), gS = new T.Group(), gD = new T.Group();
+    corpo.add(gC); testa.add(gT); sx.add(gS); dx.add(gD);
+    const pezzi = [gC, gT, gS, gD];
+    palla(0.272, k.c, 0, 0.78, 0, gC, 1, 1.32, 0.9, ex);                       // tuta sul busto
+    for (const [g, lato] of [[gS, -1], [gD, 1]]) {
+      const c = new T.Mesh(new T.CylinderGeometry(0.078, 0.088, 0.37, 12), m(k.maniche, ex)); c.position.y = -0.18; g.add(c);
+      if (k.guanti) palla(0.095, k.guanti, 0, -0.4, 0, g, 1, 1, 1, ex);
+    }
+    for (const sd of sedute) { const q = palla(0.118, k.gambe, 0, 0, 0, sd, 1, 1, 1, ex); pezzi.push(q); }   // gambe da seduto
+    for (const a of gambe) {                                                   // gambe in piedi + stivali
+      const g = new T.Group(); a.add(g); pezzi.push(g);
+      const c = new T.Mesh(new T.CylinderGeometry(0.085, 0.08, 0.43, 10), m(k.gambe, ex)); c.position.y = -0.24; g.add(c);
+      palla(0.1, k.guanti || "#2b2b33", 0, -0.46, -0.04, g, 1, 0.65, 1.45, ex);
+    }
+    if (k.cintura) tondo(0.52, 0.07, 0.42, k.cintura, 0, 0.52, 0, gC, 0.03);
+    const calotta = (c, fino, e) => {                                          // cappuccio o casco aderente
+      const q = new T.Mesh(new T.SphereGeometry(0.292, 24, 16, 0, Math.PI * 2, 0, Math.PI * fino), m(c, e)); q.position.y = 0.0; q.scale.set(1, 1.06, 1); gT.add(q); return q;
+    };
+    const lenti = (c, w, y) => { for (const sx_ of [-0.1, 0.1]) palla(0.06 * w, c, sx_, y, -0.27, gT, 1.3, 0.9, 0.45, { emissive: c, emissiveIntensity: 0.25 }); };
+    const mantello = c => {
+      const mt = new T.Mesh(new T.CylinderGeometry(0.28, 0.45, 1.0, 20, 1, true, -Math.PI * 0.42, Math.PI * 0.84), m(c, { side: T.DoubleSide }));
+      mt.position.set(0, 0.6, 0.03); mt.castShadow = true; gC.add(mt);
+    };
+    switch (k.nome) {
+      case "eroe col mantello":
+        mantello(k.mantello); tondo(0.3, 0.07, 0.06, "#1b1b20", 0, 0.0, -0.25, gT, 0.03);   // mascherina sugli occhi
+        tondo(0.16, 0.16, 0.03, "#f2c230", 0, 0.82, -0.235, gC, 0.03);                        // scudo sul petto (forma semplice)
+        palla(0.04, "#c62828", 0, 0.9, -0.255, gC, 1, 1, 0.4);
+        break;
+      case "mago": {
+        const veste = new T.Mesh(new T.CylinderGeometry(0.24, 0.42, 0.8, 18), m(k.c)); veste.position.y = 0.42; gC.add(veste);
+        const cap = new T.Mesh(new T.ConeGeometry(0.3, 0.7, 18), m(k.c)); cap.position.y = 0.48; cap.rotation.z = 0.15; gT.add(cap);
+        tondo(0.8, 0.04, 0.8, k.c, 0, 0.16, 0, gT, 0.02);
+        for (const [x, y, z] of [[0.1, 0.45, -0.2], [-0.12, 0.6, -0.14], [0.05, 0.75, -0.08]]) palla(0.035, "#f2c230", x, y, z, gT, 1, 1, 1, { emissive: "#f2c230", emissiveIntensity: 0.5 });
+        palla(0.2, "#f4f4f2", 0, -0.2, -0.12, gT, 1, 1.4, 0.9);                                // barbona bianca
+        tondo(0.04, 0.6, 0.04, "#7a4a20", 0, -0.75, -0.05, gD, 0.02);                          // bacchetta
+        palla(0.05, "#9fe8ff", 0, -0.12, -0.05, gD, 1, 1, 1, { emissive: "#9fe8ff", emissiveIntensity: 0.8 });
+        break; }
+      case "astronauta":
+        palla(0.36, "#cfe8ff", 0, 0.0, 0, gT, 1, 1, 1, { transparent: true, opacity: 0.32, roughness: 0.05, metalness: 0.2 });
+        { const anello = new T.Mesh(new T.TorusGeometry(0.27, 0.04, 8, 24), m("#b9c0cc")); anello.rotation.x = Math.PI / 2; anello.position.y = -0.28; gT.add(anello); }
+        tondo(0.38, 0.46, 0.2, "#d7dce4", 0, 0.58, 0.26, gC, 0.06);                            // zaino
+        for (const [x, c] of [[-0.07, "#e0303a"], [0, "#f2c230"], [0.07, "#2f9e5a"]]) palla(0.025, c, x, 0.85, -0.25, gC, 1, 1, 0.5, { emissive: c, emissiveIntensity: 0.6 });
+        break;
+      case "ninja":
+        calotta(k.c, 1); palla(0.2, k.c, 0, -0.12, -0.08, gT, 1.25, 0.8, 1.2);
+        tondo(0.4, 0.1, 0.04, pelle, 0, -0.02, -0.268, gT, 0.03);                              // fessura per gli occhi
+        lenti("#1b1b20", 0.6, 0.03);
+        { const fa = new T.Mesh(new T.TorusGeometry(0.29, 0.03, 6, 24), m(k.cintura)); fa.rotation.x = Math.PI / 2; fa.position.y = 0.14; gT.add(fa); }   // fascia rossa in testa
+        tondo(0.06, 0.25, 0.03, k.cintura, 0.05, -0.05, 0.3, gT, 0.015);
+        for (const r of [0.5, -0.5]) { const sp = tondo(0.04, 0.8, 0.02, "#c9d1dc", 0, 0.55, 0.26, gC, 0.01, { metalness: 0.7, roughness: 0.25 }); sp.rotation.z = r; }   // spade incrociate sulla schiena
+        break;
+      case "robot":
+        tondo(0.62, 0.56, 0.6, k.c, 0, -0.28, 0, gT, 0.08, { metalness: 0.5, roughness: 0.35 });
+        tondo(0.44, 0.16, 0.03, "#1b1b20", 0, -0.04, -0.3, gT, 0.03);
+        lenti("#40e0ff", 0.8, 0.04);
+        tondo(0.03, 0.22, 0.03, "#6b7482", 0, 0.28, 0, gT, 0.01); palla(0.05, "#e0303a", 0, 0.52, 0, gT, 1, 1, 1, { emissive: "#e0303a", emissiveIntensity: 0.8 });
+        tondo(0.26, 0.2, 0.03, "#3c4658", 0, 0.7, -0.24, gC, 0.03);
+        for (const [x, c] of [[-0.07, "#40e0ff"], [0, "#f2c230"], [0.07, "#2f9e5a"]]) palla(0.025, c, x, 0.8, -0.265, gC, 1, 1, 0.5, { emissive: c, emissiveIntensity: 0.7 });
+        break;
+      case "pirata":
+        for (const y of [0.6, 0.72, 0.84, 0.96]) { const r = new T.Mesh(new T.TorusGeometry(0.245, 0.022, 5, 22), m("#c62828")); r.rotation.x = Math.PI / 2; r.scale.set(1, 0.85, 1); r.position.y = y; gC.add(r); }
+        { const cap = new T.Mesh(new T.CylinderGeometry(0.46, 0.46, 0.08, 3), m("#1b1b20")); cap.position.y = 0.24; cap.rotation.y = Math.PI; gT.add(cap);
+          palla(0.25, "#1b1b20", 0, 0.28, 0, gT, 1, 0.75, 1); }
+        palla(0.05, "#f4f4f2", 0, 0.36, -0.24, gT, 1, 1, 0.4);                                  // teschietto
+        palla(0.05, "#1b1b20", 0.1, 0.03, -0.27, gT, 1.3, 1.1, 0.4);                            // benda sull'occhio
+        { const fl = new T.Mesh(new T.TorusGeometry(0.27, 0.01, 4, 20, Math.PI), m("#1b1b20")); fl.rotation.set(0, 0, 0.6); fl.position.set(0, 0.0, -0.05); gT.add(fl); }
+        tondo(0.05, 0.6, 0.02, "#c9d1dc", 0, -0.95, -0.05, gD, 0.01, { metalness: 0.7, roughness: 0.25 });   // sciabola
+        tondo(0.16, 0.05, 0.08, "#e0b23a", 0, -0.48, -0.05, gD, 0.02);
+        break;
+      case "cavaliere":
+        { const el = new T.Mesh(new T.CylinderGeometry(0.3, 0.3, 0.6, 18), m(k.c, ex)); el.position.y = 0.03; gT.add(el);
+          palla(0.3, k.c, 0, 0.33, 0, gT, 1, 0.5, 1, ex); }
+        box(0.4, 0.04, 0.03, "#1b1b20", 0, 0.0, -0.3, gT);                                      // fessura della visiera
+        for (let i = 0; i < 4; i++) palla(0.06, "#c62828", 0, 0.48 + i * 0.04, 0.05 + i * 0.07, gT);   // pennacchio
+        { const sc = new T.Group(); sc.position.set(-0.06, -0.38, -0.12); sc.rotation.y = 0.3; gS.add(sc);
+          tondo(0.5, 0.6, 0.06, "#2346b8", 0, -0.3, 0, sc, 0.06); box(0.08, 0.5, 0.02, "#f2c230", 0, -0.25, -0.035, sc); box(0.36, 0.08, 0.02, "#f2c230", 0, -0.04, -0.035, sc); }
+        tondo(0.05, 0.85, 0.03, "#dfe4ea", 0, -1.15, -0.05, gD, 0.01, { metalness: 0.7, roughness: 0.25 });
+        tondo(0.24, 0.05, 0.06, "#7a4a20", 0, -0.5, -0.05, gD, 0.02);
+        break;
+      case "eroe ragnatela":
+        calotta(k.c, 1); palla(0.2, k.c, 0, -0.12, -0.08, gT, 1.25, 0.8, 1.2);
+        for (const sx_ of [-0.11, 0.11]) { const l = palla(0.075, "#ffffff", sx_, 0.04, -0.27, gT, 1.1, 1.4, 0.4); l.rotation.z = sx_ < 0 ? 0.5 : -0.5; }
+        for (let i = 0; i < 4; i++) { const r = new T.Mesh(new T.TorusGeometry(0.1 + i * 0.07, 0.006, 4, 20), m("#1b1b20")); r.position.set(0, 0.02, -0.12 + i * 0.02); r.scale.set(1, 1.05, 1); gT.add(r); }
+        for (let i = 0; i < 6; i++) { const ln = box(0.006, 0.42, 0.006, "#1b1b20", 0, -0.21, 0, gT); ln.position.set(0, 0.02, -0.23); ln.rotation.set(0, 0, i / 6 * Math.PI); }
+        for (const lx of [-0.24, 0.24]) palla(0.1, k.fianchi, lx, 0.72, 0, gC, 0.5, 2.6, 1.4);   // fianchi blu
+        palla(0.06, "#1b1b20", 0, 0.85, -0.25, gC, 1, 1.3, 0.4);                                // un ragnetto stilizzato
+        for (const r of [0.6, -0.6, 1.2, -1.2]) { const z = box(0.012, 0.13, 0.012, "#1b1b20", 0, 0.78, -0.25, gC); z.rotation.z = r; }
+        break;
+      case "armatura rosso-oro":
+        calotta(k.c, 1, ex); palla(0.2, k.c, 0, -0.12, -0.08, gT, 1.25, 0.8, 1.2, ex);
+        palla(0.2, "#e0b23a", 0, -0.04, -0.2, gT, 1, 1.2, 0.55, { metalness: 0.7, roughness: 0.25 });   // maschera dorata
+        for (const sx_ of [-0.08, 0.08]) box(0.1, 0.03, 0.02, "#bff4ff", sx_, 0.03, -0.31, gT, { emissive: "#bff4ff", emissiveIntensity: 1 });
+        { const c = new T.Mesh(new T.CylinderGeometry(0.07, 0.07, 0.03, 18), m("#bff4ff", { emissive: "#7fe7ff", emissiveIntensity: 1.4 })); c.rotation.x = Math.PI / 2; c.position.set(0, 0.86, -0.245); gC.add(c); }
+        for (const g of [gS, gD]) palla(0.06, "#bff4ff", 0, -0.45, 0, g, 1, 0.4, 1, { emissive: "#7fe7ff", emissiveIntensity: 1 });
+        break;
+      case "cavaliere oscuro":
+        mantello(k.mantello);
+        calotta(k.c, 0.52);
+        for (const sx_ of [-0.15, 0.15]) { const o = new T.Mesh(new T.ConeGeometry(0.06, 0.2, 8), m(k.c)); o.position.set(sx_, 0.33, 0); gT.add(o); }   // orecchie appuntite
+        lenti("#ffffff", 0.6, 0.04);
+        palla(0.09, "#e0b23a", 0, 0.86, -0.235, gC, 1.6, 0.8, 0.35);                            // ovale dorato sul petto, senza simbolo
+        break;
+      case "velocista":
+        calotta(k.c, 0.52);
+        for (const sx_ of [-0.29, 0.29]) { const a = new T.Mesh(new T.ConeGeometry(0.05, 0.18, 6), m("#f2c230", { metalness: 0.5 })); a.position.set(sx_, 0.12, 0); a.rotation.z = sx_ < 0 ? 0.6 : -0.6; gT.add(a); }   // alette dorate
+        lenti("#ffffff", 0.55, 0.04);
+        palla(0.1, "#ffffff", 0, 0.84, -0.23, gC, 1, 1, 0.3);
+        { const f = new T.Group(); f.position.set(0, 0.84, -0.26); gC.add(f);                      // fulmine giallo stilizzato
+          const a = box(0.03, 0.1, 0.02, "#f2c230", 0.02, 0.0, 0, f); a.rotation.z = -0.5; const b = box(0.03, 0.1, 0.02, "#f2c230", -0.02, -0.08, 0, f); b.rotation.z = -0.5; box(0.06, 0.025, 0.02, "#f2c230", 0, -0.02, 0, f); }
+        break;
+    }
+    const copreTesta = ["ninja", "robot", "eroe ragnatela", "armatura rosso-oro", "cavaliere"].includes(k.nome) ? "tutta"
+      : ["cavaliere oscuro", "velocista"].includes(k.nome);
+    for (const q of pezzi) q.visible = false;
+    return { pezzi, nome: k.nome, copreTesta, cappello: ["mago", "pirata"].includes(k.nome) };
+  }
+  const vestitiMap = new Map();                                          // id -> true se e' in costume (resta tra le ricostruzioni)
+  function vestiti(u, on) {                                             // mette o toglie il costume
+    const c = u.costume; if (!c) return;
+    u.inCostume = on; vestitiMap.set(u.s.id, on);
+    for (const q of c.pezzi) q.visible = on;
+    for (const q of c.sotto) q.visible = !on;
+  }
   function omino(s, padre, x, z, ruolo) {
     const h = U.hash(s.id), capo = ruolo === "capo", resp = ruolo === "resp";
     const postino = ruolo === "postino", operaio = ruolo === "operaio", ctrl = ruolo === "controllore";
@@ -336,6 +479,7 @@
     });
     const testa = new T.Group(); testa.position.set(0, 1.33, 0); corpo.add(testa);
     palla(0.27, pelle, 0, 0, 0, testa, 1, 1.05, 1);                         // testa
+    const nCap0 = testa.children.length;
     // capelli: calotta sopra e dietro, con un ciuffo diverso per ognuno
     const cal = new T.Mesh(new T.SphereGeometry(0.29, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.42), m(capelli));
     cal.rotation.x = 0.35; cal.position.y = 0.02; cal.castShadow = true; testa.add(cal);
@@ -363,6 +507,7 @@
     if (ciuffo === 0) palla(0.11, capelli, -0.1, 0.2, -0.17, testa, 1.3, 0.7, 0.8);
     if (ciuffo === 1) { palla(0.09, capelli, -0.24, 0.0, 0.02, testa, 0.6, 1.4, 1); palla(0.09, capelli, 0.24, 0.0, 0.02, testa, 0.6, 1.4, 1); }
     if (ciuffo === 2) palla(0.14, capelli, 0, 0.26, 0.05, testa, 1, 0.6, 1);
+    const nCap1 = testa.children.length;
     // faccia (davanti = -z)
     const occhi = [palla(0.035, "#2b2b33", -0.09, 0.03, -0.25, testa, 1, 1.5, 0.6), palla(0.035, "#2b2b33", 0.09, 0.03, -0.25, testa, 1, 1.5, 0.6)];
     for (const o of occhi) o.castShadow = false;
@@ -405,6 +550,7 @@
         const r = new T.Mesh(new T.TorusGeometry(0.24, 0.012, 5, 22), m("#d96a12")); r.rotation.x = Math.PI / 2; r.scale.set(1, 0.8, 1); r.position.y = 0.62 + i * 0.1; corpo.add(r);
       }
     }
+    const nPrimaOcchiali = testa.children.length;
     if (occhiali) {                                                      // occhiali rettangolari
       for (const sx of [-0.095, 0.095]) {
         const l = new T.Mesh(new T.TorusGeometry(0.065, 0.013, 6, 4), m(occhiali)); l.rotation.z = Math.PI / 4; l.scale.set(1.25, 0.85, 1);
@@ -432,6 +578,10 @@
       return b;
     };
     const sx = braccio(-0.31), dx = braccio(0.31);
+    const pezziOcchiali = testa.children.slice(nPrimaOcchiali), pezziCapelli = testa.children.slice(nCap0, nCap1), pezziTesta = testa.children.slice();
+    const costume = ruolo === "dip" ? vestiCostume(h, corpo, testa, sx, dx, gambe, pelle, sedute) : null;
+    if (costume) costume.sotto = (gonna ? [gonna] : []).concat(costume.copreTesta === "tutta" ? pezziTesta.filter(q => q !== testa.children[0])
+      : costume.copreTesta ? [...pezziCapelli, ...pezziOcchiali, ...occhi] : costume.cappello ? pezziCapelli.slice(1) : []);
     if (operaio) {                                                       // martello nella destra, scalpello nella sinistra
       tondo(0.08, 0.62, 0.08, "#b0703a", 0, -1.0, 0, dx, 0.03);                         // martellone: manico lungo
       tondo(0.22, 0.22, 0.5, "#3a3f4a", 0, -1.14, -0.08, dx, 0.05, { metalness: 0.7, roughness: 0.3 });   // testa enorme
@@ -450,7 +600,7 @@
     }
     const tazza = tondo(0.1, 0.12, 0.1, "#ffffff", 0, -0.55, -0.06, dx, 0.04); tazza.visible = false;           // tazza del caffe'
     g.userData = { corpo, testa, sx, dx, s, fase: (h % 97) / 10, occhi, sorriso, bocca_o, linea, stato: null, salto: 0,
-      sedute, gambe, telefono, tazza, gonna, giacca, casa: [x, z], giro: null, prossimo: 8 + (h % 40) };
+      sedute, gambe, telefono, tazza, gonna, giacca, casa: [x, z], costume, pezziOcchiali, gruppoOrig: [cal, ...(gonna ? [gonna] : [])], giro: null, prossimo: 8 + (h % 40) };
     return g;
   }
   function etichetta(cls, testo, pos, titolo) {
@@ -1051,6 +1201,23 @@
     return [[casa[0], casa[1], 0.7], [porta, casa[1], 0], [porta, fuori, 0], [xa, c, 0], [xb, c, 1.5, "guarda"],
             [xa, c, 0], [porta, fuori, 0], [porta, casa[1], 0], [casa[0], casa[1], 0.4, "siede"]];
   }
+  function giroCambio(u) {                                            // dietro il paravento accanto alla sedia, e ritorno
+    const [x, z] = u.casa, c = u.corridoio, px = x - 0.8;
+    return [[x, z, 0.5], [x, c, 0], [px, c - 0.05, 2.6, "cambio"], [x, c, 0], [x, z, 0.3, "siede"]];
+  }
+  function paravento(u) {                                              // paravento a tre ante con i vestiti buttati sopra
+    if (u.paravento) return u.paravento;
+    const g = new T.Group(); g.position.set(u.casa[0] - 0.8, 0, u.corridoio + 0.45); mondo.add(g);
+    [[-0.4, 0.45], [0, 0], [0.4, -0.45]].forEach(([x, r], i) => {
+      const a = new T.Group(); a.position.set(x, 0, i === 1 ? 0 : -0.08); a.rotation.y = r; g.add(a);
+      tondo(0.4, 1.75, 0.04, ["#f3e3c3", "#e9d3a8", "#f3e3c3"][i], 0, 0.12, 0, a, 0.015);
+      for (const sx of [-0.2, 0.2]) tondo(0.04, 1.95, 0.05, "#7a4a20", sx, 0, 0, a, 0.015);
+      for (const y of [0.1, 1.85]) tondo(0.42, 0.04, 0.05, "#7a4a20", 0, y, 0, a, 0.015);
+      palla(0.06, "#e07a8a", 0, 1.1, -0.03, a, 1.6, 1, 0.3);              // fiorellino dipinto
+    });
+    g.userData.panni = [["#1f1f24", 0.34, 0.2], ["#4a6fa5", 0.22, 0.34], ["#f28c28", 0.1, 0.1]].map(([c, w, hh]) => tondo(w, hh, 0.05, c, 0, -hh / 2, 0, g, 0.02));
+    g.visible = false; u.paravento = g; return g;
+  }
   function giroCaffe(u) {                                            // dalla sedia al caffe' e ritorno, passando dietro le sedie
     const [x, z] = u.casa, c = u.corridoio, [mx, mz] = u.caffe;
     return [[x, z, 0.7], [x, c, 0], [mx - 0.7, c, 0], [mx - 0.7, mz, 0], [mx, mz, 4.5, "caffe"], [mx - 0.7, mz, 0],
@@ -1106,6 +1273,11 @@
         if (usciti.has(s.id)) { a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); continue; }
         if (!(u.giro && u.giro.trasloco) && t > s.chiude + 0.8) u.giro = { punti: giroUscita(u), inizio: t, uscita: true, trasloco: true };
       }
+      if (u.costume && s.chiude == null) {                                // chi lavora si traveste da Comic-Con, chi finisce torna con la polo
+        const vuole = s.stato === "lavora";
+        if (u.inCostume == null) vestiti(u, vestitiMap.has(s.id) ? vestitiMap.get(s.id) : vuole);
+        if (!u.giro && vuole !== u.inCostume && !pcFuori.has(s.id)) { u.giro = { punti: giroCambio(u), inizio: t, cambio: vuole }; u.cambioT = null; }
+      }
       const vaCaffe = u.caffe && s.stato === "lavora" && s.chiude == null, vaBussare = u.porta && s.stato === "aspetta";
       if (!u.giro && (vaCaffe || vaBussare)) {
         if (u.prossimoT == null) u.prossimoT = t + u.prossimo;
@@ -1131,13 +1303,14 @@
       }
       let pos = null;
       if (u.giro) {
-        pos = lungo(u.giro.punti, t - u.giro.inizio, u.giro.uscita || u.giro.arrivo || u.giro.pc ? 2.8 : 1.1);
+        pos = lungo(u.giro.punti, t - u.giro.inizio, u.giro.uscita || u.giro.arrivo || u.giro.pc ? 2.8 : u.giro.cambio != null ? 1.7 : 1.1);
         if (pos.fine) {
           if (u.giro.pc && u.giro.uscita) { pcFuori.add(s.id); a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); u.giro = null; continue; }
           if (u.giro.pc && u.giro.entra) spenti.delete(s.id);              // seduto: riaccende il computer
           if (u.giro.trasloco && chiusi.has(s.id) && chiusi.get(s.id).smonta == null) chiusi.get(s.id).smonta = t;   // e' uscito: tocca agli operai
           if (u.giro.uscita) { usciti.add(s.id); a.visible = false; if (u.etichettaPos) nascondi(u.etichettaPos, true); u.giro = null; continue; }
           if (u.giro.arrivo) arrivi.delete(u.idArrivo);
+          if (u.giro.cambio != null) { if (u.inCostume !== u.giro.cambio) vestiti(u, u.giro.cambio); if (u.paravento) u.paravento.visible = false; }
           u.giro = null; u.prossimoT = t + 50 + (U.hash(s.id + t) % 40); pos = null;
         }
         else if (u.telefonata && pos) pos.azione = pos.azione || null;
@@ -1158,6 +1331,22 @@
         else a.rotation.y = Math.PI;
         if (pos.fermo && u.giro && t - u.giro.inizio < 0.7) inPiedi = true;   // si alza
       } else { a.position.x = u.casa[0]; a.position.z = u.casa[1]; a.rotation.y = Math.PI; }
+      if (u.giro && u.giro.cambio != null) {
+        const pv = paravento(u), e0 = t - u.giro.inizio;
+        pv.visible = true; pv.scale.setScalar(Math.min(1, e0 / 0.35));    // spunta fuori con un pop
+        if (pos && pos.azione === "cambio") {
+          if (u.cambioT == null) u.cambioT = t;
+          const f = (t - u.cambioT) / 2.6;
+          if (f > 0.45 && u.inCostume !== u.giro.cambio) vestiti(u, u.giro.cambio);
+          corpo.position.y += Math.abs(Math.sin(k * 10)) * 0.06;
+          pv.userData.panni.forEach((q, j) => {                           // i vestiti volano sopra il paravento e ci restano appesi
+            const tj = Math.min(1, Math.max(0, f * 2.2 - j * 0.35));
+            q.visible = tj > 0;
+            q.position.set((j - 1) * 0.36 + (1 - tj) * 0.1, 1.15 + Math.sin(tj * Math.PI) * 0.75 + tj * 0.8 - q.scale.y * 0, -0.45 + tj * 0.45);
+            q.rotation.set(0, 0, (1 - tj) * 6);
+          });
+        } else if (u.cambioT == null) pv.userData.panni.forEach(q => q.visible = false);
+      }
       for (const l of u.sedute) l.visible = !inPiedi;
       for (const l of u.gambe) { l.visible = inPiedi; l.rotation.x = 0; }
       if (inPiedi) {
@@ -1167,6 +1356,7 @@
           sx.rotation.set(-o * 0.5, 0, 0.12); dx.rotation.set(o * 0.5, 0, -0.12);
           corpo.position.y += Math.abs(Math.cos(k * 9)) * 0.03;
         } else { sx.rotation.set(0.1, 0, 0.12); dx.rotation.set(0.1, 0, -0.12); }
+        if (pos && pos.azione === "cambio") { sx.rotation.set(-2.4 + Math.sin(k * 13) * 0.7, 0, 0.4); dx.rotation.set(-2.4 + Math.cos(k * 11) * 0.7, 0, -0.4); }   // si sfila la polo
         if (u.giro && u.giro.passeggio) { sx.rotation.set(-0.75, 0, 0.35); dx.rotation.set(-0.75, 0, -0.35); }   // mani dietro la schiena
         if (u.giro && u.giro.arrivo) {                                   // grossa ventiquattrore nella destra
           if (!u.valigetta) { u.valigetta = new T.Group(); dx.add(u.valigetta);
@@ -1493,6 +1683,8 @@
       setTimeout(() => { forzaSera = t + 60; }, 12000);
       for (const a of lav) a.userData.prossimoT = 0;
     },
+    provaCostume(n) { const d = animati.filter(a => a.userData.costume && a.userData.s.stato === "lavora")[n || 0]; if (d) { const u = d.userData; vestiti(u, false); u.giro = null; return { id: u.s.id, casa: u.casa, nome: u.costume.nome }; } },
+    galleria(x0, z0) { const out = []; COSTUMI.forEach((c, i) => { costumeScelto = i; const o = omino({ id: "gal" + i, stato: "lavora" }, mondo, x0 + i * 0.9, z0, "dip"); costumeScelto = null; o.userData.casa = null; o.userData.sedute.forEach(q => q.visible = false); o.userData.gambe.forEach(q => q.visible = true); vestiti(o.userData, true); out.push(o); }); return out.length; },
     provaPc(stato) { impostaPc(stato, false); },
     provaChiusura(n) { const ids = [...ultimeSessioni.keys()].filter(id => bersagli.has(id) && !chiusi.has(id)); const id = ids[ids.length - 1 - (n || 0)]; if (!id) return; chiudi(id, ultimeSessioni.get(id)); if (ultimiDati) costruisci(...ultimiDati); },
     provaCantiere(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); arrivoFatto.delete(ids[n || 0]); cantieri.set(ids[n || 0], performance.now() / 1000); const uf = [...bersagli.keys()].filter(k => k.startsWith("capo:") && k !== "capo:r:capo"); if (uf.length) { arrivoFatto.delete(uf[uf.length - 1]); cantieri.set(uf[uf.length - 1], performance.now() / 1000); } if (ultimiDati) costruisci(...ultimiDati); },
