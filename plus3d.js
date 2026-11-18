@@ -48,6 +48,63 @@
     voci.push({ g, corpo, look, fig: null });
   }
 
+  // capelli e barba sono un pezzo solo (materiale Hair): per chi non ha la barba o e' calvo tolgo dei triangoli
+  const varianti = new Map();
+  function testa(geo, conBarba, conCapelli) {
+    const k = geo.uuid + conBarba + conCapelli;
+    if (varianti.has(k)) return varianti.get(k);
+    const p = geo.attributes.position, idx = geo.index.array, tieni = [];
+    const barbaV = i => p.getZ(i) < 0.02 && p.getY(i) < -0.12;          // sotto gli occhi e davanti: barba
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t], b = idx[t + 1], c = idx[t + 2];
+      const barba = barbaV(a) && barbaV(b) && barbaV(c);
+      if (barba ? conBarba : conCapelli) tieni.push(a, b, c);
+    }
+    const g = geo.clone(); g.setIndex(tieni); varianti.set(k, g); return g;
+  }
+
+  function mesh(geo, col, x, y, z, padre, extra) {
+    const m = new T.Mesh(geo, new T.MeshStandardMaterial(Object.assign({ color: lin(col), roughness: 0.5 }, extra)));
+    m.position.set(x, y, z); m.castShadow = true; m.userData.plus = true; padre.add(m); return m;
+  }
+  // accessori in metri, attaccati all'osso (testa, petto, bacino): seguono le animazioni
+  function attacca(v, osso, costruisci) {
+    const b = v.ossa[osso]; if (!b) return;
+    v.o.updateMatrixWorld(true);
+    const w = new T.Vector3(); b.getWorldPosition(w);
+    const acc = new T.Group(); acc.position.copy(v.o.worldToLocal(w)); acc.scale.setScalar(1 / A.S);
+    v.o.add(acc); costruisci(acc); acc.updateMatrixWorld(true); b.attach(acc);
+  }
+  function accessori(v) {
+    const lk = v.look || {}, cap = lk.capelli || "#2b1d14";
+    if (lk.donna) attacca(v, "Head", g => {                        // capelli lunghi dietro, fino alle spalle
+      const s = new T.SphereGeometry(1, 20, 14);
+      mesh(s, cap, 0, 0.2, -0.05, g).scale.set(0.15, 0.15, 0.14);
+      mesh(s, cap, 0, 0.05, -0.1, g).scale.set(0.15, 0.22, 0.09);
+    });
+    if (lk.donna && !lk.segr) attacca(v, "Hips", g => {                // gonna
+      mesh(new T.CylinderGeometry(0.2, 0.3, 0.42, 20), lk.maglia, 0, -0.12, 0, g);
+    });
+    if (lk.occhiali) attacca(v, "Head", g => {                     // occhiali: due cerchi e il ponte
+      const r = new T.TorusGeometry(0.04, 0.009, 6, 16);
+      for (const sx of [-0.05, 0.05]) mesh(r, lk.occhiali, sx, 0.14, 0.135, g);
+      mesh(new T.BoxGeometry(0.03, 0.008, 0.008), lk.occhiali, 0, 0.145, 0.135, g);
+    });
+    if (lk.capo) {
+      attacca(v, "Head", g => {                                   // corona d'oro
+        const oro = { metalness: 0.5, roughness: 0.3, emissive: lin("#4a3000") };
+        mesh(new T.CylinderGeometry(0.12, 0.12, 0.06, 20, 1, true), "#f0c040", 0, 0.3, 0, g, Object.assign({ side: T.DoubleSide }, oro));
+        for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2;
+          mesh(new T.ConeGeometry(0.025, 0.07, 8), "#f0c040", Math.sin(a) * 0.11, 0.36, Math.cos(a) * 0.11, g, oro);
+          mesh(new T.SphereGeometry(0.014, 8, 6), "#ff6b8a", Math.sin(a) * 0.11, 0.4, Math.cos(a) * 0.11, g); }
+      });
+      attacca(v, "Chest", g => {                                  // mantello rosso con collo bianco
+        const m = mesh(new T.CylinderGeometry(0.2, 0.38, 1.0, 20, 1, true, Math.PI * 0.62, Math.PI * 0.76), "#9e1630", 0, -0.35, -0.03, g, { side: T.DoubleSide });
+        mesh(new T.TorusGeometry(0.15, 0.04, 8, 20), "#fbf7ee", 0, 0.14, 0, g).rotation.x = Math.PI / 2;
+      });
+    }
+  }
+
   function crea(v) {
     const o = T.SkeletonUtils.clone(modello.scene);
     o.scale.setScalar(A.S); o.position.y = A.Y; o.rotation.y = Math.PI;   // il vecchio omino guarda verso -z
@@ -59,6 +116,10 @@
       if (/Backpack/i.test(m.name) || (m.parent && /Backpack/i.test(m.parent.name))) { m.visible = false; return; }
       m.material = m.material.clone(); m.material.skinning = true;
       const c = colori[m.material.name]; if (c) m.material.color.copy(lin(c));
+      if (m.material.name === "Hair") {
+        const barba = !lk.donna && lk.barba !== 0, capelli = !lk.calvo;
+        if (!barba || !capelli) m.geometry = testa(m.geometry, barba, capelli);
+      }
       m.castShadow = true; m.frustumCulled = false;
     });
     const fig = new T.Group(); fig.add(o); v.corpo.add(fig);
@@ -68,6 +129,7 @@
     const ossa = {}; o.traverse(b => { if (b.isBone) ossa[b.name.replace(/[^A-Za-z0-9]/g, "")] = b; });
     const piedi = ["FootL", "FootR"].filter(n => ossa[n]).map(n => [ossa[n], ossa[n].position.clone(), ossa[n].quaternion.clone()]);
     Object.assign(v, { fig, o, mx, azioni, ossa, piedi, attuale: "Idle" });
+    accessori(v);
   }
 
   const _q = new T.Quaternion(), _p = new T.Quaternion(), _w = new T.Vector3();
@@ -76,7 +138,7 @@
     b.quaternion.premultiply(_q.setFromAxisAngle(la, ang)); b.updateMatrixWorld(true);
   }
   const _m1 = new T.Matrix4(), _m2 = new T.Matrix4(), _m3 = new T.Matrix4();
-  function siede(v, dorme) {                              // gambe piegate a 90 gradi (i piedi sono a parte: li sposto io)
+  function siede(v, dorme, scrive, t) {                              // gambe piegate a 90 gradi (i piedi sono a parte: li sposto io)
     v.o.updateMatrixWorld(true);
     const fq = new T.Quaternion(); v.o.getWorldQuaternion(fq);
     const asse = new T.Vector3(-1, 0, 0).applyQuaternion(fq);
@@ -90,6 +152,13 @@
       const l1 = new T.Quaternion(); LL.getWorldQuaternion(l1);
       const nq = l1.multiply(l0.invert()).multiply(q0); F.parent.getWorldQuaternion(_p); F.quaternion.copy(_p.invert().multiply(nq));
     }
+    if (scrive) {                                  // mani sulla tastiera, le dita battono
+      for (const sd of ["L", "R"]) {
+        const k = Math.sin(t * 14 + (sd === "L" ? 0 : 1.7)) * 0.08;
+        if (v.ossa["UpperArm" + sd]) gira(v.ossa["UpperArm" + sd], asse, 0.75);
+        if (v.ossa["LowerArm" + sd]) gira(v.ossa["LowerArm" + sd], asse, 0.75 + k);
+      }
+    }
     if (dorme) {                                   // testa sulle braccia, sulla scrivania
       for (const sd of ["L", "R"]) { if (v.ossa["UpperArm" + sd]) gira(v.ossa["UpperArm" + sd], asse, 1.0); if (v.ossa["LowerArm" + sd]) gira(v.ossa["LowerArm" + sd], asse, 0.6); }
     }
@@ -97,7 +166,9 @@
 
   function inScena(o, scena) { while (o) { if (o === scena) return true; o = o.parent; } return false; }
 
+  let tempo = 0;
   function aggiorna(dt, scena) {
+    tempo += dt;
     if (!modello) return;
     for (let i = voci.length - 1; i >= 0; i--) {
       const v = voci[i], u = v.g.userData;
@@ -122,7 +193,7 @@
         _m2.copy(v.corpo.matrix).invert().multiply(_m1);
         _m2.decompose(v.fig.position, v.fig.quaternion, v.fig.scale);
       } else { v.fig.rotation.set(0, 0, 0); v.fig.position.set(0, seduto ? 0.6 - A.anca : 0, 0); }
-      if (seduto) siede(v, dorme);
+      if (seduto) siede(v, dorme, !dorme && vuole === "Idle" && u.s && ["lavora", "supervisore"].includes(u.s.stato), tempo);
     }
   }
 

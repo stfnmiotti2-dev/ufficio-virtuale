@@ -524,7 +524,7 @@
     const tazza = tondo(0.1, 0.12, 0.1, "#ffffff", 0, -0.55, -0.06, dx, 0.04); tazza.visible = false;           // tazza del caffe'
     g.userData = { corpo, testa, sx, dx, s, fase: (h % 97) / 10, occhi, sorriso, bocca_o, linea, stato: null, salto: 0,
       sedute, gambe, telefono, tazza, gonna, giacca, casa: [x, z], giro: null, prossimo: 8 + (h % 40) };
-    if (window.Plus3D) Plus3D.registra(g, corpo, { maglia, pantaloni, capelli, pelle, scarpe }, basePlus);
+    if (window.Plus3D) Plus3D.registra(g, corpo, { maglia, pantaloni, capelli, pelle, scarpe, donna, capo, segr, occhiali, barba, calvo, coloreBarba }, basePlus);
     return g;
   }
   function etichetta(cls, testo, pos, titolo) {
