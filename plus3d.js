@@ -125,10 +125,12 @@
     const fig = new T.Group(); fig.add(o); v.corpo.add(fig);
     const mx = new T.AnimationMixer(o), azioni = {};
     for (const n of ["Idle", "Walk", "Wave"]) { const c = clip(modello, n); if (c) azioni[n] = mx.clipAction(c); }
-    azioni.Idle.play(); mx.update(Math.random() * 2);
     const ossa = {}; o.traverse(b => { if (b.isBone) ossa[b.name.replace(/[^A-Za-z0-9]/g, "")] = b; });
-    const piedi = ["FootL", "FootR"].filter(n => ossa[n]).map(n => [ossa[n], ossa[n].position.clone(), ossa[n].quaternion.clone()]);
-    Object.assign(v, { fig, o, mx, azioni, ossa, piedi, attuale: "Idle" });
+    // posa di riposo (gambe dritte) presa prima delle animazioni: da seduti bacino e gambe restano fermi qui
+    const riposo = ["Hips", "UpperLegL", "UpperLegR", "LowerLegL", "LowerLegR", "FootL", "FootR"].filter(n => ossa[n]).map(n => [ossa[n], ossa[n].position.clone(), ossa[n].quaternion.clone()]);
+    const piedi = riposo.filter(r => /Foot/.test(r[0].name));
+    azioni.Idle.play(); mx.update(Math.random() * 2);
+    Object.assign(v, { fig, o, mx, azioni, ossa, piedi, riposo, attuale: "Idle" });
     accessori(v);
   }
 
@@ -187,12 +189,13 @@
       }
       for (const [F, p, q] of v.piedi) { F.position.copy(p); F.quaternion.copy(q); }   // le animazioni non muovono i piedi: li rimetto a posto
       v.mx.update(dt);
-      if (dorme) {                                   // il vecchio omino si piega tutto: io lo piego meno, attorno all'anca
-        v.corpo.updateMatrix();
-        _m1.makeTranslation(0, 0.6, 0).multiply(_m2.makeRotationX(-0.7)).multiply(_m3.makeTranslation(0, -A.anca, 0));
+      if (seduto) for (const [B, p, q] of v.riposo) { B.position.copy(p); B.quaternion.copy(q); }   // niente dondolii: le gambe non scalciano
+      if (seduto) {                                  // da seduto ignoro i dondolii del vecchio busto: anca ferma sulla sedia
+        v.corpo.updateMatrix();                      // (chi ha finito si piega in avanti attorno all'anca)
+        _m1.makeTranslation(0, 0.6, 0).multiply(_m2.makeRotationX(dorme ? -0.7 : 0)).multiply(_m3.makeTranslation(0, -A.anca, 0));
         _m2.copy(v.corpo.matrix).invert().multiply(_m1);
         _m2.decompose(v.fig.position, v.fig.quaternion, v.fig.scale);
-      } else { v.fig.rotation.set(0, 0, 0); v.fig.position.set(0, seduto ? 0.6 - A.anca : 0, 0); }
+      } else { v.fig.rotation.set(0, 0, 0); v.fig.position.set(0, 0, 0); v.fig.scale.set(1, 1, 1); }
       if (seduto) siede(v, dorme, !dorme && vuole === "Idle" && u.s && ["lavora", "supervisore"].includes(u.s.stato), tempo);
     }
   }
