@@ -601,6 +601,91 @@
     return { punti, inizio: t, fine: t + durata(punti, 1.6), verso: Math.atan2(-(u.casa[0] - sx_), -(u.casa[1] - sz_)), frase: FRASI[Math.floor(Math.random() * FRASI.length)] };
   }
   let ordini = [], uffici = new Map();
+  // ---------- sala relax: macchinetta del caffe', divano con la TV, calcio balilla ----------
+  let relax = null;
+  function salaRelax(x0, z0) {
+    const W = 5.6, D = 5.0, HV = 2.2, cx = x0 + W / 2, cz = z0 + D / 2, zd = corridoioPrimo;   // la porta e' sul corridoio della prima fila
+    const g = new T.Group(); g.position.set(cx, 0, cz); mondo.add(g);
+    tondo(W, 0.03, D, "#eadfcf", 0, 0, 0, g, 0.01);                          // pavimento caldo
+    const tp = tondo(2.6, 0.02, 1.6, "#d97757", 1.3, 0.03, D / 2 - 1.2, g, 0.3); tp.castShadow = false;   // tappeto davanti al divano
+    const pv = new T.MeshStandardMaterial({ transparent: true, opacity: 0.16, color: lin("#bfe3fb"), roughness: 0.1 });
+    const pz = zd - cz, LP = 1.3;                                             // apertura nella parete di sinistra
+    for (const [w, d, px, pz_] of [[W, 0.05, 0, -D / 2], [W, 0.05, 0, D / 2], [0.05, D, W / 2, 0],
+                                   [0.05, (pz - LP / 2) + D / 2, -W / 2, (-D / 2 + pz - LP / 2) / 2], [0.05, D / 2 - (pz + LP / 2), -W / 2, (D / 2 + pz + LP / 2) / 2]]) {
+      if (w <= 0.05 && d <= 0.05) continue;
+      const v = new T.Mesh(geo, pv); v.scale.set(w, HV, d); v.position.set(px, HV / 2, pz_); g.add(v);
+      tondo(w + 0.04, 0.07, d + 0.04, "#2fbf6d", px, HV, pz_, g, 0.025);
+    }
+    // bancone del caffe' sul fondo, a sinistra
+    tondo(1.6, 0.9, 0.6, "#ffffff", -1.5, 0, -D / 2 + 0.35, g, 0.06);
+    tondo(1.64, 0.06, 0.64, "#c08850", -1.5, 0.9, -D / 2 + 0.35, g, 0.03);
+    tondo(0.36, 0.5, 0.32, "#3c4658", -1.8, 0.96, -D / 2 + 0.3, g, 0.06);
+    palla(0.035, "#ff6b6b", -1.8, 1.3, -D / 2 + 0.47, g, 1, 1, 0.5, { emissive: "#ff6b6b", emissiveIntensity: 0.6 });
+    for (const dx of [-1.3, -1.1, -0.9]) tondo(0.1, 0.11, 0.1, "#ffffff", dx, 0.96, -D / 2 + 0.45, g, 0.04);
+    tondo(0.6, 1.5, 0.55, "#e9edf2", -W / 2 + 0.45, 0, -D / 2 + 0.4, g, 0.06);   // frigorifero
+    tondo(0.04, 0.4, 0.04, "#8a9099", -W / 2 + 0.68, 0.9, -D / 2 + 0.69, g, 0.015);
+    const cest = new T.Mesh(new T.CylinderGeometry(0.2, 0.16, 0.42, 14, 1, true), m("#8a9099", { side: T.DoubleSide }));
+    cest.position.set(-0.45, 0.21, -D / 2 + 0.35); g.add(cest);
+    // divano verso la TV appesa sul fondo, a destra
+    tondo(2.3, 0.45, 0.8, "#4f7cac", 1.3, 0, D / 2 - 0.55, g, 0.12);
+    tondo(2.3, 0.6, 0.25, "#3f6894", 1.3, 0.35, D / 2 - 0.2, g, 0.1);
+    for (const sx_ of [0.1, 2.5]) tondo(0.22, 0.65, 0.8, "#3f6894", sx_, 0, D / 2 - 0.55, g, 0.1);
+    for (const sx_ of [0.6, 1.3, 2.0]) tondo(0.36, 0.3, 0.12, ["#f2c230", "#d97757", "#7cc98a"][Math.round(sx_ * 2) % 3], sx_, 0.5, D / 2 - 0.36, g, 0.06);   // cuscini
+    tondo(1.5, 0.9, 0.06, "#1c1c22", 1.3, 1.0, -D / 2 + 0.06, g, 0.03);       // TV
+    const tv = new T.Mesh(new T.PlaneGeometry(1.38, 0.78), new T.MeshBasicMaterial({ color: "#5c9ee6", toneMapped: false }));
+    tv.position.set(1.3, 1.45, -D / 2 + 0.1); g.add(tv);
+    tondo(1.2, 0.4, 0.4, "#8a5a2b", 1.3, 0, -D / 2 + 0.3, g, 0.04);           // mobiletto TV
+    tondo(0.6, 0.35, 0.5, "#c08850", 1.3, 0, 0.75, g, 0.08);                  // tavolino
+    // calcio balilla al centro
+    const bx = -1.0, bz = 0.55;
+    tondo(1.3, 0.75, 0.72, "#2b6e3f", bx, 0.1, bz, g, 0.04);
+    tondo(1.2, 0.03, 0.62, "#3fa35b", bx, 0.86, bz, g, 0.01);
+    for (const [lx, lz] of [[-0.55, -0.28], [0.55, -0.28], [-0.55, 0.28], [0.55, 0.28]]) tondo(0.07, 0.12, 0.07, "#3c4658", bx + lx, 0, bz + lz, g, 0.02);
+    const aste = [];
+    for (let i = 0; i < 4; i++) {
+      const ax = bx - 0.45 + i * 0.3, c = i % 2 ? "#e03131" : "#3b82f6";
+      const asta = new T.Mesh(new T.CylinderGeometry(0.015, 0.015, 1.3, 6), m("#c9ced6", { metalness: 0.6 }));
+      asta.rotation.x = Math.PI / 2; asta.position.set(ax, 0.95, bz); g.add(asta); aste.push(asta);
+      for (const o of [-0.17, 0, 0.17]) palla(0.04, c, ax, 0.9, bz + o, g, 0.8, 1.6, 0.8);
+      palla(0.05, "#1c1c22", ax, 0.95, bz + (i < 2 ? 0.68 : -0.68), g);      // manopola
+    }
+    const pall = palla(0.035, "#ffffff", bx, 0.9, bz, g);
+    palla(0.3, "#7cc98a", W / 2 - 0.4, 0.75, -D / 2 + 0.45, g, 1, 1.15, 1); tondo(0.4, 0.45, 0.4, "#f3f0ea", W / 2 - 0.4, 0, -D / 2 + 0.45, g, 0.12);
+    marcati.push(etichetta("nome uff", "🛋️ Sala relax", new T.Vector3(cx, HV + 0.55, z0)));
+    const chi = { pos: new T.Vector3(cx - 1.65, 2.1, cz - D / 2 + 1.2) };
+    chi.et = etichetta("f3d", "💬 bla bla bla…", chi.pos); chi.et.e.style.visibility = "hidden"; marcati.push(chi.et);
+    chiacchiere.push(chi);
+    const P = (lx, lz, az, ang, lato) => ({ x: cx + lx, z: cz + lz, az, ang, lato, libero: 0 });
+    const posti = [P(-1.95, -D / 2 + 0.95, "caffe", 0, 0), P(-1.3, -D / 2 + 0.95, "caffe", 0, 1),
+                   P(0.6, D / 2 - 0.62, "divano", 0), P(1.3, D / 2 - 0.62, "divano", 0), P(2.0, D / 2 - 0.62, "divano", 0),
+                   P(bx, bz + 0.72, "balilla", 0, 0), P(bx, bz - 0.72, "balilla", Math.PI, 1)];
+    relax = { zp: z0 - 1.1, posti, ingresso: [x0 - 0.7, zd], dentro: [x0 + 0.7, zd], tv, pall, aste, bx: cx + bx, chi, inBalilla: 0,
+              cestino: new T.Vector3(cx - 0.45, 0.45, cz - D / 2 + 0.35) };
+    for (const om of camminatori.splice(0)) {
+      om.userData.caffe = [posti[0].x, posti[0].z]; om.userData.chiacchiera = chi; om.userData.cestino = relax.cestino;
+    }
+  }
+  // sceglie un posto libero nella sala relax (macchinetta, divano o calcio balilla) e lo tiene occupato
+  const SOSTA = { caffe: 5, divano: 14, balilla: 13 };
+  function postoRelax(da) {
+    if (!relax) return null;
+    const ora = t, tipi = ["caffe", "caffe", "divano", "balilla"];
+    // se uno gioca gia' a calcio balilla, l'altro posto ha la precedenza
+    const giocaUno = relax.posti.filter(p => p.az === "balilla" && p.libero > ora).length === 1;
+    let lib = relax.posti.filter(p => p.libero <= ora && (giocaUno ? p.az === "balilla" : p.az === tipi[Math.floor(Math.random() * tipi.length)]));
+    if (!lib.length) lib = relax.posti.filter(p => p.libero <= ora);
+    if (!lib.length) return null;
+    return lib[Math.floor(Math.random() * lib.length)];
+  }
+  // percorso dal corridoio (x, zc) dentro la sala fino al posto, e ritorno; "andata" tiene conto di chi e' gia' in cammino
+  function versoRelax(xa, zc, p, ox = 0, oz = 0, vel = 1.1, extra = 0) {
+    const [ix, iz] = relax.ingresso, [dx, dz] = relax.dentro, L = (x, z, pa, a) => [x - ox, z - oz, pa || 0, a];
+    const andata = [L(xa, zc), L(ix, zc), L(ix, iz), L(dx, iz), L(p.x, p.z, SOSTA[p.az], p.az)];
+    const ritorno = [L(dx, iz), L(ix, iz), L(ix, zc), L(xa, zc)];
+    const occupa = durata(andata.slice(0, -1), vel) + extra;
+    p.libero = t + occupa + SOSTA[p.az] + 1.5;
+    return { andata, ritorno };
+  }
   // ---------- soppalco: capo, sala riunioni e ufficio del controllore stanno al piano di sopra ----------
   let SC = null;                                                       // { H, zb, zs, xl, xt, xb, zp, x0, x1, z0, z1 }
   function quota(x, z) {                                               // altezza del pavimento in quel punto
@@ -669,7 +754,7 @@
   const momenti = new Map();                                             // id -> {tipo, inizio, fine}
   const compPrima = new Map(), schedePrima = new Map(), usciti = new Set();
   let effetti = [], lampadine = [], lampadari = [], chiacchiere = [], gruppoDi = new Map();
-  let forzaSera = 0, forzaVenerdi = 0, passeggioSubito = false, corridoioPrimo = 7, xDestra = 0;
+  let relaxSubito = false, forzaSera = 0, forzaVenerdi = 0, passeggioSubito = false, corridoioPrimo = 7, xDestra = 0;
   const capoMondo = new T.Vector3(); let capoInGiro = false, tPrec = 0;
   const ora_ = () => new Date();
   const sera = () => t < forzaSera || ora_().getHours() >= 19 || ora_().getHours() < 6;
@@ -989,7 +1074,7 @@
       file[file.length - 1].push(q); usate += q.fuori.length;
     }
     let z0 = profMax / 2 + 6.4;
-    corridoioPrimo = z0 - 1.75; xDestra = 0;
+    corridoioPrimo = z0 - 1.75; xDestra = 0; let fineFile = mezzo;
     for (const fila of file) {
       if (!fila.length) continue;
       const w = fila.reduce((n, q) => n + q.fuori.length * PASSO, 0) + (fila.length - 1) * 0.8;
@@ -1042,25 +1127,10 @@
         });
         x0 += wi + 0.8;
       }
-      // angolo caffe' in fondo alla fila: chi lavora ogni tanto si alza e ci va
-      const cx = x0 + 0.6, cz = z0 - 1.75;
-      tondo(1.2, 0.9, 0.6, "#ffffff", cx, 0, cz, mondo, 0.06);
-      tondo(1.24, 0.06, 0.64, "#c08850", cx, 0.9, cz, mondo, 0.03);
-      tondo(0.36, 0.5, 0.32, "#3c4658", cx - 0.2, 0.96, cz - 0.05, mondo, 0.06);       // macchinetta
-      palla(0.035, "#ff6b6b", cx - 0.2, 1.3, cz + 0.12, mondo, 1, 1, 0.5, { emissive: "#ff6b6b", emissiveIntensity: 0.6 });
-      for (const dx of [0.15, 0.32]) tondo(0.1, 0.11, 0.1, "#ffffff", cx + dx, 0.96, cz + 0.1, mondo, 0.04);
-      const cest = new T.Mesh(new T.CylinderGeometry(0.2, 0.16, 0.42, 14, 1, true), m("#8a9099", { side: T.DoubleSide }));
-      cest.position.set(cx + 1.0, 0.21, cz + 0.2); mondo.add(cest);                  // cestino della carta
-      const chi = { pos: new T.Vector3(cx - 0.2, 2.1, cz + 0.65) };
-      chi.et = etichetta("f3d", "💬 bla bla bla…", chi.pos); chi.et.e.style.visibility = "hidden"; marcati.push(chi.et);
-      chiacchiere.push(chi);
-      for (const om of camminatori.splice(0)) {
-        const lato = U.hash(om.userData.s.id) % 2;                       // due posti alla macchinetta: possono chiacchierare
-        om.userData.caffe = [cx - 0.5 + lato * 0.6, cz + 0.65]; om.userData.lato = lato; om.userData.chiacchiera = chi;
-        om.userData.cestino = new T.Vector3(cx + 1.0, 0.45, cz + 0.2);
-      }
+      fineFile = Math.max(fineFile, x0);
       z0 += 4.4;
     }
+    salaRelax(fineFile + 1.4, (SC ? SC.zp : profMax / 2 + 2.2) + 1.1);   // sala relax a destra delle file: ci vanno tutti, ogni tanto
     // pavimento e pareti attorno a tutto
     const bb = new T.Box3().setFromObject(mondo);
     const size = bb.getSize(new T.Vector3()), mid = bb.getCenter(new T.Vector3());
@@ -1302,10 +1372,21 @@
     return [[casa[0], casa[1], 0.7], [porta, casa[1], 0], [porta, bal, 0], ...giu, [xa, c, 0], [xb, c, 1.5, "guarda"],
             [xa, c, 0], ...su, [porta, bal, 0], [porta, casa[1], 0], [casa[0], casa[1], 0.4, "siede"]];
   }
-  function giroCaffe(u) {                                            // dalla sedia al caffe' e ritorno, passando dietro le sedie
-    const [x, z] = u.casa, c = u.corridoio, [mx, mz] = u.caffe;
-    return [[x, z, 0.7], [x, c, 0], [mx - 0.7, c, 0], [mx - 0.7, mz, 0], [mx, mz, 4.5, "caffe"], [mx - 0.7, mz, 0],
-            [mx - 0.7, c, 0], [x, c, 0], [x, z, 0.4, "siede"]];
+  function giroCaffe(u) {                                            // dalla sedia alla sala relax e ritorno, passando dietro le sedie
+    const p = postoRelax(); if (!p) return null;
+    const [x, z] = u.casa, c = u.corridoio, r = versoRelax(x, c, p, 0, 0, 1.1, 0.7);
+    u.relaxPosto = p; if (p.lato != null) u.lato = p.lato;
+    return [[x, z, 0.7], ...r.andata, ...r.ritorno, [x, z, 0.4, "siede"]];
+  }
+  function giroRelaxCapo(u) {                                        // anche capo e responsabili, ogni tanto, si prendono una pausa
+    const uf = uffici.get(u.chiave), p = uf && postoRelax(); if (!p) return null;
+    const { gx, gz, LW, LD, casa } = uf, porta = LW * 0.32, fuori = LD / 2 + 0.7, sc = u.chiave === "r:capo" && SC;
+    const bal = sc ? SC.zb - gz : fuori, giu = sc ? giuScala(gx, gz) : [], via = relax.zp - gz;
+    const xa = sc ? SC.xb : gx + porta;
+    const inizio = [[casa[0], casa[1], 0.7], [porta, casa[1], 0], [porta, bal, 0], ...giu];
+    const r = versoRelax(xa, via + gz, p, gx, gz, 1.1, durata(inizio, 1.1));
+    u.relaxPosto = p; if (p.lato != null) u.lato = p.lato;
+    return [...inizio, ...r.andata, ...r.ritorno, ...giu.slice().reverse(), [porta, bal, 0], [porta, casa[1], 0], [casa[0], casa[1], 0.4, "siede"]];
   }
   function anima(ms) {
     requestAnimationFrame(anima);
@@ -1323,6 +1404,13 @@
     for (const l of lampadine) l.material.emissiveIntensity = eSera || buio > 0.5 ? 1.8 : 0.2;   // le lampade delle scrivanie restano accese
     for (const l of lampadari) l.material.emissiveIntensity = eSera || buio > 0.5 ? 2.2 : 0.05;
     for (const c of chiacchiere) c.alCaffe = [];
+    if (relax) {                                                          // TV accesa, calcio balilla che va se giocano in due
+      relax.tv.material.color.setHSL((t * 0.07) % 1, 0.55, 0.55 + Math.sin(t * 3) * 0.05);
+      const due = relax.inBalilla >= 2; relax.inBalilla = 0;
+      relax.pall.position.x = relax.bx - relax.pall.parent.position.x + (due ? Math.sin(t * 4.2) * 0.5 : 0);
+      relax.pall.position.z = 0.55 + (due ? Math.sin(t * 7.3) * 0.2 : 0);
+      relax.aste.forEach((a, i) => { a.position.z = 0.55 + (due ? Math.sin(t * 9 + i) * 0.08 : 0); });
+    }
     let capoVisto = false;
     for (const a of animati) {
       const u = a.userData, { corpo, testa, sx, dx, s, fase } = u;
@@ -1360,7 +1448,8 @@
       const vaCaffe = u.caffe && s.stato === "lavora" && s.chiude == null, vaBussare = u.porta && s.stato === "aspetta";
       if (!u.giro && (vaCaffe || vaBussare)) {
         if (u.prossimoT == null) u.prossimoT = t + u.prossimo;
-        if (t > u.prossimoT) u.giro = { punti: vaCaffe ? giroCaffe(u) : giroBussa(u), inizio: t };
+        if (t > u.prossimoT) { const punti = vaCaffe ? giroCaffe(u) : giroBussa(u);
+          if (punti) u.giro = { punti, inizio: t }; else u.prossimoT = t + 15 + Math.random() * 20; }
       }
       if (!u.giro && arrivi.has(u.idArrivo)) {                          // nuovo arrivato: entra dalla porta con la 24 ore
         u.giro = { punti: versoCasa(u, false), inizio: arrivi.get(u.idArrivo), arrivo: true };
@@ -1378,6 +1467,14 @@
           const punti = giroPasseggio(u);
           if (punti) u.giro = { punti, inizio: t, passeggio: true };
           u.passeggioT = t + 150; passeggioSubito = false;
+        }
+      }
+      if (u.chiave && !u.giro && !u.telefonata && s.stato === "supervisore" && pc !== "off") {
+        if (u.relaxT == null) u.relaxT = t + 70 + (U.hash(s.id) % 150);
+        if (relaxSubito || t > u.relaxT) {
+          const punti = giroRelaxCapo(u);
+          if (punti) u.giro = { punti, inizio: t };
+          u.relaxT = t + 260 + Math.random() * 200; relaxSubito = false;
         }
       }
       let pos = null;
@@ -1398,11 +1495,12 @@
         pos.azione = "telefono";
       }
       if (pos) {
-        inPiedi = !(pos.azione === "siede" || (pos.fermo && pos.x === u.casa[0] && pos.z === u.casa[1] && !u.telefonata && !pos.azione));
+        inPiedi = !(pos.azione === "siede" || (pos.fermo && pos.azione === "divano") || (pos.fermo && pos.x === u.casa[0] && pos.z === u.casa[1] && !u.telefonata && !pos.azione));
         cammina = !pos.fermo;
         a.position.x = pos.x; a.position.z = pos.z;
         if (u.chiave === "r:capo" && SC) { const uf = uffici.get("r:capo"); a.position.y = quota(uf.gx + pos.x, uf.gz + pos.z) - SC.H; }
         if (pos.dir) a.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
+        else if (["divano", "balilla", "caffe"].includes(pos.azione) && u.relaxPosto) a.rotation.y = u.relaxPosto.ang;   // nella sala relax
         else if (["caffe", "bussa", "attende"].includes(pos.azione)) a.rotation.y = 0;      // verso la macchinetta o la porta
         else if (pos.azione === "guarda") a.rotation.y = Math.PI + Math.sin(k * 0.8) * 0.9;  // il capo controlla l'open space
         else if (pos.azione === "ordini") a.rotation.y = -Math.PI / 2;                    // guarda l'omino alla scrivania
@@ -1466,6 +1564,11 @@
         } else if (pos && pos.azione === "attende") {
           sx.rotation.set(0.3, 0, 0.5); dx.rotation.set(0.3, 0, -0.5);       // mani sui fianchi, aspetta
           testa.rotation.z = Math.sin(k * 2) * 0.12;
+        } else if (pos && pos.azione === "divano") {                       // sul divano a guardare la TV, mani dietro la testa
+          sx.rotation.set(-2.7, 0, -0.5); dx.rotation.set(-2.7, 0, 0.5); testa.rotation.x = -0.12;
+        } else if (pos && pos.azione === "balilla") {                      // calcio balilla: mani sulle manopole, colpi veloci
+          const w = Math.sin(k * 13) * 0.35; sx.rotation.set(1.35 + w, 0, 0.25); dx.rotation.set(1.35 - w, 0, -0.25);
+          testa.rotation.y = Math.sin(k * 5) * 0.25; relax.inBalilla++;
         } else if (pos && pos.azione === "caffe") {
           u.tazza.visible = true;
           const sorso = Math.sin((t - u.giro.inizio) * 1.4) > 0.3;
@@ -1878,6 +1981,8 @@
     provaCtrl(az, prima) { if (!ispettore) return; const i = ispettore.punti.findIndex(p => p[3] === (az || "scrive")); const d = durata(ispettore.punti.slice(0, i), 1.3) - (prima || 3); ispettore.anticipo = ((d - t) % ispettore.durata + ispettore.durata) % ispettore.durata; },
     provaPostino(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); avviaPostino(ids[n || 0]); },
     get effetti() { return effetti.length; }, get ispettore() { return ispettore && ispettore.o.position; }, get dati() { return ultimiDati; }, get scrivanie() { return [...bersagli.keys()].filter(k => !k.startsWith("capo:")); }, get postini() { return postini.map(p => [p.id, p.inizio, p.fine]); }, get giocatore() { return gioc && gioc.g.position; },
+    get relax() { return relax && relax.posti.map(p => [p.x, p.z, p.az]); },
+    relaxSubito() { relaxSubito = true; for (const a of animati) a.userData.prossimoT = 0; },
     caffeSubito() { for (const a of animati) a.userData.prossimoT = 0; },   // per le prove
   };
 })();
