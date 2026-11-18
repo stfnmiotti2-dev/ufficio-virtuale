@@ -285,7 +285,7 @@
   function omino(s, padre, x, z, ruolo) {
     const h = U.hash(s.id), capo = ruolo === "capo", resp = ruolo === "resp";
     const postino = ruolo === "postino", operaio = ruolo === "operaio", ctrl = ruolo === "controllore", segr = ruolo === "segretaria";
-    const donna = segr || !capo && !resp && !postino && !operaio && ((h >>> 12) & 1) === 1;   // i capi commessa sono tutti uomini (come nelle foto)
+    const donna = segr || (s.donna != null && !capo && !resp ? !!s.donna : !capo && !resp && !postino && !operaio && ((h >>> 12) & 1) === 1);   // i capi commessa sono tutti uomini (come nelle foto)
     // aspetto ispirato alla squadra: capelli scuri o brizzolati, teste rasate, barbe, occhiali; il re ha barba scura e occhiali blu
     const PELLI = ["#f1c7a5", "#e8b896", "#d9a27c", "#c68a62"], CAPI = ["#1c1714", "#2b1d14", "#3b2a1e", "#5a3a22", "#8d8d96", "#b9b9c2"];
     const pelle = PELLI[h % PELLI.length];
@@ -302,10 +302,12 @@
     if (modello === 2) { calvo = false; capelli = "#1c1714"; barba = 5; occhiali = null; orecchino = true; ciuffoFisso = 2; }
     if (modello === 3) { calvo = false; capelli = "#2b1d14"; barba = 4; occhiali = null; ciuffoFisso = 0; }
     if (modello === 4) { calvo = true; barba = 2; capelli = "#1c1714"; occhiali = null; }
-    const divisa = ruolo === "dip" ? ((h >>> 25) & 1 ? "polo" : "polo bianca") : null;   // tutti in polo aziendale, nera o bianca
-    const maglia = ctrl ? "#f07d1e" : divisa === "polo" ? "#1f1f24" : divisa === "polo bianca" ? "#f4f4f2" : operaio ? "#f28c28" : segr ? "#d0213a" : postino ? "#2f9e44" : capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
-    const pantaloni = operaio ? "#3d4a5c" : postino ? "#3d5a8a" : capo ? "#7a1426" : resp ? maglia : donna ? pelle : JEANS[(h >>> 9) % JEANS.length];
-    const scarpe = segr ? "#b5122b" : capo ? "#e3b23c" : resp ? "#1f1f26" : donna ? ["#ef7f9f", "#2b2b33", "#ffffff"][(h >>> 10) % 3] : "#ffffff";
+    const tuta = !!s.tuta && ruolo === "dip", vecchio = !!s.anziano && ruolo === "dip";   // meccanico in tuta, signore anziano
+    if (vecchio) { calvo = true; capelli = "#e9e9ec"; barba = 2; occhiali = null; }                          // meccanico in tuta da lavoro
+    const divisa = ruolo === "dip" && !tuta && !vecchio ? ((h >>> 25) & 1 ? "polo" : "polo bianca") : null;   // tutti in polo aziendale, nera o bianca
+    const maglia = tuta ? "#3a5f8f" : vecchio ? "#8a7356" : ctrl ? "#f07d1e" : divisa === "polo" ? "#1f1f24" : divisa === "polo bianca" ? "#f4f4f2" : operaio ? "#f28c28" : segr ? "#d0213a" : postino ? "#2f9e44" : capo ? "#b3203a" : resp ? COMPLETI[(h >>> 8) % COMPLETI.length] : PASTELLI[(h >>> 8) % PASTELLI.length];
+    const pantaloni = tuta ? "#3a5f8f" : vecchio ? "#6b6f78" : operaio ? "#3d4a5c" : postino ? "#3d5a8a" : capo ? "#7a1426" : resp ? maglia : donna ? pelle : JEANS[(h >>> 9) % JEANS.length];
+    const scarpe = tuta ? "#2b2b33" : vecchio ? "#6b3d22" : segr ? "#b5122b" : capo ? "#e3b23c" : resp ? "#1f1f26" : donna ? ["#ef7f9f", "#2b2b33", "#ffffff"][(h >>> 10) % 3] : "#ffffff";
     const g = new T.Group(); g.position.set(x, 0, z); g.rotation.y = Math.PI; padre.add(g);
     const corpo = new T.Group(); g.add(corpo);
     const busto = palla(0.26, maglia, 0, 0.78, 0, corpo, 1, 1.3, 0.85);   // busto a pillola
@@ -386,6 +388,26 @@
       const c = new T.Mesh(new T.SphereGeometry(0.3, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), m("#f5c518", { roughness: 0.35 }));
       c.position.y = 0.06; testa.add(c);
       tondo(0.66, 0.025, 0.66, "#f5c518", 0, 0.06, 0, testa, 0.012);
+    }
+    if (vecchio) {                                                       // curvo, corona di capelli bianchi, occhiali enormi
+      busto.rotation.x = -0.32; testa.position.set(0, 1.24, -0.17);
+      const corona = new T.Mesh(new T.TorusGeometry(0.235, 0.06, 8, 24, Math.PI * 1.3), m("#e9e9ec"));
+      corona.rotation.set(Math.PI / 2, 0, -Math.PI * 0.15); corona.position.set(0, 0.0, 0.03); testa.add(corona);
+      for (const sx of [-0.13, 0.13]) {
+        const l = new T.Mesh(new T.TorusGeometry(0.115, 0.022, 8, 24), m("#3b2a1e")); l.position.set(sx, 0.03, -0.3); testa.add(l);
+        const v = new T.Mesh(new T.CircleGeometry(0.11, 20), new T.MeshStandardMaterial({ color: lin("#dff1ff"), transparent: true, opacity: 0.35, roughness: 0.05 }));
+        v.position.set(sx, 0.03, -0.305); v.rotation.y = Math.PI; testa.add(v);
+      }
+      box(0.04, 0.02, 0.02, "#3b2a1e", 0, 0.04, -0.3, testa);
+      for (const sx of [-0.25, 0.25]) box(0.015, 0.015, 0.22, "#3b2a1e", sx, 0.04, -0.2, testa);
+      for (let i = 0; i < 3; i++) palla(0.022, "#e3d6b8", 0, 0.92 - i * 0.12, -0.235, corpo);   // bottoni del cardigan
+    }
+    if (tuta) {                                                          // cappellino con visiera, bande riflettenti, chiave inglese nel taschino
+      const cap = new T.Mesh(new T.SphereGeometry(0.295, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.42), m("#2c4a72")); cap.position.y = 0.05; testa.add(cap);
+      tondo(0.32, 0.03, 0.2, "#2c4a72", 0, 0.12, -0.3, testa, 0.012);
+      for (const zb of [-0.215, 0.215]) tondo(0.44, 0.045, 0.02, "#e8eef3", 0, 0.62, zb, corpo, 0.01, { emissive: "#c9d4dd", emissiveIntensity: 0.4 });
+      tondo(0.12, 0.1, 0.02, "#2c4a72", 0.1, 0.86, -0.225, corpo, 0.01);     // taschino
+      tondo(0.025, 0.16, 0.02, "#9aa3b0", 0.12, 0.9, -0.24, corpo, 0.008, { metalness: 0.6 });   // chiave inglese
     }
     if (postino) {                                                       // cuffione da gamer
       const arco = new T.Mesh(new T.TorusGeometry(0.3, 0.035, 8, 24, Math.PI), m("#1c1c22")); arco.position.y = 0.02; testa.add(arco);
@@ -2023,6 +2045,7 @@
     provaCtrl(az, prima) { if (!ispettore) return; const i = ispettore.punti.findIndex(p => p[3] === (az || "scrive")); const d = durata(ispettore.punti.slice(0, i), 1.3) - (prima || 3); ispettore.anticipo = ((d - t) % ispettore.durata + ispettore.durata) % ispettore.durata; },
     provaPostino(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); avviaPostino(ids[n || 0]); },
     get effetti() { return effetti.length; }, get ispettore() { return ispettore && ispettore.o.position; }, get dati() { return ultimiDati; }, get scrivanie() { return [...bersagli.keys()].filter(k => !k.startsWith("capo:")); }, get postini() { return postini.map(p => [p.id, p.inizio, p.fine]); }, get giocatore() { return gioc && gioc.g.position; },
+    get scena() { return scena; },
     get relax() { return relax && relax.posti.map(p => [p.x, p.z, p.az]); },
     relaxSubito() { relaxSubito = true; for (const a of animati) a.userData.prossimoT = 0; },
     caffeSubito() { for (const a of animati) a.userData.prossimoT = 0; },   // per le prove

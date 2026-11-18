@@ -336,6 +336,45 @@ def _info_extra(t, stato):
     return out
 
 
+# Progetti claude.ai che hanno sempre una persona fissa in ufficio (richiesta di Stefano, 18/11).
+# Se sul PC ci sono gia' sessioni di quel progetto al lavoro, si vedono quelle e la figura fissa non serve.
+PROGETTI_FISSI = [
+    {"id": "fisso:ufficio-virtuale", "progetto": "Ufficio virtuale", "cerca": "ufficio virtuale", "donna": True,
+     "titolo": "Ufficio virtuale › Progettista", "aggiornamenti": True},
+    {"id": "fisso:agente-kuka", "progetto": "Agente robot KUKA", "cerca": "kuka", "donna": False,
+     "titolo": "Agente robot KUKA › Meccanico robot", "tuta": True},
+    {"id": "fisso:agente-gx", "progetto": "Agente GX Works", "cerca": "gx", "donna": False,
+     "titolo": "Agente GX Works › Programmatore", "anziano": True},
+]
+
+
+def _progetti_fissi(locali):
+    ora = time.time()
+    out = []
+    for p in PROGETTI_FISSI:
+        suoi = [s for s in locali if p["cerca"] in str(s.get("progetto_claude") or "").lower()]
+        if any(s.get("stato") in ("aspetta", "lavora", "pensa") for s in suoi):
+            continue                                   # ci sono gia' le sue sessioni vere
+        ultimo = max([s.get("modificato", 0) for s in suoi] + [0])
+        if p.get("aggiornamenti"):                     # l'ufficio stesso: quando arriva una versione nuova, ci sta lavorando
+            try:
+                ultimo = max(ultimo, aggiorna.SHA_FILE.stat().st_mtime)
+            except OSError:
+                pass
+        lavora = ora - ultimo < 40 * 60
+        out.append({
+            "id": p["id"], "titolo": p["titolo"], "thread_titolo": p["titolo"], "progetto_claude": p["progetto"],
+            "progetto": "cloud", "cloud": True, "responsabile": None, "donna": p["donna"], "tuta": p.get("tuta", False), "anziano": p.get("anziano", False), "fisso": True,
+            "stato": "lavora" if lavora else "finito",
+            "icona": "🛠️" if lavora else "✅",
+            "attivita": ("Nuova versione: " + VERSIONE.split("(", 1)[-1].rstrip(")") if p.get("aggiornamenti") else "Lavora al progetto")
+                        if lavora else "Nessun lavoro in corso",
+            "modificato": ora // 3600 * 3600,          # resta in ufficio (non si chiude dopo un giorno)
+            "link": "https://claude.ai/code",
+        })
+    return out
+
+
 def _sottoagenti_interni(t, ts, link, chan):
     """Sottoagenti lanciati DENTRO un thread (campo "sottoagenti" di stato-thread.json):
     una figura temporanea ciascuno, nell'isola del thread. Quando finiscono spariscono
@@ -515,7 +554,7 @@ def _watcher(hours):
             locali = _scan(hours)
             # regola di Stefano: chi e' fermo da 48 ore o piu' non si mostra (i responsabili restano, dagli uffici)
             limite = time.time() - FERMI_ORE * 3600
-            sessions = [s for s in _con_nomi(locali + _sessioni_cloud(locali)) if s.get("modificato", 0) >= limite]
+            sessions = [s for s in _con_nomi(locali + _sessioni_cloud(locali) + _progetti_fissi(locali)) if s.get("modificato", 0) >= limite]
             data = json.dumps(sessions, ensure_ascii=False).encode("utf-8")
             extra = json.dumps(_extra(sessions), ensure_ascii=False).encode("utf-8")
             with _cond:
