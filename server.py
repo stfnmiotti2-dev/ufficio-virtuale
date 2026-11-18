@@ -30,6 +30,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8"),
           "/ufficio3d.js": ("ufficio3d.js", "text/javascript; charset=utf-8"),
           "/lib/three.min.js": ("lib/three.min.js", "text/javascript; charset=utf-8"),
+          "/pp3d.js": ("pp3d.js", "text/javascript; charset=utf-8"),
           "/lib/three170.js": ("lib/three170.js", "text/javascript; charset=utf-8"),
           "/lib/OrbitControls.js": ("lib/OrbitControls.js", "text/javascript; charset=utf-8"),
           "/lib/GLTFLoader.js": ("lib/GLTFLoader.js", "text/javascript; charset=utf-8"),
@@ -38,7 +39,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.49 (3D++ passo 1: libreria 3D nuova solo in 3D++)"
+VERSIONE = "task 9.50 (3D++ passo 2: personaggi realistici)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
@@ -628,6 +629,13 @@ class Handler(BaseHTTPRequestHandler):
         if path in STATIC:
             name, ctype = STATIC[path]
             return self._send(200, (HERE / name).read_bytes(), ctype)
+        if path.startswith("/lib/umani/"):            # personaggi realistici del 3D++ (MakeHuman, CC0)
+            base = (HERE / "lib" / "umani").resolve()
+            f = (base / path[len("/lib/umani/"):]).resolve()
+            if base in f.parents and f.is_file():
+                tipi = {".json": "application/json", ".webp": "image/webp", ".gz": "application/octet-stream"}
+                return self._send(200, f.read_bytes(), tipi.get(f.suffix, "application/octet-stream"))
+            return self._send(404, b"", "text/plain")
         if path == "/api/sessions":
             return self._send(200, _snapshot["json"], "application/json; charset=utf-8")
         if path == "/api/stream":
