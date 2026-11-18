@@ -157,6 +157,25 @@
   }
   // tappeto persiano disegnato al volo (motivo originale: cornice, medaglione centrale, angoli, frange)
   let tappetoTex = null;
+  // parquet a spina di pesce in rovere: una sola texture ripetuta su tutto il pavimento
+  let parquetTex = null;
+  function texParquet() {
+    if (parquetTex) return parquetTex;
+    const c = document.createElement("canvas"); c.width = c.height = 256;
+    const x = c.getContext("2d"), L = 64, Wd = 16, toni = ["#dcc29c", "#e3cba6", "#d6bb93", "#e0c7a0", "#d9be97"];
+    x.fillStyle = "#c8ab82"; x.fillRect(0, 0, 256, 256);
+    let n = 0;
+    for (let row = -4; row < 12; row++) for (let col = -2; col < 10; col++) for (const lato of [0, 1]) {
+      x.save(); x.translate(col * Wd * 2 + lato * Wd, row * Wd * 2 + col * 0 + (lato ? Wd : 0));
+      x.rotate(lato ? -Math.PI / 4 : Math.PI / 4);
+      x.fillStyle = toni[(n++ * 7 + row * 3) % toni.length]; x.fillRect(0, 0, L, Wd - 1.5);
+      x.fillStyle = "rgba(120,80,40,0.07)"; x.fillRect(0, (Wd - 1.5) * 0.45, L, 1.2);   // venatura
+      x.restore();
+    }
+    parquetTex = new T.CanvasTexture(c); parquetTex.encoding = T.sRGBEncoding;
+    parquetTex.wrapS = parquetTex.wrapT = T.RepeatWrapping; parquetTex.anisotropy = 8;
+    return parquetTex;
+  }
   function texTappeto() {
     if (tappetoTex) return tappetoTex;
     const c = document.createElement("canvas"); c.width = 640; c.height = 420;
@@ -1021,6 +1040,9 @@
         const v = new T.Mesh(geo, pv); v.scale.set(w, HV, d); v.position.set(px, HV / 2, pz); g.add(v);
         tondo(w + 0.04, 0.07, d + 0.04, telaio, px, HV, pz, g, 0.025, capo ? { metalness: 0.6, roughness: 0.3 } : undefined);
       }
+      { const sat = new T.Mesh(geo, new T.MeshStandardMaterial({ color: lin("#ffffff"), transparent: true, opacity: 0.55, roughness: 0.9 }));
+        sat.scale.set(LW * 0.62, 0.32, 0.07); sat.position.set(-LW * 0.19, 1.15, LD / 2); g.add(sat);       // fascia satinata
+        tondo(LW * 0.62, 0.03, 0.075, capo ? "#e3b23c" : "#f28c28", -LW * 0.19, 1.0, LD / 2, g, 0.01); }
       tondo(LW, 0.14, 0.1, capo ? "#e3b23c" : gr.colore, 0, HV + 0.07, -LD / 2, g, 0.05,
         capo ? { metalness: 0.6, roughness: 0.3, emissive: "#6a4a00", emissiveIntensity: 0.3 } : { emissive: gr.colore, emissiveIntensity: 0.25 });
       const piante = capo ? [[LW / 2 - 0.45, -LD / 2 + 0.45], [-LW / 2 + 0.45, -LD / 2 + 0.45]] : [[LW / 2 - 0.45, -LD / 2 + 0.45]];
@@ -1134,12 +1156,20 @@
     // pavimento e pareti attorno a tutto
     const bb = new T.Box3().setFromObject(mondo);
     const size = bb.getSize(new T.Vector3()), mid = bb.getCenter(new T.Vector3());
-    const pav = box(size.x + 6, 0.1, size.z + 6, "#dcc7a6", mid.x, -0.1, mid.z, mondo, { roughness: 0.35 });
+    const pav = box(size.x + 6, 0.1, size.z + 6, "#ffffff", mid.x, -0.1, mid.z, mondo, { roughness: 0.55 });
     pav.castShadow = false;
-    box(size.x + 6, 3, 0.2, "#f6f1e9", mid.x, 0, bb.min.z - 3);          // parete di fondo chiara
-    box(size.x + 6, 0.2, 0.22, "#d9cbb5", mid.x, 0, bb.min.z - 2.9);     // battiscopa
+    { const tx = texParquet().clone(); tx.needsUpdate = true; tx.repeat.set((size.x + 6) / 1.8, (size.z + 6) / 1.8);
+      pav.material = new T.MeshStandardMaterial({ map: tx, roughness: 0.55 }); }
+    box(size.x + 6, 3, 0.2, "#f4efe6", mid.x, 0, bb.min.z - 3);          // parete di fondo calda
+    box(size.x + 6, 1.05, 0.06, "#8fa58c", mid.x, 0, bb.min.z - 2.88);    // boiserie verde salvia
+    box(size.x + 6, 0.05, 0.1, "#e3b23c", mid.x, 1.05, bb.min.z - 2.87, mondo, { metalness: 0.5, roughness: 0.35 });   // filo ottone
+    box(size.x + 6, 0.2, 0.22, "#6f8a6c", mid.x, 0, bb.min.z - 2.85);     // battiscopa
     for (let i = 0; i < Math.max(1, Math.floor(size.x / 6)); i++) {        // finestre
       const fx = bb.min.x + 3 + i * 6;
+      if (i % 2) {                                                       // fra le finestre: pannelli fonoassorbenti in feltro
+        [["#f28c28", -0.55, 2.35], ["#5a6170", 0, 2.55], ["#d9cbb5", 0.55, 2.35], ["#5a6170", -0.28, 1.9], ["#f28c28", 0.28, 1.9]]
+          .forEach(([c, dx, y]) => tondo(0.46, 0.4, 0.05, c, fx + 3 + dx, y, bb.min.z - 2.86, mondo, 0.08, { roughness: 1 }));
+      }
       tondo(2.5, 1.4, 0.06, "#ffffff", fx, 1.15, bb.min.z - 2.88, mondo, 0.05);
       const v = box(2.2, 1.1, 0.06, "#7cc0ea", fx, 1.3, bb.min.z - 2.86, mondo, {});
       v.material = new T.MeshBasicMaterial({ color: new T.Color("#9fd4f2").convertSRGBToLinear() });
@@ -1150,6 +1180,10 @@
     box(0.2, 3, zp - LP / 2 - zb, "#efe8dc", xm, 0, (zb + zp - LP / 2) / 2);
     box(0.2, 3, zf - zp - LP / 2, "#efe8dc", xm, 0, (zf + zp + LP / 2) / 2);
     box(0.2, 0.7, LP, "#efe8dc", xm, 2.3, zp);                             // architrave
+    for (const [za, zb_] of [[zb, zp - LP / 2], [zp + LP / 2, zf]]) {        // boiserie anche qui
+      box(0.06, 1.05, zb_ - za, "#8fa58c", xm + 0.12, 0, (za + zb_) / 2);
+      box(0.1, 0.05, zb_ - za, "#e3b23c", xm + 0.13, 1.05, (za + zb_) / 2, mondo, { metalness: 0.5, roughness: 0.35 });
+    }
     for (const dz of [-LP / 2, LP / 2]) box(0.3, 2.35, 0.1, "#6b3d22", xm, 0, zp + dz);   // stipiti
     box(0.3, 0.1, LP + 0.1, "#6b3d22", xm, 2.3, zp);
     const cartello = box(0.06, 0.24, 0.62, "#21a35b", xm + 0.14, 2.42, zp);   // cartello verde di uscita
@@ -1279,8 +1313,8 @@
   function arreda(bb, xm, zp, zb) {
     const xr = bb.max.x + 2.2, x1 = xm + 0.3, x2 = bb.max.x + 2.9;
     const guida = (xa, xb, z, w) => {                                    // passatoia del corridoio, con il bordo
-      tondo(xb - xa, 0.012, w + 0.16, "#7d8a9c", (xa + xb) / 2, 0, z, mondo, 0.02);
-      const g = tondo(xb - xa - 0.1, 0.02, w, "#a9b8c9", (xa + xb) / 2, 0, z, mondo, 0.02);
+      tondo(xb - xa, 0.012, w + 0.12, "#f28c28", (xa + xb) / 2, 0, z, mondo, 0.02);
+      const g = tondo(xb - xa - 0.1, 0.02, w, "#5a6170", (xa + xb) / 2, 0, z, mondo, 0.02, { roughness: 1 });
       g.castShadow = false;
     };
     guida(x1, x2, zb + 1.55, 1.1);                                       // corridoio dietro gli uffici
@@ -1336,6 +1370,14 @@
     acqua.position.set(xr, 1.2, 3.0); mondo.add(acqua);
     tondo(0.8, 2.0, 0.55, "#9aa3b0", xr, 0, -1.2, mondo, 0.04, { metalness: 0.3 });
     box(0.02, 1.8, 0.02, "#596273", xr - 0.02, 0.1, -0.93);
+    // piante alte lungo il corridoio davanti, fra gli uffici e le scrivanie
+    for (let px = x1 + 3.5; px < x2 - 2; px += 7.5) {
+      const pz = zp + 1.05;
+      tondo(0.42, 0.55, 0.42, "#e9e4da", px, 0, pz, mondo, 0.1);
+      tondo(0.04, 0.8, 0.04, "#6b4a2b", px, 0.5, pz, mondo, 0.015);
+      for (const [dx, dy, dz, r] of [[0, 1.45, 0, 0.3], [0.17, 1.2, 0.06, 0.22], [-0.15, 1.3, -0.08, 0.22], [0.05, 1.7, -0.1, 0.18]])
+        palla(r, dy > 1.4 ? "#4f9a5e" : "#3f8a50", px + dx, dy, pz + dz, mondo, 1.15, 0.9, 1.15);
+    }
     // piante grandi negli angoli
     for (const [px, pz] of [[x1 + 0.4, zb + 0.6], [x2 - 0.4, zb + 0.6], [x2 - 0.4, bb.max.z + 2.4], [x1 + 0.4, bb.max.z + 2.4], [xr, 6]]) {
       tondo(0.5, 0.5, 0.5, "#c0763b", px, 0, pz, mondo, 0.12);
