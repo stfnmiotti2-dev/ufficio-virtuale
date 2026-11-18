@@ -35,7 +35,7 @@
     const bb = new T.Box3(), v = new T.Vector3(); let anca = 0;
     gl.scene.traverse(o => { if (o.isBone) { o.getWorldPosition(v); bb.expandByPoint(v); if (/Hips/.test(o.name)) anca = v.y; } });
     mx.stopAllAction();
-    const S = 1.56 / (bb.max.y - bb.min.y);
+    const S = 1.85 / (bb.max.y - bb.min.y);              // un po' piu' alto: i mobili dell'ufficio sono grandi
     A = { S, Y: -bb.min.y * S, anca: (anca - bb.min.y) * S };
     modello = gl;
   });
@@ -75,9 +75,10 @@
     b.parent.getWorldQuaternion(_p); const la = asse.clone().applyQuaternion(_p.invert());
     b.quaternion.premultiply(_q.setFromAxisAngle(la, ang)); b.updateMatrixWorld(true);
   }
-  function siede(v) {                              // gambe piegate a 90 gradi (i piedi sono a parte: li sposto io)
+  const _m1 = new T.Matrix4(), _m2 = new T.Matrix4(), _m3 = new T.Matrix4();
+  function siede(v, dorme) {                              // gambe piegate a 90 gradi (i piedi sono a parte: li sposto io)
     v.o.updateMatrixWorld(true);
-    const fq = new T.Quaternion(); v.fig.getWorldQuaternion(fq);
+    const fq = new T.Quaternion(); v.o.getWorldQuaternion(fq);
     const asse = new T.Vector3(-1, 0, 0).applyQuaternion(fq);
     for (const sd of ["L", "R"]) {
       const F = v.ossa["Foot" + sd], LL = v.ossa["LowerLeg" + sd], UL = v.ossa["UpperLeg" + sd];
@@ -88,6 +89,9 @@
       const nw = LL.localToWorld(loc.clone()); F.parent.updateMatrixWorld(true); F.position.copy(F.parent.worldToLocal(nw));
       const l1 = new T.Quaternion(); LL.getWorldQuaternion(l1);
       const nq = l1.multiply(l0.invert()).multiply(q0); F.parent.getWorldQuaternion(_p); F.quaternion.copy(_p.invert().multiply(nq));
+    }
+    if (dorme) {                                   // testa sulle braccia, sulla scrivania
+      for (const sd of ["L", "R"]) { if (v.ossa["UpperArm" + sd]) gira(v.ossa["UpperArm" + sd], asse, 1.0); if (v.ossa["LowerArm" + sd]) gira(v.ossa["LowerArm" + sd], asse, 0.6); }
     }
   }
 
@@ -102,7 +106,8 @@
       if (!v.g.visible) continue;
       const seduto = !!(u.sedute && u.sedute[0] && u.sedute[0].visible && !(u.gambe && u.gambe[0] && u.gambe[0].visible));
       const cammina = !seduto && u.gambe && u.gambe[0] && Math.abs(u.gambe[0].rotation.x) > 0.05;
-      const alza = [u.sx, u.dx].some(b => b && (Math.abs(b.rotation.x) > 1.6 || Math.abs(b.rotation.z) > 1.6));
+      const alza = [u.sx, u.dx].some(b => b && b.rotation.x < -1.6);           // braccio alzato (aspetta), non mano al mento
+      const dorme = seduto && v.corpo.rotation.x < -0.5;                         // piegato sulla scrivania (ha finito)
       const vuole = alza ? "Wave" : cammina ? "Walk" : "Idle";
       if (vuole !== v.attuale && v.azioni[vuole]) {
         const da = v.azioni[v.attuale], a = v.azioni[vuole];
@@ -111,8 +116,13 @@
       }
       for (const [F, p, q] of v.piedi) { F.position.copy(p); F.quaternion.copy(q); }   // le animazioni non muovono i piedi: li rimetto a posto
       v.mx.update(dt);
-      v.fig.position.y = seduto ? 0.5 - A.anca : 0;
-      if (seduto) siede(v);
+      if (dorme) {                                   // il vecchio omino si piega tutto: io lo piego meno, attorno all'anca
+        v.corpo.updateMatrix();
+        _m1.makeTranslation(0, 0.6, 0).multiply(_m2.makeRotationX(-0.7)).multiply(_m3.makeTranslation(0, -A.anca, 0));
+        _m2.copy(v.corpo.matrix).invert().multiply(_m1);
+        _m2.decompose(v.fig.position, v.fig.quaternion, v.fig.scale);
+      } else { v.fig.rotation.set(0, 0, 0); v.fig.position.set(0, seduto ? 0.6 - A.anca : 0, 0); }
+      if (seduto) siede(v, dorme);
     }
   }
 
