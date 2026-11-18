@@ -1,0 +1,8 @@
+Anteprima "realistica" (18/11/2026), separata dall'ufficio.
+- Personaggi: humanforge (codice MIT, asset MakeHuman/MPFB2 CC0), npm humanforge@0.8.1, three@0.170.0.
+- Animazioni: Quaternius Universal Animation Library (CC0), github J-Ponzo/gltf-universal-animation-library (cartella glTF).
+- Mobili: Kenney Furniture Kit (CC0).
+Per rifarla: npm i three@0.170.0 humanforge@0.8.1 esbuild; copiare i glb Kenney e i file UAL in www/;
+esbuild main.js --bundle --format=esm --outfile=www/bundle.js; python3 serve.py (porta 8795, fa da proxy per /human/).
+Retarget: delta di rotazione nel mondo; allineamento direzione solo per gli arti; bacino/colonna senza allineamento;
+clavicole NON copiate; in piedi gambe a riposo; camminata con busto smorzato 60%.
