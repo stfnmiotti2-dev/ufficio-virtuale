@@ -1174,7 +1174,7 @@
               ufficio: uffici.has(gr.chiave) ? gr.chiave : uffici.has("r:capo") ? "r:capo" : null });
           }
           schermi.push({ mesh: scr.userData.schermo, s: presente ? s : { stato: "spento" } });
-          const apri = () => s.link ? apriLink(s.link) : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
+          const apri = () => s.link ? apriLink(s.link) : s.fisso ? null : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
           cliccabili.push({ obj: scr, apri });
           if (presente) {
             const [ic, testo] = U.testoFumetto(s);

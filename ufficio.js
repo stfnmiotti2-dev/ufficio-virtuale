@@ -540,7 +540,7 @@
         zona = document.createElement("div");
         zona.append(document.createElement("div"), document.createElement("div"));
         zona.lastChild.className = "targa";
-        zona.onclick = () => s.link ? apriLink(s.link)
+        zona.onclick = () => s.link ? apriLink(s.link) : s.fisso ? null
           : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
         zone.set(s.id, zona);
         strato.append(zona);

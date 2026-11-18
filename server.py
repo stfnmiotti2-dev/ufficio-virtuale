@@ -31,7 +31,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/ufficio3d.js": ("ufficio3d.js", "text/javascript; charset=utf-8"),
           "/lib/three.min.js": ("lib/three.min.js", "text/javascript; charset=utf-8"),
           "/lib/OrbitControls.js": ("lib/OrbitControls.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.41 (domande commesse come testo)"
+VERSIONE = "task 9.42 (clic sui colleghi: apre il loro progetto)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
@@ -348,9 +348,34 @@ PROGETTI_FISSI = [
 ]
 
 
+LINK_PROGETTI = HERE / "progetti-link.json"     # personale: chan dei progetti visti sul PC (non va nel repo)
+
+
+def _chan_progetti(locali):
+    """Il codice (chan_...) di ogni progetto fisso, preso dalle sessioni sul PC e ricordato in progetti-link.json."""
+    try:
+        noti = json.loads(LINK_PROGETTI.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        noti = {}
+    nuovi = dict(noti)
+    for p in PROGETTI_FISSI:
+        for s in locali:
+            ch = str(s.get("chan") or "")
+            if ch.startswith("chan_") and p["cerca"] in str(s.get("progetto_claude") or "").lower():
+                nuovi[p["id"]] = ch
+                break
+    if nuovi != noti:
+        try:
+            LINK_PROGETTI.write_text(json.dumps(nuovi, indent=1), encoding="utf-8")
+        except OSError:
+            pass
+    return nuovi
+
+
 def _progetti_fissi(locali):
     ora = time.time()
     out = []
+    chan = _chan_progetti(locali)
     for p in PROGETTI_FISSI:
         suoi = [s for s in locali if p["cerca"] in str(s.get("progetto_claude") or "").lower()]
         if any(s.get("stato") in ("aspetta", "lavora", "pensa") for s in suoi):
@@ -370,7 +395,7 @@ def _progetti_fissi(locali):
             "attivita": ("Nuova versione: " + VERSIONE.split("(", 1)[-1].rstrip(")") if p.get("aggiornamenti") else "Lavora al progetto")
                         if lavora else "Nessun lavoro in corso",
             "modificato": ora // 3600 * 3600,          # resta in ufficio (non si chiude dopo un giorno)
-            "link": "https://claude.ai/code",
+            "link": f"https://claude.ai/code/project/{chan[p['id']]}" if str(chan.get(p["id"], "")).startswith("chan_") else None,
         })
     return out
 
