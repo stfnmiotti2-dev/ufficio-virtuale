@@ -1035,7 +1035,7 @@
       else gr.sessioni.splice(Math.min(c.idx, gr.sessioni.length), 0, { ...c.s, chiude: c.inizio });
     }
     const capi = gruppi.filter(U.haUfficio);
-    const UFF = 3.6, PASSO = 2.6;
+    const UFF = 3.6, PASSO = 2.3;
     // 1) uffici a vetri in fila in fondo; quello del capo e' piu' grande, con tappeto persiano e finiture d'oro
     const dim = gr => gr.chiave === "r:capo" ? [5.6, 4.6] : [UFF, UFF];
     const pulito = s => (s || "").replace(/^\S*[^\w\s]\S*\s+/u, "").replace(/\s*\(.*\)$/, "");   // toglie l'emoji iniziale
@@ -1124,17 +1124,19 @@
       file[file.length - 1].push(q); usate += q.fuori.length;
     }
     if (aParte.length) { const fa = [...aParte]; fa.aParte = true; file.push(fa); }
-    let z0 = profMax / 2 + 6.4;
+    let z0 = profMax / 2 + 5.3, xPrima = null, zPrima = 0;
     corridoioPrimo = z0 - 1.75; xDestra = 0; let fineFile = mezzo;
     for (const fila of file) {
       if (!fila.length) continue;
       const w = fila.reduce((n, q) => n + q.fuori.length * PASSO, 0) + (fila.length - 1) * 0.8;
-      let x0 = mezzo - w / 2;
+      let x0 = mezzo - w / 2, cx = mezzo;
+      if (!fila.aParte && xPrima == null) { xPrima = x0; zPrima = z0; }
       if (fila.aParte) {                                                 // open space a parte: moquette, fioriere basse e cartello
-        z0 += 1.8;
+        if (xPrima != null) { cx = xPrima - 1.8 - (w + 2.2) / 2; z0 = zPrima + 0.6; x0 = cx - w / 2; }   // a sinistra della prima fila, dove c'era spazio vuoto
+        else z0 += 1.2;
         const W = w + 2.2, zc = z0 + 0.1, D = 5.6;
-        const mq = tondo(W, 0.02, D, "#c9d3df", mezzo, 0, zc, mondo, 0.05, { roughness: 1 }); mq.castShadow = false;
-        tondo(W + 0.12, 0.012, D + 0.12, "#f28c28", mezzo, 0, zc, mondo, 0.05);
+        const mq = tondo(W, 0.02, D, "#c9d3df", cx, 0, zc, mondo, 0.05, { roughness: 1 }); mq.castShadow = false;
+        tondo(W + 0.12, 0.012, D + 0.12, "#f28c28", cx, 0, zc, mondo, 0.05);
         const fioriera = (cx, cz, lw, ld) => {
           tondo(lw, 0.42, ld, "#5a6170", cx, 0, cz, mondo, 0.06);
           const n = Math.max(1, Math.round(Math.max(lw, ld) / 0.55));
@@ -1143,9 +1145,9 @@
             palla(0.2, i % 2 ? "#5fae6e" : "#4f9a5e", cx + f * (lw > ld ? lw : 0), 0.55, cz + f * (ld > lw ? ld : 0), mondo, 1.1, 0.8, 1.1);
           }
         };
-        fioriera(mezzo, zc + D / 2 - 0.2, W - 0.6, 0.3);                  // davanti
-        for (const sx_ of [-1, 1]) fioriera(mezzo + sx_ * (W / 2 - 0.2), zc + 0.9, 0.3, D - 2.4);   // ai lati, il dietro resta aperto
-        marcati.push(etichetta("nome uff", "🧪 Open space altri progetti", new T.Vector3(mezzo, 0.05, zc + D / 2 + 0.35)));
+        fioriera(cx, zc + D / 2 - 0.2, W - 0.6, 0.3);                  // davanti
+        for (const sx_ of [-1, 1]) fioriera(cx + sx_ * (W / 2 - 0.2), zc + 0.9, 0.3, D - 2.4);   // ai lati, il dietro resta aperto
+        marcati.push(etichetta("nome uff", "🧪 Open space altri progetti", new T.Vector3(cx, 0.05, zc + D / 2 + 0.35)));
       }
       for (const { gr, fuori } of fila) {
         const wi = fuori.length * PASSO;
