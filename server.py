@@ -31,7 +31,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/ufficio3d.js": ("ufficio3d.js", "text/javascript; charset=utf-8"),
           "/lib/three.min.js": ("lib/three.min.js", "text/javascript; charset=utf-8"),
           "/lib/OrbitControls.js": ("lib/OrbitControls.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.40 (open space altri progetti: Ufficio virtuale, KUKA, GX Works)"
+VERSIONE = "task 9.41 (domande commesse come testo)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
@@ -504,7 +504,7 @@ def _schede():
                     "colore": COLORI_COMMESSA.get(stato, "#8b90a3"), "progetto_tia": txt("progetto_tia")[:120],
                     "fatto": txt("fatto"), "in_corso": txt("in_corso"), "aspetta": txt("aspetta"), "testo": txt("testo"),
                     "versione": txt("versione")[:40], "priorita": txt("priorita")[:20],
-                    "domande": [str(d)[:300] for d in (c.get("domande") or []) if d][:8],
+                    "domande": [str(d)[:300] for d in ([c["domande"]] if isinstance(c.get("domande"), str) else c.get("domande") or []) if d][:8],
                     "link": link if link.startswith("https://claude.ai/") else None})
     return out
 
