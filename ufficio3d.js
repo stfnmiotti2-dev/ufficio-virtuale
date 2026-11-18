@@ -502,6 +502,7 @@
       return b;
     };
     const sx = braccio(capo ? -0.42 : -0.31), dx = braccio(capo ? 0.42 : 0.31);
+    const basePlus = []; g.traverse(o => { if (o.isMesh) basePlus.push(o); });   // per il 3D+: il corpo da nascondere
     if (ctrl) g.scale.set(1.12, 1.25, 1.12);                             // il controllore e' piu' alto di tutti
     if (operaio) {                                                       // martello nella destra, scalpello nella sinistra
       tondo(0.08, 0.62, 0.08, "#b0703a", 0, -1.0, 0, dx, 0.03);                         // martellone: manico lungo
@@ -511,6 +512,7 @@
     }
     // cornetta da telefono classico, grande e rossa, con il filo a spirale (si vede bene anche da lontano)
     const giacca = palla(0.29, "#5b4a3f", 0, 0.8, 0, corpo, 1, 1.25, 0.9); giacca.visible = false;   // cappotto per uscire la sera
+    basePlus.push(giacca);
     const telefono = new T.Group(); dx.add(telefono); telefono.visible = false;
     tondo(0.09, 0.42, 0.09, "#e0303a", 0, -0.5, -0.1, telefono, 0.04);           // impugnatura
     palla(0.13, "#e0303a", 0, -0.48, -0.17, telefono, 1, 0.75, 0.6);               // auricolare, all'orecchio
@@ -522,6 +524,7 @@
     const tazza = tondo(0.1, 0.12, 0.1, "#ffffff", 0, -0.55, -0.06, dx, 0.04); tazza.visible = false;           // tazza del caffe'
     g.userData = { corpo, testa, sx, dx, s, fase: (h % 97) / 10, occhi, sorriso, bocca_o, linea, stato: null, salto: 0,
       sedute, gambe, telefono, tazza, gonna, giacca, casa: [x, z], giro: null, prossimo: 8 + (h % 40) };
+    if (window.Plus3D) Plus3D.registra(g, corpo, { maglia, pantaloni, capelli, pelle, scarpe }, basePlus);
     return g;
   }
   function etichetta(cls, testo, pos, titolo) {
@@ -1326,6 +1329,7 @@
   const COL = Object.assign({}, U.COLORI_STATO, { supervisore: "#9fd2f0", spento: "#2a2e3a", inattiva: "#2a2e3a", vuota: "#2a2e3a" });
   const v = new T.Vector3();
   let t = 0, ultimo = 0, attivo = false, fps = 40, costo = 8;
+  let tSemplice = -10;
   // percorso a tappe: punti = [[x, z, pausa, azione]]; restituisce dove si trova l'omino dopo e secondi
   function durata(punti, vel) {
     let tt = 0;
@@ -2004,6 +2008,7 @@
       if (map) mat.color.copy(BIANCO);
       else mat.color.set(["finito", "spento", "inattiva", "vuota"].includes(s.stato) ? "#8f949c" : c).convertSRGBToLinear();
     }
+    if (window.Plus3D) { Plus3D.aggiorna(dt, scena); if (t - tSemplice > 3) { tSemplice = t; Plus3D.semplifica(scena); } }
     controlli.update();
     renderer.render(scena, camera);
     costo = costo * 0.95 + (performance.now() - inizioFrame) * 0.05;     // media del tempo di disegno
