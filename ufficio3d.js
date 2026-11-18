@@ -1204,9 +1204,9 @@
     // pavimento e pareti attorno a tutto
     const bb = new T.Box3().setFromObject(mondo);
     const size = bb.getSize(new T.Vector3()), mid = bb.getCenter(new T.Vector3());
-    const pav = box(size.x + 6, 0.1, size.z + 6, "#ffffff", mid.x, -0.1, mid.z, mondo, { roughness: 0.55 });
+    const pav = box(size.x + 6, 0.1, size.z + 4, "#ffffff", mid.x, -0.1, mid.z - 1, mondo, { roughness: 0.55 });   // davanti solo 1 m di margine
     pav.castShadow = false;
-    { const tx = texParquet().clone(); tx.needsUpdate = true; tx.repeat.set((size.x + 6) / 1.8, (size.z + 6) / 1.8);
+    { const tx = texParquet().clone(); tx.needsUpdate = true; tx.repeat.set((size.x + 6) / 1.8, (size.z + 4) / 1.8);
       pav.material = new T.MeshStandardMaterial({ map: tx, roughness: 0.55 }); }
     box(size.x + 6, 3, 0.2, "#f4efe6", mid.x, 0, bb.min.z - 3);          // parete di fondo calda
     box(size.x + 6, 1.05, 0.06, "#8fa58c", mid.x, 0, bb.min.z - 2.88);    // boiserie verde salvia
@@ -1428,7 +1428,7 @@
         palla(r, dy > 1.4 ? "#4f9a5e" : "#3f8a50", px + dx, dy, pz + dz, mondo, 1.15, 0.9, 1.15);
     }
     // piante grandi negli angoli
-    for (const [px, pz] of [[x1 + 0.4, zb + 0.6], [x2 - 0.4, zb + 0.6], [x2 - 0.4, bb.max.z + 2.4], [x1 + 0.4, bb.max.z + 2.4], [xr, 6]]) {
+    for (const [px, pz] of [[x1 + 0.4, zb + 0.6], [x2 - 0.4, zb + 0.6], [x2 - 0.4, bb.max.z + 0.5], [x1 + 0.4, bb.max.z + 0.5], [xr, 6]]) {
       tondo(0.5, 0.5, 0.5, "#c0763b", px, 0, pz, mondo, 0.12);
       palla(0.38, "#5fae6e", px, 0.9, pz, mondo, 1, 1.3, 1);
       palla(0.26, "#7cc98a", px + 0.15, 1.3, pz - 0.05, mondo);
