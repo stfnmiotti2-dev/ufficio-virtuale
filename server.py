@@ -30,6 +30,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8"),
           "/ufficio3d.js": ("ufficio3d.js", "text/javascript; charset=utf-8"),
           "/lib/three.min.js": ("lib/three.min.js", "text/javascript; charset=utf-8"),
+          "/lib/three170.js": ("lib/three170.js", "text/javascript; charset=utf-8"),
           "/lib/OrbitControls.js": ("lib/OrbitControls.js", "text/javascript; charset=utf-8"),
           "/lib/GLTFLoader.js": ("lib/GLTFLoader.js", "text/javascript; charset=utf-8"),
           "/lib/meshopt_decoder.js": ("lib/meshopt_decoder.js", "text/javascript; charset=utf-8"),
@@ -37,7 +38,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.48 (3D+: seduti fermi, niente scalci)"
+VERSIONE = "task 9.49 (3D++ passo 1: libreria 3D nuova solo in 3D++)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova

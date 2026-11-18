@@ -7,6 +7,7 @@
   const wrap = document.getElementById("ufficio3d");
   if (!wrap || !window.THREE || !U) return;
   const T = THREE;
+  const LUCE = T.NUOVO ? Math.PI : 1;   // r170: luci in unità fisiche
 
   const renderer = new T.WebGLRenderer({ antialias: true });
   renderer.outputEncoding = T.sRGBEncoding;
@@ -29,9 +30,9 @@
   controlli.maxPolarAngle = Math.PI * 0.44;          // mai sotto il pavimento
   controlli.minDistance = 6; controlli.maxDistance = 80;
 
-  const cielo = new T.HemisphereLight(new T.Color("#ffffff").convertSRGBToLinear(), new T.Color("#d9c4a5").convertSRGBToLinear(), 0.55);
+  const cielo = new T.HemisphereLight(new T.Color("#ffffff").convertSRGBToLinear(), new T.Color("#d9c4a5").convertSRGBToLinear(), 0.55 * LUCE);
   scena.add(cielo);
-  const sole = new T.DirectionalLight(new T.Color("#ffe9cc").convertSRGBToLinear(), 1.35);
+  const sole = new T.DirectionalLight(new T.Color("#ffe9cc").convertSRGBToLinear(), 1.35 * LUCE);
   sole.position.set(-14, 26, 18);
   sole.castShadow = true;
   sole.shadow.mapSize.set(1024, 1024);
@@ -1490,7 +1491,7 @@
     // luce della stanza: con \pc off si spegne subito; con \pc on si riaccende quando il primo arriva all'interruttore
     const pcL = pc === "off" ? 1 - Math.min(1, Math.max(0, (t - pcT - 1.2) / 1.2)) : Math.min(1, Math.max(0, (t - pcT - 3.2) / 0.4));
     pcLuce = pcL; const buio = 1 - pcL;
-    cielo.intensity = (eSera ? 0.3 : 0.55) * pcL + 0.12 * buio; sole.intensity = (eSera ? 0.5 : 1.35) * pcL + 0.06 * buio;
+    cielo.intensity = ((eSera ? 0.3 : 0.55) * pcL + 0.12 * buio) * LUCE; sole.intensity = ((eSera ? 0.5 : 1.35) * pcL + 0.06 * buio) * LUCE;
     scena.background.set(buio > 0.5 ? "#1a2034" : eSera ? "#4f5f86" : "#cfe6f5").convertSRGBToLinear();
     for (const l of lampadine) l.material.emissiveIntensity = eSera || buio > 0.5 ? 1.8 : 0.2;   // le lampade delle scrivanie restano accese
     for (const l of lampadari) l.material.emissiveIntensity = eSera || buio > 0.5 ? 2.2 : 0.05;
