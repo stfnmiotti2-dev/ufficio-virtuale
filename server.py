@@ -554,7 +554,7 @@ def _watcher(hours):
             locali = _scan(hours)
             # regola di Stefano: chi e' fermo da 48 ore o piu' non si mostra (i responsabili restano, dagli uffici)
             limite = time.time() - FERMI_ORE * 3600
-            sessions = [s for s in _con_nomi(locali + _sessioni_cloud(locali) + _progetti_fissi(locali)) if s.get("modificato", 0) >= limite]
+            sessions = [s for s in _con_nomi(locali + _sessioni_cloud(locali)) + _progetti_fissi(locali) if s.get("modificato", 0) >= limite]
             data = json.dumps(sessions, ensure_ascii=False).encode("utf-8")
             extra = json.dumps(_extra(sessions), ensure_ascii=False).encode("utf-8")
             with _cond:
