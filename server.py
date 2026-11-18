@@ -39,7 +39,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.50 (3D++ passo 2: personaggi realistici)"
+VERSIONE = "task 9.51 (3D++: personaggi realistici con animazioni vere)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
@@ -633,7 +633,7 @@ class Handler(BaseHTTPRequestHandler):
             base = (HERE / "lib" / "umani").resolve()
             f = (base / path[len("/lib/umani/"):]).resolve()
             if base in f.parents and f.is_file():
-                tipi = {".json": "application/json", ".webp": "image/webp", ".gz": "application/octet-stream"}
+                tipi = {".json": "application/json", ".webp": "image/webp", ".gz": "application/octet-stream", ".gltf": "model/gltf+json", ".bin": "application/octet-stream"}
                 return self._send(200, f.read_bytes(), tipi.get(f.suffix, "application/octet-stream"))
             return self._send(404, b"", "text/plain")
         if path == "/api/sessions":

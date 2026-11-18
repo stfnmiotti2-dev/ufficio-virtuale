@@ -11,7 +11,72 @@
   const NASCOSTO = 1;
   const voci = [];
   let pkg = null, occupato = false;
-  Umani.loadHumanPackage("/lib/umani").then(p => { pkg = p; }).catch(e => console.warn("3D++: personaggi non caricati", e));
+  let ual = null;                                   // animazioni vere: Quaternius Universal Animation Library (CC0)
+  Promise.all([
+    Umani.loadHumanPackage("/lib/umani"),
+    new Promise((ok, ko) => new T.GLTFLoader().load("/lib/umani/animazioni/AnimationLibrary_Godot_Standard.gltf", ok, undefined, ko)),
+  ]).then(([p, g]) => { pkg = p; ual = g; }).catch(e => console.warn("3D++: personaggi non caricati", e));
+
+  // corrispondenza fra le ossa dello scheletro delle animazioni (Rigify) e quello dei personaggi (Mixamo)
+  const MAPPA = [["hips", "Hips"], ["spine.001", "Spine"], ["spine.002", "Spine1"], ["spine.003", "Spine2"], ["neck", "Neck"], ["head", "Head"]];
+  for (const [l, L] of [["L", "Left"], ["R", "Right"]]) {
+    for (const [a, b] of [["upper_arm", "Arm"], ["forearm", "ForeArm"], ["hand", "Hand"], ["thigh", "UpLeg"], ["shin", "Leg"], ["foot", "Foot"], ["toe", "ToeBase"]]) MAPPA.push([a + "." + l, L + b]);
+    for (const [f, F] of [["f_index", "Index"], ["f_middle", "Middle"], ["f_ring", "Ring"], ["f_pinky", "Pinky"], ["thumb", "Thumb"]]) for (let k = 1; k <= 3; k++) MAPPA.push([f + ".0" + k + "." + l, L + "Hand" + F + k]);
+  }
+  const FIGLIO = { upper_arm: "forearm", forearm: "hand", hand: "f_middle.01", thigh: "shin", shin: "foot", foot: "toe" };
+  const nomeUal = n => T.PropertyBinding.sanitizeNodeName("DEF-" + n);
+  // prepara il passaggio delle animazioni a un personaggio: per ogni osso la rotazione di riposo dei due scheletri
+  // (gli arti si allineano per direzione: i personaggi stanno in posa ad A, le animazioni a T; bacino e schiena no)
+  function prepara(v) {
+    const src = T.SkeletonUtils.clone(ual.scene); src.updateMatrixWorld(true);
+    const mixer = new T.AnimationMixer(src), azioni = {};
+    for (const n of ["Sitting_Idle_Loop", "Sitting_Talking_Loop", "Idle_Loop", "Walk_Loop"]) azioni[n] = mixer.clipAction(T.AnimationClip.findByName(ual.animations, n));
+    const gq = v.av.group.getWorldQuaternion(new T.Quaternion()), gqi = gq.clone().invert(), coppie = [];
+    for (const [sn, dn] of MAPPA) {
+      const sb = src.getObjectByName(nomeUal(sn)), db = v.ossa[dn]; if (!sb || !db) continue;
+      const base = sn.replace(/\.[LR]$/, ""), lr = sn.slice(-2);
+      let cn = FIGLIO[base] ? FIGLIO[base] + lr : /0[12]$/.test(base) ? base.replace(/0([12])$/, (m, k) => "0" + (+k + 1)) + lr : null;
+      if (/^(hips|spine|neck|head)/.test(sn)) cn = null;
+      const sc = cn && src.getObjectByName(nomeUal(cn)), dnf = cn && (MAPPA.find(m => m[0] === cn) || [])[1], dc = dnf && v.ossa[dnf];
+      let A = new T.Quaternion();
+      if (sc && dc) {
+        const sd = sc.getWorldPosition(new T.Vector3()).sub(sb.getWorldPosition(new T.Vector3())).normalize();
+        const dd = dc.getWorldPosition(new T.Vector3()).sub(db.getWorldPosition(new T.Vector3())).applyQuaternion(gqi).normalize();
+        A.setFromUnitVectors(dd, sd);
+      } else if (!/^(hips|spine|neck|head)/.test(sn)) { const c = coppie.find(c => c.db === db.parent); if (c) A.copy(c.A); }
+      const dR = A.clone().multiply(gqi.clone().multiply(db.getWorldQuaternion(new T.Quaternion())));
+      coppie.push({ sb, db, A, sR: sb.getWorldQuaternion(new T.Quaternion()).invert(), dR,
+        braccio: /Arm|Hand/.test(dn), gamba: /Hips|UpLeg|Leg|Foot|Toe/.test(dn), destro: dn.startsWith("Right"), schiena: /Spine|Neck|Head/.test(dn) });
+    }
+    const sh = src.getObjectByName(nomeUal("hips"));
+    const hipS = sh.getWorldPosition(new T.Vector3()), hipD = v.av.group.worldToLocal(v.ossa.Hips.getWorldPosition(new T.Vector3()));
+    Object.assign(v, { src, mixer, azioni, coppie, sh, hipS, hipD, scalaAnca: (hipD.y) / hipS.y, clip: null });
+  }
+  const _a = new T.Quaternion(), _b = new T.Quaternion(), _I = new T.Quaternion(), _v = new T.Vector3();
+  function retarget(v, salta, muoviAnca, smorza) {
+    const gq = v.av.group.getWorldQuaternion(new T.Quaternion());
+    for (const c of v.coppie) {
+      if (salta(c)) continue;
+      c.sb.getWorldQuaternion(_a).multiply(c.sR);                       // quanto si e' girato l'osso dell'animazione
+      if (smorza && c.schiena) _a.slerp(_I, smorza);
+      _a.multiply(c.dR).premultiply(gq);
+      c.db.parent.getWorldQuaternion(_b).invert();
+      c.db.quaternion.copy(_b.multiply(_a)); c.db.updateMatrixWorld(true);
+    }
+    if (muoviAnca) {
+      v.sh.getWorldPosition(_v).sub(v.hipS).multiplyScalar(v.scalaAnca); _v.x = 0; _v.z = 0; _v.add(v.hipD);   // solo su e giu'
+      v.av.group.localToWorld(_v); v.ossa.Hips.parent.worldToLocal(_v); v.ossa.Hips.position.copy(_v); v.ossa.Hips.updateMatrixWorld(true);
+    }
+  }
+  function suona(v, nome, dt) {                                         // cambia animazione con una breve dissolvenza
+    if (v.clip !== nome) {
+      const a = v.azioni[nome], da = v.clip && v.azioni[v.clip];
+      a.reset().play(); a.time = Math.random() * a.getClip().duration;
+      if (da) a.crossFadeFrom(da, 0.3, false);
+      v.clip = nome;
+    }
+    v.mixer.update(dt); v.src.updateMatrixWorld(true);
+  }
 
   // ---------- aspetto: dal look dell'omino alla configurazione del personaggio ----------
   const scegli = (h, lista) => lista[h % lista.length];
@@ -104,7 +169,9 @@
     await av.setConfig(cfg);
     av.group.traverse(m => {
       if (!m.isMesh) return;
-      m.castShadow = true; m.receiveShadow = false; m.frustumCulled = false; m.userData.plus = true;
+      m.castShadow = !/eyes|eyebrow|eyelash|hair|teeth|tongue/.test(m.name);   // ombre solo da corpo e vestiti (piu' leggero)
+      m.receiveShadow = false; m.frustumCulled = false; m.userData.plus = true;
+      if (/teeth|tongue/.test(m.name)) m.visible = false;                 // denti e lingua non si vedono: non li disegno
       if (ricolora && /clothes-male_casualsuit05/.test(m.name)) tingi(m.material, ricolora);
     });
     const fig = new T.Group(); fig.add(av.group);
@@ -117,6 +184,7 @@
     const anca = ossa.Hips.getWorldPosition(v3).y;
     v.corpo.add(fig);
     Object.assign(v, { av, fig, ossa, S, anca, riposo: av.bones.map(b => [b, b.position.clone(), b.quaternion.clone()]), fase: Math.random() * 10 });
+    prepara(v);
     accessori(v);
   }
 
@@ -128,7 +196,7 @@
     b.quaternion.premultiply(_q.setFromAxisAngle(la, ang)); b.updateMatrixWorld(true);
   }
   const _m1 = new T.Matrix4(), _m2 = new T.Matrix4(), _m3 = new T.Matrix4();
-  function posa(v, st, t) {
+  function posa(v, st, t, dt) {
     const o = v.ossa;
     for (const [b, p, q] of v.riposo) { b.position.copy(p); b.quaternion.copy(q); }
     if (st.seduto) {                                                   // anca ferma sulla sedia (chi dorme si piega in avanti)
@@ -141,11 +209,16 @@
     const fq = v.av.group.getWorldQuaternion(new T.Quaternion());
     const lato = new T.Vector3(1, 0, 0).applyQuaternion(fq), avanti = new T.Vector3(0, 0, 1).applyQuaternion(fq), su = new T.Vector3(0, 1, 0);
     const k = t + v.fase;
-    gira(o.LeftArm, avanti, -0.95); gira(o.RightArm, avanti, 0.95);       // braccia lungo i fianchi
-    gira(o.Spine1, lato, Math.sin(k * 1.6) * 0.012);                      // respiro
+    const braccia = st.seduto && (st.scrive || st.dorme);            // braccia guidate da me (tastiera, testa sulle braccia)
+    // animazione vera per tutto il resto: le clavicole restano ferme (copiate spingono indietro le spalle)
+    if (st.cammina) { suona(v, "Walk_Loop", dt); retarget(v, c => false, true, 0.6); }
+    else if (st.seduto) { suona(v, st.parla ? "Sitting_Talking_Loop" : "Sitting_Idle_Loop", dt); retarget(v, c => c.gamba || (braccia && c.braccio) || (st.dorme && c.schiena), false, 0.3); }
+    else { suona(v, "Idle_Loop", dt); retarget(v, c => c.gamba || (st.alza && c.braccio && c.destro), false, 0.3); }
+    if (braccia) { gira(o.LeftArm, avanti, -0.95); gira(o.RightArm, avanti, 0.95); }
+    if (st.alza && !st.cammina && !braccia) gira(o.RightArm, avanti, 0.95);
     if (st.seduto) {
       for (const sd of ["Left", "Right"]) { gira(o[sd + "UpLeg"], lato, -1.55); gira(o[sd + "Leg"], lato, 1.55); }
-      if (st.scrive || st.dorme) for (const sd of ["Left", "Right"]) {
+      if (braccia) for (const sd of ["Left", "Right"]) {
         const bt = st.scrive ? Math.sin(k * 13 + (sd === "Left" ? 0 : 2)) * 0.06 : 0;
         gira(o[sd + "Arm"], lato, st.dorme ? -1.25 : -1.0); gira(o[sd + "Arm"], avanti, sd === "Left" ? 0.1 : -0.1);
         gira(o[sd + "ForeArm"], lato, (st.dorme ? -0.2 : -0.45) + bt);
@@ -155,13 +228,7 @@
         gira(fa, dir, sd === "Left" ? 1.4 : -1.4);                          // palmi verso il basso
       }
       if (st.dorme) gira(o.Head, lato, 0.35);
-      else gira(o.Head, su, Math.sin(k * 0.4) * 0.12);
-    } else if (st.cammina) {
-      const a = st.passo;                                              // stessa fase delle gambe del vecchio omino
-      gira(o.LeftUpLeg, lato, -a * 0.9); gira(o.RightUpLeg, lato, a * 0.9);
-      gira(o.LeftLeg, lato, Math.max(0, a) * 0.9); gira(o.RightLeg, lato, Math.max(0, -a) * 0.9);
-      gira(o.LeftArm, lato, a * 0.5); gira(o.RightArm, lato, -a * 0.5);
-    } else gira(o.Head, su, Math.sin(k * 0.5) * 0.15);
+    }
     if (st.alza) { gira(o.RightArm, avanti, -2.3); gira(o.RightForeArm, lato, -0.3); }   // braccio alzato: aspetta Stefano
   }
 
@@ -170,7 +237,7 @@
   let tempo = 0;
   function aggiorna(dt, scena) {
     tempo += dt;
-    if (!pkg) return;
+    if (!pkg || !ual) return;
     for (let i = voci.length - 1; i >= 0; i--) {
       const v = voci[i], u = v.g.userData;
       if (!inScena(v.g, scena)) { if (v.fig) v.fig.removeFromParent(); voci.splice(i, 1); continue; }
@@ -187,7 +254,8 @@
         dorme: seduto && v.corpo.rotation.x < -0.5,
       };
       st.scrive = seduto && !st.dorme && !st.alza && !!u.s && ["lavora", "supervisore"].includes(u.s.stato);
-      posa(v, st, tempo);
+      st.parla = st.seduto && !u.s;                                  // in riunione: parlano
+      posa(v, st, tempo, dt);
     }
   }
 
