@@ -39,8 +39,9 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.56 (connettore Ufficio registrato nella configurazione vera di Claude, in Claude-Data)"
+VERSIONE = "task 9.57 (thread del cloud senza notizie da più di 1 ora: omino arancione con ⏳ dato vecchio?)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
+VECCHIO_S = 3600        # un thread del cloud "al lavoro" senza notizie da piu' di cosi' diventa "dato vecchio?"
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
 
@@ -365,6 +366,7 @@ def _sessioni_cloud(locali):
             continue
         stato = "aspetta" if st.startswith("aspetta") else "finito" if st.startswith(("finit", "fatto")) else "lavora"
         ts = _iso(t.get("ultima_attivita_utc")) or _iso(dati.get("aggiornato_utc")) or time.time()
+        vecchio = stato == "lavora" and time.time() - ts > VECCHIO_S     # "lavora" ma nessuna notizia da troppo
         out.append({
             "id": "cloud:" + str(t["id"]), "cloud": True, "thread": str(t["id"]),
             "thread_titolo": t.get("titolo"), "titolo": t.get("titolo") or "(thread nel cloud)",
@@ -381,6 +383,10 @@ def _sessioni_cloud(locali):
             **_info_extra(t, stato),
             **_aspetto_progetto(progetto),
         })
+        if vecchio:                                    # omino arancione con ⏳: il dato potrebbe non essere vero
+            ore = int((time.time() - ts) // 3600)
+            out[-1].update(stato="ferma?", icona="⏳", vecchio=True,
+                           attivita="Dato vecchio? " + str(out[-1]["attivita"])[:90])
         out += _sottoagenti_interni(t, ts, out[-1]["link"], chan, progetto)
     return out
 

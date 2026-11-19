@@ -135,10 +135,16 @@ def aggiorna(arg):
     dati.update(aggiornato_utc=_ora_utc(), thread=voci)
     _scrivi(dati)
     acceso = _diagnosi_fresca() is not None
+    # chi chiama vede anche i thread del suo progetto fermi da piu' di un'ora: se puo', li aggiorna lui
+    vecchi = [v for v in voci if v is not voce and str(v.get("progetto", "")).lower() == progetto.lower()
+              and v.get("stato") == "lavora" and time.time() - (_ts(v.get("ultima_attivita_utc")) or 0) > 3600]
+    nota = ("\nAttenzione: in ufficio questi thread del tuo progetto risultano 'al lavoro' ma senza notizie da piu' di un'ora "
+            "(dato vecchio?): " + "; ".join(f"{v.get('titolo') or v['id']} ({v['id']})" for v in vecchi[:10])
+            + ". Se sai com'e' andata, aggiornali con ufficio_aggiorna.") if vecchi else ""
     return (f"Fatto: in ufficio '{voce.get('titolo') or thread}' ({progetto}) ora e' '{voce['stato']}'"
             + (f" - {voce.get('attesa') if voce['stato'] == 'aspetta' and voce.get('attesa') else voce.get('attivita')}"
                if voce.get("attivita") or voce.get("attesa") else "") + "."
-            + ("" if acceso else " (L'ufficio adesso e' chiuso: lo vedra' quando Stefano lo apre.)"))
+            + ("" if acceso else " (L'ufficio adesso e' chiuso: lo vedra' quando Stefano lo apre.)") + nota)
 
 
 def _ts(s):
