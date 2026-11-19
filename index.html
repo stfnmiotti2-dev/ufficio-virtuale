@@ -166,7 +166,6 @@
   <span class="tia" id="tia" title="Stima dalle sessioni delle ultime 2 ore: TIA aperti e non ancora chiusi. Regola: massimo 2 per versione e 3 in totale."></span>
   <span class="spia" id="spia"></span>
   <label title="Prova della versione 3D: trascina per girare, rotella per lo zoom"><input type="checkbox" id="vista3d"> 3D</label>
-  <label title="3D+: omini con un modello 3D vero (stile videogioco) e oggetti più semplici. Ricarica la pagina."><input type="checkbox" id="vista3dplus"> 3D+</label>
   <label title="3D++: personaggi realistici (MakeHuman) con animazioni vere. Più pesante del 3D+. Ricarica la pagina."><input type="checkbox" id="vista3dpp"> 3D++</label>
   <button id="demo3d" hidden title="Fa partire subito pausa caffè, bussate, postino con ordini e cantiere, per vederli senza aspettare">🎬 Prova animazioni</button>
   <button id="visuale3d" hidden title="Riporta la visuale 3D a quella iniziale (anche: doppio clic sull'ufficio)">🎯 Visuale iniziale</button>
@@ -186,6 +185,7 @@
 <script>
 // 3D++ usa la libreria 3D nuova (three.js r170); 3D e 3D+ restano sulla vecchia r128.
 (function () {
+  try { localStorage.setItem("vista3dplus", "0"); } catch (e) {}       // 3D+ tolto (19/11): chi l'aveva acceso torna al 3D
   var pp = false; try { pp = localStorage.getItem("vista3dpp") === "1"; } catch (e) {}
   var f = pp ? ["/lib/three170.js"] : ["/lib/three.min.js", "/lib/OrbitControls.js", "/lib/GLTFLoader.js", "/lib/meshopt_decoder.js", "/lib/SkeletonUtils.js", "/lib/BufferGeometryUtils.js"];
   for (var i = 0; i < f.length; i++) document.write('<script src="' + f[i] + '"><\/script>');
@@ -446,22 +446,15 @@ document.getElementById("demo3d").onclick = () => {
 };
 vista3d.onchange = () => {
   try { localStorage.setItem("vista3d", vista3d.checked ? "1" : "0"); } catch (e) {}
-  if (!vista3d.checked && (vista3dplus.checked || localStorage.getItem("vista3dpp") === "1")) { try { localStorage.setItem("vista3dplus", "0"); localStorage.setItem("vista3dpp", "0"); } catch (e) {} location.reload(); return; }
+  if (!vista3d.checked && localStorage.getItem("vista3dpp") === "1") { try { localStorage.setItem("vista3dpp", "0"); } catch (e) {} location.reload(); return; }
   disegnaUfficio();
-};
-// 3D+: omini con modello 3D vero; si sceglie all'avvio della pagina, quindi ricarico
-const vista3dplus = document.getElementById("vista3dplus");
-try { vista3dplus.checked = localStorage.getItem("vista3dplus") === "1"; } catch (e) {}
-vista3dplus.onchange = () => {
-  try { localStorage.setItem("vista3dplus", vista3dplus.checked ? "1" : "0"); if (vista3dplus.checked) { localStorage.setItem("vista3d", "1"); localStorage.setItem("vista3dpp", "0"); } } catch (e) {}
-  location.reload();
 };
 const vista3dpp = document.getElementById("vista3dpp");
 try { vista3dpp.checked = localStorage.getItem("vista3dpp") === "1"; } catch (e) {}
 vista3dpp.onchange = () => {
   try {
     localStorage.setItem("vista3dpp", vista3dpp.checked ? "1" : "0");
-    if (vista3dpp.checked) { localStorage.setItem("vista3d", "1"); localStorage.setItem("vista3dplus", "0"); }
+    if (vista3dpp.checked) localStorage.setItem("vista3d", "1");
   } catch (e) {}
   location.reload();
 };
