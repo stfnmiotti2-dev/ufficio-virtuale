@@ -39,23 +39,19 @@ def file_config():
                 trovati.append(d / "LocalCache" / "Roaming" / "Claude" / "claude_desktop_config.json")
         except OSError:
             pass
-    esistenti = [f for f in trovati if f.exists()]
-    if esistenti:
-        return esistenti
-    # nessun file: i connettori dell'app sono estensioni. Lo creo dove l'app lo cerca
-    # (la versione dello Store legge la copia in LocalCache, quella classica %APPDATA%\Claude)
+    # se manca, lo creo in tutte le cartelle di Claude Desktop: la versione dello Store puo' leggere
+    # %APPDATA%\Claude oppure la sua copia in LocalCache (dipende da come e' installata)
     cartelle = [f for f in trovati if f.parent.is_dir()]
-    store = [f for f in cartelle if "Packages" in f.parts]
-    nuovi = store or cartelle
-    for f in nuovi:
-        try:
-            f.write_text('{"mcpServers": {}}', encoding="utf-8")
-            log(f"creato {f}")
-        except OSError as exc:
-            log(f"non creo {f}: {exc}")
-    if not nuovi:
+    for f in cartelle:
+        if not f.exists():
+            try:
+                f.write_text('{"mcpServers": {}}', encoding="utf-8")
+                log(f"creato {f}")
+            except OSError as exc:
+                log(f"non creo {f}: {exc}")
+    if not cartelle:
         log("nessuna cartella di Claude Desktop trovata: " + ", ".join(str(f.parent) for f in trovati))
-    return [f for f in nuovi if f.exists()]
+    return [f for f in cartelle if f.exists()]
 
 
 def python_exe():
