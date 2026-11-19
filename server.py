@@ -39,7 +39,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.52 (3D++: postura corretta da seduti, chi dorme appoggia la testa sulle braccia)"
+VERSIONE = "task 9.53 (connettore Ufficio: i progetti aggiornano il loro omino direttamente)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
@@ -204,6 +204,9 @@ def _con_nomi(sessions):
     out = []
     for s in sessions:
         s = dict(s)
+        if s.get("altro_progetto"):                     # KUKA, GX Works...: niente commesse ne' responsabili TIA
+            out.append(s)
+            continue
         titolo_thread, resp = s.get("thread_titolo"), None
         if titolo_thread and _BOSS.search(titolo_thread):     # "24_247 OP60 -boss": e' un responsabile
             titolo_thread = resp = _senza_boss(titolo_thread)
@@ -286,16 +289,76 @@ def _stato_cloud():
     return _cloud["dati"]
 
 
+# ---------- connettore Ufficio (connettore.py): i progetti scrivono qui il loro stato, direttamente ----------
+CONN_FILE = HERE / "connettore-stato.json"
+_conn = {"mtime": None, "dati": {}}
+
+
+def _stato_connettore():
+    try:
+        mt = CONN_FILE.stat().st_mtime
+    except OSError:
+        return {}
+    if mt != _conn["mtime"]:
+        try:
+            dati = json.loads(CONN_FILE.read_text(encoding="utf-8"))
+            _conn.update(mtime=mt, dati=dati if isinstance(dati, dict) else {})
+        except (OSError, ValueError):
+            pass
+    return _conn["dati"]
+
+
+def _e_tia(progetto):
+    return "tia" in str(progetto or "").lower()
+
+
+def _thread_cloud():
+    """[(voce, progetto)]: stato-thread.json (Agente TIA) piu' il connettore. Se lo stesso thread
+    c'e' in tutti e due, vale la voce scritta per ultima."""
+    voci = {}
+    for t in _stato_cloud().get("thread") or []:
+        if isinstance(t, dict) and t.get("id"):
+            voci[("agente tia portal", str(t["id"]).lower())] = (t, "Agente Tia portal")
+    for t in _stato_connettore().get("thread") or []:
+        if not isinstance(t, dict) or not t.get("id"):
+            continue
+        prog = str(t.get("progetto") or "").strip() or "Altro progetto"
+        k = ("agente tia portal" if _e_tia(prog) else prog.lower(), str(t["id"]).lower())
+        vecchia = voci.get(k)
+        if vecchia and (_iso(vecchia[0].get("ultima_attivita_utc")) or 0) > (_iso(t.get("ultima_attivita_utc")) or 0):
+            continue
+        voci[k] = (t, "Agente Tia portal" if _e_tia(prog) else prog)
+    return list(voci.values())
+
+
+def _chan_di(progetto, locali):
+    if _e_tia(progetto):
+        return next((s.get("chan") for s in locali if s.get("chan") and s.get("progetto_claude", "").lower().startswith("agente tia")), None) or \
+            next((s.get("chan") for s in locali if s.get("chan") and s.get("progetto_claude", "").lower().startswith("agente")), None)
+    try:
+        noti = json.loads(LINK_PROGETTI.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        noti = {}
+    for p in PROGETTI_FISSI:
+        if p["cerca"] in progetto.lower() and str(noti.get(p["id"], "")).startswith("chan_"):
+            return noti[p["id"]]
+    return next((s.get("chan") for s in locali if s.get("chan") and progetto.lower() in str(s.get("progetto_claude") or "").lower()), None)
+
+
 def _sessioni_cloud(locali):
     """Una figura per ogni thread del cloud, se sul PC non c'e' gia' una sua sessione al lavoro."""
     dati = _stato_cloud()
     al_pc = {(s.get("thread") or "").lower() for s in locali
              if s.get("stato") in ("aspetta", "lavora", "pensa", "ferma?")}
-    chan = next((s.get("chan") for s in locali if s.get("chan") and s.get("progetto_claude", "").lower().startswith("agente")), None)
+    chans = {}
     out = []
-    for t in dati.get("thread") or []:
-        if not isinstance(t, dict) or not t.get("id") or str(t["id"]).lower() in al_pc:
+    for t, progetto in _thread_cloud():
+        if str(t["id"]).lower() in al_pc:
             continue
+        if progetto not in chans:
+            chans[progetto] = _chan_di(progetto, locali)
+        chan = chans[progetto]
+        altro = not _e_tia(progetto)
         testo = str(t.get("stato") or "").strip()
         st = testo.lower()
         if st.startswith(("chius", "archiviat")):    # chiuso da Stefano: sparisce, e l'ufficio fa la scena di chiusura
@@ -308,15 +371,24 @@ def _sessioni_cloud(locali):
             "responsabile": None, "stato": stato, "modificato": ts,
             "icona": "✋" if stato == "aspetta" else "☁️",
             "attivita": str(t["attesa"])[:120] if stato == "aspetta" and t.get("attesa") else
+                        str(t["attivita"])[:120] if t.get("attivita") else
                         (testo[:1].upper() + testo[1:] if testo else "Lavora nel cloud"),
-            "progetto": "cloud", "progetto_claude": "Agente Tia portal", "chan": chan,
+            "progetto": "cloud", "progetto_claude": progetto, "chan": chan, "altro_progetto": altro,
             "link": t.get("link") if str(t.get("link") or "").startswith("https://claude.ai/") else
-                    (f"https://claude.ai/code/project/{chan}?thread={t['id']}" if chan else None),
-            "voce_cloud_resp": t.get("responsabile"),
+                    (f"https://claude.ai/code/project/{chan}?thread={t['id']}" if chan and str(t["id"]).startswith("cmsg_") else
+                     f"https://claude.ai/code/project/{chan}" if chan else None),
+            "voce_cloud_resp": None if altro else t.get("responsabile"),
             **_info_extra(t, stato),
+            **_aspetto_progetto(progetto),
         })
-        out += _sottoagenti_interni(t, ts, out[-1]["link"], chan)
+        out += _sottoagenti_interni(t, ts, out[-1]["link"], chan, progetto)
     return out
+
+
+def _aspetto_progetto(progetto):
+    """I thread di KUKA e GX Works hanno l'aspetto della loro figura fissa (tuta, signore anziano...)."""
+    p = next((p for p in PROGETTI_FISSI if p["cerca"] in str(progetto).lower()), None) if not _e_tia(progetto) else None
+    return {"donna": p["donna"], "tuta": p.get("tuta", False), "anziano": p.get("anziano", False)} if p else {}
 
 
 def _info_extra(t, stato):
@@ -380,12 +452,13 @@ def _chan_progetti(locali):
     return nuovi
 
 
-def _progetti_fissi(locali):
+def _progetti_fissi(locali, cloud=()):
     ora = time.time()
     out = []
     chan = _chan_progetti(locali)
     for p in PROGETTI_FISSI:
-        suoi = [s for s in locali if p["cerca"] in str(s.get("progetto_claude") or "").lower()]
+        suoi = [s for s in list(locali) + [c for c in cloud if c.get("altro_progetto")]
+                if p["cerca"] in str(s.get("progetto_claude") or "").lower()]
         if any(s.get("stato") in ("aspetta", "lavora", "pensa") for s in suoi):
             continue                                   # ci sono gia' le sue sessioni vere
         ultimo = max([s.get("modificato", 0) for s in suoi] + [0])
@@ -408,7 +481,7 @@ def _progetti_fissi(locali):
     return out
 
 
-def _sottoagenti_interni(t, ts, link, chan):
+def _sottoagenti_interni(t, ts, link, chan, progetto="Agente Tia portal"):
     """Sottoagenti lanciati DENTRO un thread (campo "sottoagenti" di stato-thread.json):
     una figura temporanea ciascuno, nell'isola del thread. Quando finiscono spariscono
     (l'ufficio li fa uscire dalla porta)."""
@@ -418,7 +491,9 @@ def _sottoagenti_interni(t, ts, link, chan):
     if not isinstance(sub, list):
         return []
     base = str(t.get("titolo") or "")
-    if _BOSS.search(base):
+    if not _e_tia(progetto):
+        isola = base or progetto
+    elif _BOSS.search(base):
         isola = _senza_boss(base)
     else:
         parti = _SEPARATORE.split(base, 1)
@@ -438,7 +513,8 @@ def _sottoagenti_interni(t, ts, link, chan):
             "cloud": True, "thread": None, "sottoagente": True,
             "thread_titolo": f"{isola} › {nome}", "titolo": f"{isola} › {nome}",
             "responsabile": None, "stato": "aspetta" if st.startswith("aspetta") else "lavora", "modificato": ts,
-            "icona": "🧩", "attivita": nome, "progetto": "cloud", "progetto_claude": "Agente Tia portal", "chan": chan,
+            "icona": "🧩", "attivita": nome, "progetto": "cloud", "progetto_claude": progetto, "chan": chan,
+            "altro_progetto": not _e_tia(progetto),
             "link": link, "voce_cloud_resp": None,
         })
     return out
@@ -587,7 +663,8 @@ def _watcher(hours):
             locali = _scan(hours)
             # regola di Stefano: chi e' fermo da 48 ore o piu' non si mostra (i responsabili restano, dagli uffici)
             limite = time.time() - FERMI_ORE * 3600
-            sessions = [s for s in _con_nomi(locali + _sessioni_cloud(locali)) + _progetti_fissi(locali) if s.get("modificato", 0) >= limite]
+            cloud = _sessioni_cloud(locali)
+            sessions = [s for s in _con_nomi(locali + cloud) + _progetti_fissi(locali, cloud) if s.get("modificato", 0) >= limite]
             data = json.dumps(sessions, ensure_ascii=False).encode("utf-8")
             extra = json.dumps(_extra(sessions), ensure_ascii=False).encode("utf-8")
             with _cond:
@@ -749,6 +826,11 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except AttributeError:
         pass
+    try:                             # connettore Ufficio in Claude Desktop (anche dopo un aggiornamento automatico)
+        import registra_connettore
+        registra_connettore.registra()
+    except Exception as exc:
+        print("connettore non registrato:", exc, file=sys.stderr)
     server = None
     for _ in range(20):              # dopo un riavvio la porta puo' restare occupata per un attimo
         try:

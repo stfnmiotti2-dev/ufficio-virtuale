@@ -1118,7 +1118,7 @@
     const file = [[]];
     let usate = 0;
     // i colleghi degli altri progetti (Ufficio virtuale, KUKA, GX Works) stanno a parte, in un open space tutto loro
-    const aParte = isole.filter(q => q.fuori.some(s => s.fisso));
+    const aParte = isole.filter(q => q.fuori.some(s => s.fisso || s.altro_progetto));
     for (const q of isole) {
       if (aParte.includes(q)) continue;
       if (usate && usate + q.fuori.length > rigaMax) { file.push([]); usate = 0; }

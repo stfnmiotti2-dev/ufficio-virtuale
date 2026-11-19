@@ -44,6 +44,11 @@ def main():
         changed = aggiorna.update()
     except Exception:
         pass
+    try:                                  # connettore Ufficio per le chat dei progetti (Claude Desktop)
+        import registra_connettore
+        registra_connettore.registra()
+    except Exception:
+        pass
     if changed and server_acceso():
         # il server acceso ha il codice vecchio: gli chiedo di ripartire
         try:
