@@ -33,6 +33,12 @@ def file_config():
         trovati.append(Path(app) / "Claude" / "claude_desktop_config.json")
     loc = os.environ.get("LOCALAPPDATA")
     if loc:
+        try:                                         # versione attuale dell'app: %LOCALAPPDATA%\Claude-Data\<pacchetto>
+            vere = [f for f in (Path(loc) / "Claude-Data").glob("*/claude_desktop_config.json") if f.is_file()]
+        except OSError:
+            vere = []
+        if vere:
+            return vere
         pk = Path(loc) / "Packages"
         try:
             for d in pk.glob("Claude_*"):
