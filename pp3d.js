@@ -195,13 +195,21 @@
     b.parent.getWorldQuaternion(_p); const la = asse.clone().applyQuaternion(_p.invert());
     b.quaternion.premultiply(_q.setFromAxisAngle(la, ang)); b.updateMatrixWorld(true);
   }
+  const _v1 = new T.Vector3(), _v2 = new T.Vector3(), _v3 = new T.Vector3(), _q2 = new T.Quaternion();
+  function punta(b, figlio, meta) {                                    // ruota l'osso perché il figlio punti verso "meta" (mondo)
+    b.getWorldPosition(_v2); figlio.getWorldPosition(_v3);
+    const ora = _v3.sub(_v2).normalize(), voglio = meta.clone().sub(_v2).normalize();
+    _q2.setFromUnitVectors(ora, voglio);
+    b.parent.getWorldQuaternion(_p); b.getWorldQuaternion(_q);
+    b.quaternion.copy(_p.invert().multiply(_q2).multiply(_q)); b.updateMatrixWorld(true);
+  }
   const _m1 = new T.Matrix4(), _m2 = new T.Matrix4(), _m3 = new T.Matrix4();
   function posa(v, st, t, dt) {
     const o = v.ossa;
     for (const [b, p, q] of v.riposo) { b.position.copy(p); b.quaternion.copy(q); }
     if (st.seduto) {                                                   // anca ferma sulla sedia (chi dorme si piega in avanti)
       v.corpo.updateMatrix();
-      _m1.makeTranslation(0, 0.6, 0).multiply(_m2.makeRotationX(st.dorme ? -0.55 : 0)).multiply(_m3.makeTranslation(0, -v.anca, 0));
+      _m1.makeTranslation(0, 0.6, 0).multiply(_m3.makeTranslation(0, -v.anca, 0));
       _m2.copy(v.corpo.matrix).invert().multiply(_m1);
       _m2.decompose(v.fig.position, v.fig.quaternion, v.fig.scale);
     } else { v.fig.position.set(0, 0, 0); v.fig.quaternion.identity(); v.fig.scale.set(1, 1, 1); }
@@ -217,13 +225,23 @@
     if (braccia) { gira(o.LeftArm, avanti, -0.95); gira(o.RightArm, avanti, 0.95); }
     if (st.alza && !st.cammina && !braccia) gira(o.RightArm, avanti, 0.95);
     if (st.seduto) {
-      for (const sd of ["Left", "Right"]) { gira(o[sd + "UpLeg"], lato, -1.55); gira(o[sd + "Leg"], lato, 1.55); }
+      for (const sd of ["Left", "Right"]) {                           // gambe dritte in avanti, ginocchia non divaricate
+        gira(o[sd + "UpLeg"], lato, -1.55); gira(o[sd + "UpLeg"], su, sd === "Left" ? -0.13 : 0.13); gira(o[sd + "Leg"], lato, 1.55);
+      }
+      if (st.dorme) {                                                  // dorme: schiena curva in avanti, testa appoggiata sulle braccia incrociate
+        for (const n of ["Spine", "Spine1", "Spine2"]) gira(o[n], lato, 0.33);
+        gira(o.Neck, lato, 0.4);
+      }
       if (braccia) for (const sd of ["Left", "Right"]) {
-        const bt = st.scrive ? Math.sin(k * 13 + (sd === "Left" ? 0 : 2)) * 0.06 : 0;
-        gira(o[sd + "Arm"], lato, st.dorme ? -1.25 : -1.0); gira(o[sd + "Arm"], avanti, sd === "Left" ? 0.1 : -0.1);
-        gira(o[sd + "ForeArm"], lato, (st.dorme ? -0.2 : -0.45) + bt);
-        if (st.dorme) gira(o[sd + "ForeArm"], su, sd === "Left" ? -1.0 : 1.0);   // avambracci incrociati sotto la testa
-        const fa = o[sd + "ForeArm"], ha = o[sd + "Hand"];
+        const fa = o[sd + "ForeArm"], ha = o[sd + "Hand"], s1 = sd === "Left" ? -1 : 1;
+        if (st.dorme) {                                                // gomiti sul piano, avambracci incrociati davanti alla testa
+          punta(o[sd + "Arm"], fa, _v1.set(s1 * 0.25, 0.88, -0.47).applyMatrix4(v.g.matrixWorld));
+          punta(fa, ha, _v1.set(-s1 * 0.1, sd === "Left" ? 0.89 : 0.92, -0.6).applyMatrix4(v.g.matrixWorld));
+        } else {
+          const bt = st.scrive ? Math.sin(k * 13 + (sd === "Left" ? 0 : 2)) * 0.06 : 0;
+          gira(o[sd + "Arm"], lato, -1.0); gira(o[sd + "Arm"], avanti, sd === "Left" ? 0.1 : -0.1);
+          gira(fa, lato, -0.45 + bt);
+        }
         const dir = ha.getWorldPosition(new T.Vector3()).sub(fa.getWorldPosition(new T.Vector3())).normalize();
         gira(fa, dir, sd === "Left" ? 1.4 : -1.4);                          // palmi verso il basso
       }
