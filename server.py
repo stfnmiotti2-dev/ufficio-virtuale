@@ -29,6 +29,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/chat": ("chat.html", "text/html; charset=utf-8"),
           "/ufficio.js": ("ufficio.js", "text/javascript; charset=utf-8"),
           "/ufficio3d.js": ("ufficio3d.js", "text/javascript; charset=utf-8"),
+          "/gdr.js": ("gdr.js", "text/javascript; charset=utf-8"),
           "/lib/three.min.js": ("lib/three.min.js", "text/javascript; charset=utf-8"),
           "/pp3d.js": ("pp3d.js", "text/javascript; charset=utf-8"),
           "/lib/three170.js": ("lib/three170.js", "text/javascript; charset=utf-8"),
@@ -39,7 +40,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.60 (chi ha finito va in sala relax, scrivania e sedia verdi; tappeti persiani del colore dell isola sotto le scrivanie)"
+VERSIONE = "task 9.61 (modalita GDR nel 3D: pulsante Entra, giri l ufficio a piedi in prima o terza persona)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 VECCHIO_S = 3600        # un thread del cloud "al lavoro" senza notizie da piu' di cosi' diventa "dato vecchio?"
 ATTESA_LUNGA_S = 2 * 3600   # chi aspetta Stefano da piu' di cosi' (o dati cloud piu' vecchi di cosi'): ⏳
