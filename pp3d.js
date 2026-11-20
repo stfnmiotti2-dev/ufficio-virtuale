@@ -30,7 +30,7 @@
   function prepara(v) {
     const src = T.SkeletonUtils.clone(ual.scene); src.updateMatrixWorld(true);
     const mixer = new T.AnimationMixer(src), azioni = {};
-    for (const n of ["Sitting_Idle_Loop", "Sitting_Talking_Loop", "Idle_Loop", "Walk_Loop"]) azioni[n] = mixer.clipAction(T.AnimationClip.findByName(ual.animations, n));
+    for (const n of ["Sitting_Idle_Loop", "Sitting_Talking_Loop", "Idle_Loop", "Idle_Talking_Loop", "Walk_Loop"]) { const c = T.AnimationClip.findByName(ual.animations, n); if (c) azioni[n] = mixer.clipAction(c); }
     const gq = v.av.group.getWorldQuaternion(new T.Quaternion()), gqi = gq.clone().invert(), coppie = [];
     for (const [sn, dn] of MAPPA) {
       const sb = src.getObjectByName(nomeUal(sn)), db = v.ossa[dn]; if (!sb || !db) continue;
@@ -89,12 +89,13 @@
     let vestiti, ricolora = null;
     if (lk.capo) vestiti = "male_elegantsuit01";
     else if (lk.ruolo === "resp") vestiti = donna ? scegli(h >>> 3, ["toigo_female_suit", "toigo_female_double-breasted_suit"]) : scegli(h >>> 3, ["male_elegantsuit01", "toigo_male_suit_3", "toigo_male_double-breasted_suit"]);
-    else if (lk.segr) vestiti = "toigo_halter_dress_knee_length";
+    else if (lk.segr) { vestiti = "toigo_halter_dress_knee_length"; ricolora = "#d0213a"; }      // vestito rosso come nel 3D
+    else if (lk.ruolo === "ispettrice") { vestiti = "toigo_halter_dress_knee_length"; ricolora = "#c8102e"; }   // l'ispettrice: abito rosso
     else if (lk.tuta || lk.ruolo === "operaio") vestiti = "male_worksuit01";
     else if (lk.vecchio) vestiti = "male_casualsuit01";
     else if (donna) vestiti = scegli(h >>> 3, ["female_elegantsuit01", "toigo_shift_dress"]);
     else { vestiti = "male_casualsuit05"; ricolora = lk.maglia; }          // maglietta bianca: la tingo del colore della polo / maglione
-    const capelli = lk.calvo ? null : donna ? scegli(h >>> 5, ["toigo_blunt_bob", "ponytail01", "long01", "bob02"]) : scegli(h >>> 5, ["short02", "short04", "short01", "short03"]);
+    const capelli = lk.calvo || lk.tuta ? null : lk.ruolo === "ispettrice" ? "long01" : lk.segr ? "ponytail01" : donna ? scegli(h >>> 5, ["toigo_blunt_bob", "ponytail01", "long01", "bob02"]) : scegli(h >>> 5, ["short02", "short04", "short01", "short03"]);
     const scarpe = donna ? scegli(h >>> 7, ["shoes04", "shoes06"]) : scegli(h >>> 7, ["shoes01", "shoes02"]);
     return {
       cfg: { gender: donna ? 0 : 1, age: eta, muscle: lk.capo ? 0.75 : 0.5, weight: 0.5, skin, eyes: scegli(h >>> 9, ["brown", "brown", "blue", "green", "grey"]),
@@ -152,12 +153,17 @@
       for (const sx of [-0.1, 0.1]) { const c = mesh(new T.CylinderGeometry(0.05, 0.05, 0.035, 16), "#2f9e44", sx, 0.06, 0.0, g, { roughness: 0.4 });
         c.rotation.z = Math.PI / 2; }
     });
+    if (lk.ruolo === "ispettrice") attacca(v, "LeftHand", g => {       // cartellina dei resoconti
+      mesh(new T.BoxGeometry(0.2, 0.27, 0.012), "#7a0a1c", 0.02, 0.08, 0.05, g);
+      mesh(new T.BoxGeometry(0.17, 0.22, 0.004), "#ffffff", 0.02, 0.07, 0.058, g);
+    });
+    accessoriSpeciali(v, lk);
     if (lk.occhiali) attacca(v, "Head", g => {
       const q = g;
       const r = new T.TorusGeometry(0.026, 0.0035, 6, 20);
-      for (const sx of [-0.032, 0.032]) mesh(r, lk.occhiali, sx, 0.075, 0.092, q, { metalness: 0.3 });
-      mesh(new T.BoxGeometry(0.016, 0.004, 0.004), lk.occhiali, 0, 0.078, 0.094, q);
-      for (const sx of [-0.06, 0.06]) mesh(new T.BoxGeometry(0.003, 0.004, 0.09), lk.occhiali, sx, 0.078, 0.05, q);
+      for (const sx of [-0.034, 0.034]) mesh(r, lk.occhiali, sx, 0.095, 0.138, q, { metalness: 0.3 });
+      mesh(new T.BoxGeometry(0.016, 0.004, 0.004), lk.occhiali, 0, 0.098, 0.14, q);
+      for (const sx of [-0.064, 0.064]) mesh(new T.BoxGeometry(0.003, 0.004, 0.1), lk.occhiali, sx, 0.098, 0.088, q);
     });
     if (lk.capo) attacca(v, "Head", g => {                                // corona d'oro
       const q = g;
@@ -169,9 +175,94 @@
     });
   }
 
+  // barba vera: copio la pelle del viso nella zona della barba e la sposto in fuori di qualche millimetro
+  // (misure relative all'osso della testa: occhi a y 0.095, bocca a y 0.025, mento a y -0.05; avanti = +z)
+  function barba(v, g, tipo, colore) {
+    let corpo = null; v.av.group.traverse(m => { if (!corpo && m.isSkinnedMesh && /body/.test(m.name)) corpo = m; });
+    if (!corpo) return;
+    const sk = corpo.skeleton, ih = sk.bones.findIndex(b => /Head$/.test(b.name)); if (ih < 0) return;
+    const hp = new T.Vector3().setFromMatrixPosition(sk.boneInverses[ih].clone().invert());
+    const ge = corpo.geometry, pos = ge.attributes.position, idx = ge.index;
+    let nor = ge.attributes.normal; if (!nor) { const c = ge.clone(); c.computeVertexNormals(); nor = c.attributes.normal; }
+    const P = new T.Vector3(), Nn = new T.Vector3();
+    const dentro = k => {
+      P.fromBufferAttribute(pos, k).sub(hp); const x = Math.abs(P.x), y = P.y, z = P.z;
+      if (z < -0.005 || y < -0.075 || y > 0.06) return false;
+      const bocca = x < 0.03 && y > 0.008 && y < 0.036 && z > 0.07;            // le labbra restano scoperte
+      const baffi = x < 0.036 && y >= 0.036 && y < 0.052 && z > 0.08;
+      const mento = x < 0.032 && y < 0.012 && z > 0.06;
+      if (tipo === "labbra") return x < 0.023 && y > 0.013 && y < 0.032 && z > 0.08;
+      if (bocca) return false;
+      if (tipo === 2 || tipo === 6) return baffi || mento;                     // pizzetto / a punta
+      if (y >= 0.036) return baffi;                                           // sopra la bocca solo i baffi
+      if (tipo === 4 && y < -0.065) return false;                              // corta curata: niente collo
+      return z > (y > 0 ? 0.035 : 0.0) || y < -0.02;                           // guance basse, mascella e mento
+    };
+    const out = [], off = tipo === "labbra" ? 0.0007 : tipo === 1 ? 0.0015 : tipo === 4 ? 0.003 : 0.0045;
+    const n = idx ? idx.count : pos.count;
+    for (let t = 0; t < n; t += 3) {
+      const a = idx ? idx.getX(t) : t, b2 = idx ? idx.getX(t + 1) : t + 1, c = idx ? idx.getX(t + 2) : t + 2;
+      if (!(dentro(a) && dentro(b2) && dentro(c))) continue;
+      for (const k of [a, b2, c]) { P.fromBufferAttribute(pos, k).sub(hp); Nn.fromBufferAttribute(nor, k); P.addScaledVector(Nn, off); out.push(P.x, P.y, P.z); }
+    }
+    if (!out.length) return;
+    const bg = new T.BufferGeometry(); bg.setAttribute("position", new T.Float32BufferAttribute(out, 3)); bg.computeVertexNormals();
+    const m = new T.Mesh(bg, new T.MeshStandardMaterial(Object.assign({ color: colore, roughness: tipo === "labbra" ? 0.35 : 1 }, tipo === 1 ? { transparent: true, opacity: 0.45, depthWrite: false } : {})));
+    m.castShadow = false; m.userData.plus = true; g.add(m);
+    if (tipo === 5) { const l = new T.Mesh(new T.SphereGeometry(1, 16, 12), m.material); l.scale.set(0.034, 0.05, 0.022); l.position.set(0, -0.075, 0.08); g.add(l); }
+    if (tipo === 6) { const c = new T.Mesh(new T.ConeGeometry(0.022, 0.06, 12), m.material); c.rotation.x = Math.PI - 0.25; c.position.set(0, -0.085, 0.085); g.add(c); }
+  }
+  // le caratteristiche speciali del 3D: barbe, mantello del capo, controllore, operai, meccanico, anziano, segretaria
+  function accessoriSpeciali(v, lk) {
+    const cb = lk.coloreBarba || (grigio(lk.capelli || "#000") ? "#6d6d75" : lk.capelli || "#2b1d14"), sfera = new T.SphereGeometry(1, 20, 14);
+    const palla = (r, col, x, y, z, g, sx = 1, sy = 1, sz = 1, extra) => { const m = mesh(sfera, col, x, y, z, g, extra); m.scale.set(r * sx, r * sy, r * sz); m.castShadow = false; return m; };
+    const b = lk.barba | 0;                                              // 0 niente, 1 accenno, 2 pizzetto, 3 piena, 4 corta curata, 5 lunga, 6 a punta
+    if (b && !lk.donna) attacca(v, "Head", g => barba(v, g, b, cb));
+    if (lk.orecchino) attacca(v, "Head", g => { for (const sx of [-0.08, 0.08]) { const o = mesh(new T.TorusGeometry(0.012, 0.004, 6, 14), "#1c1c22", sx, 0.05, 0.02, g); o.rotation.y = Math.PI / 2; } });
+    if (lk.ruolo === "ispettrice" || lk.segr) attacca(v, "Head", g => barba(v, g, "labbra", lk.segr ? "#7a0f20" : "#5e0012"));   // rossetto
+    if (lk.segr) attacca(v, "Head", g => { for (const sx of [-0.08, 0.08]) palla(0.008, "#e3b23c", sx, 0.045, 0.02, g, 1, 1, 1, { metalness: 0.6 }); });
+    if (lk.ruolo === "ispettrice") attacca(v, "Head", g => { for (const sx of [-0.078, 0.078]) palla(0.009, "#e3b23c", sx, 0.035, 0.015, g, 1, 1.5, 1, { metalness: 0.7 }); });
+    if (lk.ruolo === "controllore") {                                    // occhiali appoggiati sulla testa, piu' alto di tutti
+      attacca(v, "Head", g => {
+        const oc = new T.Group(); oc.position.set(0, 0.204, 0.035); oc.rotation.x = -0.3; g.add(oc);
+        for (const sx of [-0.032, 0.032]) mesh(new T.TorusGeometry(0.026, 0.0035, 6, 4), "#2b2b33", sx, 0, 0, oc);
+        for (const sx of [-0.06, 0.06]) mesh(new T.BoxGeometry(0.003, 0.004, 0.09), "#2b2b33", sx, 0, -0.045, oc);
+      });
+      v.av.group.scale.set(v.S * 1.04, v.S * 1.12, v.S * 1.04);
+    }
+    if (lk.capo) attacca(v, "Spine2", g => {                              // mantello rosso con il collo d'ermellino
+      const mant = mesh(new T.CylinderGeometry(0.17, 0.3, 1.05, 20, 1, true, Math.PI * 0.62, Math.PI * 0.76), "#9e1630", 0, -0.42, -0.02, g, { side: T.DoubleSide, roughness: 0.6 });
+      mant.castShadow = true;
+      const coll = mesh(new T.TorusGeometry(0.12, 0.035, 10, 24), "#fbf7ee", 0, 0.14, 0, g, { roughness: 0.9 }); coll.rotation.x = Math.PI / 2;
+    });
+    if (lk.ruolo === "operaio") {                                        // casco giallo e martellone
+      attacca(v, "Head", g => { mesh(new T.SphereGeometry(0.125, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), "#f5c518", 0, 0.14, 0.015, g, { roughness: 0.35 });
+        mesh(new T.CylinderGeometry(0.135, 0.135, 0.008, 24), "#f5c518", 0, 0.14, 0.015, g); });
+      attacca(v, "RightHand", g => { mesh(new T.CylinderGeometry(0.015, 0.015, 0.5, 8), "#b0703a", 0, -0.12, 0.03, g);
+        mesh(new T.BoxGeometry(0.09, 0.09, 0.2), "#3a3f4a", 0, -0.36, 0.03, g, { metalness: 0.7, roughness: 0.3 }); });
+    }
+    if (lk.tuta) attacca(v, "Head", g => {                                // meccanico: cappellino con visiera
+      mesh(new T.SphereGeometry(0.118, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.45), "#2c4a72", 0, 0.125, 0.012, g);
+      const vis = mesh(new T.BoxGeometry(0.13, 0.008, 0.08), "#2c4a72", 0, 0.168, 0.135, g); vis.rotation.x = -0.12;
+    });
+    if (lk.vecchio) {                                                    // occhiali enormi
+      attacca(v, "Head", g => {
+        for (const sx of [-0.042, 0.042]) mesh(new T.TorusGeometry(0.036, 0.006, 8, 24), "#3b2a1e", sx, 0.095, 0.142, g);
+        mesh(new T.BoxGeometry(0.012, 0.005, 0.005), "#3b2a1e", 0, 0.098, 0.142, g);
+        for (const sx of [-0.078, 0.078]) mesh(new T.BoxGeometry(0.004, 0.005, 0.11), "#3b2a1e", sx, 0.098, 0.085, g);
+      });
+      v.curvo = true;
+    }
+    if (lk.ruolo === "resp" && !lk.donna) attacca(v, "Spine2", g => mesh(new T.BoxGeometry(0.045, 0.018, 0.005), "#f28c28", -0.07, 0.08, 0.15, g));   // logo sul taschino
+    if (lk.divisa === "polo" || lk.divisa === "polo bianca") attacca(v, "Spine2", g => {          // cordino arancione con il badge
+      const c = mesh(new T.TorusGeometry(0.09, 0.005, 6, 20, Math.PI * 1.1), "#f28c28", 0, 0.1, 0.06, g); c.rotation.set(-0.35, 0, Math.PI * 0.95);
+      mesh(new T.BoxGeometry(0.045, 0.06, 0.006), "#ffffff", 0, -0.0, 0.15, g);
+    });
+  }
+
   // ---------- creazione (uno alla volta, per non bloccare la pagina) ----------
-  function registra(g, corpo, look, base) {
-    voci.push({ g, corpo, look, base, fig: null });                // il vecchio omino resta visibile finche' il personaggio non e' pronto
+  function registra(g, corpo, look, base, prima) {
+    voci[prima ? "unshift" : "push"]({ g, corpo, look, base, fig: null });                // il vecchio omino resta visibile finche' il personaggio non e' pronto
   }
 
   async function crea(v) {
@@ -183,7 +274,7 @@
       m.castShadow = !/eyes|eyebrow|eyelash|hair|teeth|tongue/.test(m.name);   // ombre solo da corpo e vestiti (piu' leggero)
       m.receiveShadow = false; m.frustumCulled = false; m.userData.plus = true;
       if (/teeth|tongue/.test(m.name)) m.visible = false;                 // denti e lingua non si vedono: non li disegno
-      if (ricolora && /clothes-male_casualsuit05/.test(m.name)) tingi(m.material, ricolora);
+      if (ricolora && m.name.includes("clothes-" + vestiti)) tingi(m.material, ricolora);
     });
     const fig = new T.Group(); fig.add(av.group);
     av.group.rotation.y = Math.PI;                                     // il vecchio omino guarda verso -z
@@ -235,9 +326,10 @@
     // animazione vera per tutto il resto: le clavicole restano ferme (copiate spingono indietro le spalle)
     if (st.cammina) { suona(v, "Walk_Loop", dt); retarget(v, c => false, true, 0.6); }
     else if (st.seduto) { suona(v, st.parla ? "Sitting_Talking_Loop" : "Sitting_Idle_Loop", dt); retarget(v, c => c.gamba || (braccia && c.braccio) || (st.dorme && c.schiena), false, 0.3); }
-    else { suona(v, "Idle_Loop", dt); retarget(v, c => c.gamba || (st.alza && c.braccio && c.destro), false, 0.3); }
+    else { suona(v, st.parla && v.azioni && v.azioni.Idle_Talking_Loop ? "Idle_Talking_Loop" : "Idle_Loop", dt); retarget(v, c => c.gamba || (st.alza && c.braccio && c.destro), false, 0.3); }
     if (braccia) { gira(o.LeftArm, avanti, -0.95); gira(o.RightArm, avanti, 0.95); }
     if (st.alza && !st.cammina && !braccia) gira(o.RightArm, avanti, 0.95);
+    if (v.curvo && !st.seduto) { gira(o.Spine1, lato, 0.2); gira(o.Spine2, lato, 0.18); gira(o.Neck, lato, -0.22); }   // il signore anziano, curvo
     if (st.seduto) {
       for (const sd of ["Left", "Right"]) {                           // gambe dritte in avanti, ginocchia non divaricate
         gira(o[sd + "UpLeg"], lato, -1.55); gira(o[sd + "UpLeg"], su, sd === "Left" ? -0.13 : 0.13); gira(o[sd + "Leg"], lato, 1.55);
@@ -291,6 +383,7 @@
       };
       st.scrive = seduto && !st.dorme && !st.alza && !!u.s && ["lavora", "supervisore"].includes(u.s.stato);
       st.parla = st.seduto && !u.s;                                  // in riunione: parlano
+      if (v.look.ruolo === "ispettrice" && !seduto && !st.cammina && u.dx && u.dx.rotation.x > 1) st.parla = true;   // chiede il resoconto
       st.telefona = !!(u.telefono && u.telefono.visible);
       if (st.telefona) st.alza = false;
       if (v.tel) v.tel.visible = st.telefona;
@@ -298,5 +391,5 @@
     }
   }
 
-  window.Plus3D = { registra, aggiorna, semplifica() {} };
+  window.Plus3D = { registra, aggiorna, semplifica() {}, get voci() { return voci; }, get pronti() { return [voci.filter(v => v.fig).length, voci.length, voci.filter(v => v.errore).length]; } };
 })();

@@ -551,6 +551,7 @@
       const cart = new T.Group(); cart.position.set(0, -0.42, -0.08); sx.add(cart);
       box(0.2, 0.27, 0.025, "#7a0a1c", 0, -0.1, 0, cart); box(0.17, 0.22, 0.01, "#ffffff", 0, -0.075, -0.016, cart);
       box(0.07, 0.03, 0.03, "#e3b23c", 0, 0.15, -0.016, cart, { metalness: 0.6 });
+      cart.traverse(q => { if (q.isMesh) basePlus.push(q); });            // nel 3D++ la tiene in mano il personaggio vero
     }
     if (operaio) {                                                       // martello nella destra, scalpello nella sinistra
       tondo(0.08, 0.62, 0.08, "#b0703a", 0, -1.0, 0, dx, 0.03);                         // martellone: manico lungo
@@ -572,7 +573,7 @@
     const tazza = tondo(0.1, 0.12, 0.1, "#ffffff", 0, -0.55, -0.06, dx, 0.04); tazza.visible = false;           // tazza del caffe'
     g.userData = { corpo, testa, sx, dx, s, fase: (h % 97) / 10, occhi, sorriso, bocca_o, linea, stato: null, salto: 0,
       sedute, gambe, telefono, tazza, gonna, giacca, casa: [x, z], giro: null, prossimo: 8 + (h % 40) };
-    if (window.Plus3D) Plus3D.registra(g, corpo, { maglia, pantaloni, capelli, pelle, scarpe, donna, capo, segr, occhiali, barba, calvo, coloreBarba, h, ruolo, tuta, vecchio }, basePlus);
+    if (window.Plus3D) Plus3D.registra(g, corpo, { maglia, pantaloni, capelli, pelle, scarpe, donna, capo, segr, occhiali, barba, calvo, coloreBarba, h, ruolo, tuta, vecchio, orecchino, divisa }, basePlus);
     return g;
   }
   function etichetta(cls, testo, pos, titolo) {
