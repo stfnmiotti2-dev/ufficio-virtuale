@@ -157,7 +157,8 @@
     return p;
   }
   // tappeto persiano disegnato al volo (motivo originale: cornice, medaglione centrale, angoli, frange)
-  let tappetoTex = null;
+  const geoTappeto = new T.PlaneGeometry(3.3, 2.2);
+  let tappetoTex = null; const tappetiColore = {};
   // parquet a spina di pesce in rovere: una sola texture ripetuta su tutto il pavimento
   let parquetTex = null;
   function texParquet() {
@@ -177,14 +178,17 @@
     parquetTex.wrapS = parquetTex.wrapT = T.RepeatWrapping; parquetTex.anisotropy = 8;
     return parquetTex;
   }
-  function texTappeto() {
-    if (tappetoTex) return tappetoTex;
+  // tappeto persiano: senza colore quello rosso del capo; con un colore, il campo e il medaglione di quel colore
+  function texTappeto(colore) {
+    if (!colore && tappetoTex) return tappetoTex;
+    if (colore && tappetiColore[colore]) return tappetiColore[colore];
+    const campo = colore || "#8e1f2a", scuro = colore ? "#" + new T.Color(colore).multiplyScalar(0.62).getHexString() : "#b8323a";
     const c = document.createElement("canvas"); c.width = 640; c.height = 420;
     const x = c.getContext("2d"), W = 640, H = 420;
     x.fillStyle = "#f3ead6"; x.fillRect(0, 0, W, H);                           // frange
     x.fillStyle = "#1f2e5c"; x.fillRect(24, 0, W - 48, H);                     // bordo blu
     x.fillStyle = "#f0dca8"; x.fillRect(44, 20, W - 88, H - 40);
-    x.fillStyle = "#8e1f2a"; x.fillRect(54, 30, W - 108, H - 60);              // campo rosso
+    x.fillStyle = campo; x.fillRect(54, 30, W - 108, H - 60);                  // campo (rosso per il capo)
     x.strokeStyle = "#e9c46a"; x.lineWidth = 3; x.strokeRect(66, 42, W - 132, H - 84);
     for (let i = 0; i < 26; i++) {                                              // motivo sul bordo
       const px = 60 + i * ((W - 120) / 25);
@@ -195,7 +199,7 @@
     const losanga = (cx, cy, rx, ry, col) => { x.fillStyle = col; x.beginPath(); x.moveTo(cx - rx, cy); x.lineTo(cx, cy - ry); x.lineTo(cx + rx, cy); x.lineTo(cx, cy + ry); x.closePath(); x.fill(); };
     losanga(W / 2, H / 2, 170, 120, "#1f2e5c");                                 // medaglione
     losanga(W / 2, H / 2, 150, 104, "#e9c46a");
-    losanga(W / 2, H / 2, 128, 88, "#b8323a");
+    losanga(W / 2, H / 2, 128, 88, scuro);
     x.fillStyle = "#f3ead6"; x.beginPath(); x.ellipse(W / 2, H / 2, 58, 40, 0, 0, 7); x.fill();
     x.fillStyle = "#1f2e5c"; x.beginPath(); x.ellipse(W / 2, H / 2, 30, 20, 0, 0, 7); x.fill();
     for (let a = 0; a < 8; a++) { x.fillStyle = "#e9c46a"; x.beginPath(); x.arc(W / 2 + Math.cos(a * Math.PI / 4) * 44, H / 2 + Math.sin(a * Math.PI / 4) * 30, 6, 0, 7); x.fill(); }
@@ -205,8 +209,9 @@
     }
     x.strokeStyle = "#ddd2bb"; x.lineWidth = 2;                                 // fili delle frange
     for (let j = 4; j < H; j += 8) for (const [a, b] of [[0, 24], [W - 24, W]]) { x.beginPath(); x.moveTo(a, j); x.lineTo(b, j); x.stroke(); }
-    tappetoTex = new T.CanvasTexture(c); tappetoTex.encoding = T.sRGBEncoding; tappetoTex.anisotropy = 4;
-    return tappetoTex;
+    const tx = new T.CanvasTexture(c); tx.encoding = T.sRGBEncoding; tx.anisotropy = 4;
+    if (T.SRGBColorSpace) tx.colorSpace = T.SRGBColorSpace;
+    return colore ? (tappetiColore[colore] = tx) : (tappetoTex = tx);
   }
   function lampada(x, z, padre, col) {
     palla(0.1, col, x, 0.82, z, padre, 1, 0.3, 1);
@@ -241,9 +246,10 @@
       lampada(-W / 2 + 0.25, -0.15, g, "#3c4658");
       tondo(0.3, 0.06, 0.22, "#e9edf2", W / 2 - 0.35, 0.83, 0.05, g, 0.02);         // pila di fogli
     } else {
-      tondo(1.8, 0.09, 0.9, "#e2b880", 0, 0.72, 0, g, 0.04);                // piano in legno chiaro
-      for (const dx of [-0.78, 0.78]) tondo(0.1, 0.72, 0.8, "#e9edf2", dx, 0, 0, g, 0.04);   // fianchi
-      tondo(1.5, 0.36, 0.06, "#e9edf2", 0, 0.32, 0.38, g, 0.03);          // pannello davanti
+      const verde = s.stato === "finito";                                // ha finito: scrivania verde (lui e' in sala relax)
+      tondo(1.8, 0.09, 0.9, verde ? "#5fbf7a" : "#e2b880", 0, 0.72, 0, g, 0.04);                // piano in legno chiaro
+      for (const dx of [-0.78, 0.78]) tondo(0.1, 0.72, 0.8, verde ? "#b5e3c1" : "#e9edf2", dx, 0, 0, g, 0.04);   // fianchi
+      tondo(1.5, 0.36, 0.06, verde ? "#b5e3c1" : "#e9edf2", 0, 0.32, 0.38, g, 0.03);          // pannello davanti
       targhetta(nome, 1.4, 0.27, 0, 0.5, 0.415, g, "#ffffff", "#2a3142", "#f2b443");
       const tz = ["#f29fb5", "#7fb3e8", "#f5c26b"][U.hash(s.id) % 3];
       tondo(0.12, 0.13, 0.12, tz, 0.65, 0.81, 0.05, g, 0.05);              // tazza
@@ -722,6 +728,30 @@
     if (!lib.length) return null;
     return lib[Math.floor(Math.random() * lib.length)];
   }
+  // chi ha finito si gode il tempo libero in sala relax (Stefano, 20/11): divano, calcio balilla, caffe' o in piedi
+  // a chiacchierare. Ognuno ha il suo posto fisso finche' resta "finito"; gli altri non lo occupano.
+  const PIEDI = [[0.4, -0.95], [1.05, -0.95], [1.7, -0.95], [2.35, -0.95], [0.4, -0.25], [2.35, -0.25], [-2.35, 0.1], [-2.35, 0.85]];
+  function assegnaTempoLibero(lista) {
+    if (!relax || !lista.length) return;
+    const cx = relax.bx + 1.0, cz = relax.posti[2].z - (5.0 / 2 - 0.62);   // centro della sala
+    const fissi = relax.posti.filter(p => p.az !== "caffe").concat(relax.posti.filter(p => p.az === "caffe"))
+      .concat(PIEDI.map(([lx, lz]) => ({ x: cx + lx, z: cz + lz, az: "libero", ang: 0, libero: 0 })));
+    lista.sort((a, b) => String(a.userData.s.id).localeCompare(String(b.userData.s.id)));
+    lista.forEach((om, i) => {
+      const p = fissi[i]; if (!p) return;                                  // troppi: gli ultimi restano a sonnecchiare alla scrivania
+      p.libero = Infinity; const u = om.userData;
+      if (u.etichettaPos) { const mk = marcati.find(q => q.pos === u.etichettaPos); if (mk) mk.e.style.visibility = "hidden"; }   // la scrivania verde dice gia' che ha finito
+      u.tempoLibero = p; u.relaxPosto = p; if (p.lato != null) u.lato = p.lato;
+      if (statiPrima.get(u.s.id) === "finito" || statiPrima.size === 0)    // era gia' li': nessuna passeggiata
+        u.giro = { punti: [[p.x, p.z, 1e9, p.az]], inizio: -1e3, libero: true };
+    });
+  }
+  function versoTempoLibero(u) {                                       // appena finito: dalla scrivania alla sala relax, e ci resta
+    const p = u.tempoLibero, [x, z] = u.casa, r = versoRelax(x, u.corridoio, p, 0, 0, 1.1, 0.7);
+    p.libero = Infinity;
+    const andata = r.andata.slice(); andata[andata.length - 1] = [p.x, p.z, 1e9, p.az];
+    return [[x, z, 0.7], ...andata];
+  }
   // percorso dal corridoio (x, zc) dentro la sala fino al posto, e ritorno; "andata" tiene conto di chi e' gia' in cammino
   function versoRelax(xa, zc, p, ox = 0, oz = 0, vel = 1.1, extra = 0) {
     const [ix, iz] = relax.ingresso, [dx, dz] = relax.dentro, L = (x, z, pa, a) => [x - ox, z - oz, pa || 0, a];
@@ -1113,6 +1143,7 @@
     });
     // 2) open space davanti: un'isola per gruppo, scrivanie in fila; ogni fila centrata sotto gli uffici
     const isole = gruppi.map(gr => ({ gr, fuori: gr.sessioni.filter(q => !q.inUfficio) })).filter(q => q.fuori.length);
+    const inLibero = [];
     const largUffici = Math.max(UFF, xc - 0.6), mezzo = largUffici / 2;
     salaRiunioni(-0.6 - 2.8, 0);                                         // a sinistra dell'ufficio del capo
     if (SC) soppalco();
@@ -1159,7 +1190,11 @@
       }
       for (const { gr, fuori } of fila) {
         const wi = fuori.length * PASSO;
-        const tappeto = tondo(wi, 0.03, 3.4, gr.colore, x0 + wi / 2, 0, z0 + 0.2, mondo, 0.012, { transparent: true, opacity: 0.4 });
+        const matTap = new T.MeshStandardMaterial({ map: texTappeto(gr.colore), roughness: 0.95 });
+        for (let ti = 0; ti < fuori.length; ti++) {                      // un tappeto persiano del colore dell'isola per ogni scrivania
+          const tp = new T.Mesh(geoTappeto, matTap); tp.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
+          tp.position.set(x0 + PASSO / 2 + ti * PASSO, 0.025, z0 + 0.2); tp.receiveShadow = true; mondo.add(tp);
+        }
         for (let li = 0; li < fuori.length; li++) {                      // lampade a stelo dietro le sedie: si accendono la sera
           const lx = x0 + PASSO * (li + 1) - 0.12, lz = z0 - 1.25;
           tondo(0.04, 1.7, 0.04, "#3c4658", lx, 0, lz, mondo, 0.015);
@@ -1167,19 +1202,19 @@
           const pa = palla(0.17, "#fff3d6", lx, 1.82, lz, mondo, 1, 0.8, 1, { emissive: "#ffd98a", emissiveIntensity: 0.05 });
           pa.material = pa.material.clone(); lampadari.push(pa);
         }
-        tappeto.castShadow = false;
         marcati.push(etichetta("nome", U.nomeIsola(gr), new T.Vector3(x0 + wi / 2, 0.05, z0 + 2.35)));
         fuori.forEach((s, i) => {
           const x = x0 + PASSO / 2 + i * PASSO;
           xDestra = Math.max(xDestra, x);
           const scr = scrivania(x, z0, mondo, s, "", pulito(U.targa(s)).replace(/\s*❌\d*$/, ""));
-          const sd = sedia(x, z0 - 0.95, mondo);
+          const sd = sedia(x, z0 - 0.95, mondo, s.stato === "finito" ? "#4fb06a" : undefined);
           const presente = U.PRESENTI.includes(s.stato) || s.chiude != null;
           if (s.chiude == null) ultimeSessioni.set(s.id, { s, chiave: gr.chiave, idx: gr.sessioni.indexOf(s) });
           const om = presente ? omino(s, mondo, x, z0 - 0.8, "dip") : null;
           apriCantiere(s.id, [scr, sd], om, x, z0 - 0.3, false);
           if (s.chiude != null) apriSmontaggio(s.id, [scr, sd], x, z0 - 0.3);
           if (om) {
+            if (s.stato === "finito" && s.chiude == null) inLibero.push(om);   // ha finito: tempo libero in sala relax
             animati.push(om); camminatori.push(om); om.userData.corridoio = z0 - 1.75;
             om.userData.porta = (gr.chiave === "r:capo" || !porte[gr.chiave]) && SC ? [SC.xb - 0.55, SC.zp - 0.45] : porte[gr.chiave] || porte["r:capo"] || null;   // i thread senza responsabile vanno dal capo
             gruppoDi.set(s.id, gr.chiave); om.userData.via = profMax / 2 + 2.2;
@@ -1210,6 +1245,7 @@
       z0 += 4.4;
     }
     salaRelax(fineFile + 1.4, (SC ? SC.zp : profMax / 2 + 2.2) + 1.1);   // sala relax a destra delle file: ci vanno tutti, ogni tanto
+    assegnaTempoLibero(inLibero);
     // pavimento e pareti attorno a tutto
     const bb = new T.Box3().setFromObject(mondo);
     const size = bb.getSize(new T.Vector3()), mid = bb.getCenter(new T.Vector3());
@@ -1564,7 +1600,7 @@
       const salto = Math.max(0, 1 - (t - u.salto) / 0.5);
       corpo.position.y = Math.sin(k * 2) * 0.012 + Math.sin(salto * Math.PI) * 0.12 * (u.salto ? 1 : 0);
       // faccia: sorriso se lavora, "o" se aspetta te, linea se pensa o e' fermo, occhi chiusi se ha finito
-      const dorme = s.stato === "finito", batte = (k % 4) < 0.12;
+      const dorme = s.stato === "finito" && !u.tempoLibero, batte = (k % 4) < 0.12;
       for (const o of u.occhi) o.scale.y = dorme || batte ? 0.25 : 1.5;
       u.sorriso.visible = ["lavora", "supervisore"].includes(s.stato);
       u.bocca_o.visible = s.stato === "aspetta";
@@ -1596,6 +1632,8 @@
         if (t > u.prossimoT) { const punti = vaCaffe ? giroCaffe(u) : giroBussa(u);
           if (punti) u.giro = { punti, inizio: t }; else u.prossimoT = t + 15 + Math.random() * 20; }
       }
+      if (!u.giro && u.tempoLibero && s.stato === "finito" && s.chiude == null && pc !== "off" && !pcFuori.has(s.id))
+        u.giro = { punti: versoTempoLibero(u), inizio: t, libero: true };
       if (!u.giro && arrivi.has(u.idArrivo)) {                          // nuovo arrivato: entra dalla porta con la 24 ore
         u.giro = { punti: versoCasa(u, false), inizio: arrivi.get(u.idArrivo), arrivo: true };
       }
@@ -1714,12 +1752,17 @@
         } else if (pos && pos.azione === "balilla") {                      // calcio balilla: mani sulle manopole, colpi veloci
           const w = Math.sin(k * 13) * 0.35; sx.rotation.set(1.35 + w, 0, 0.25); dx.rotation.set(1.35 - w, 0, -0.25);
           testa.rotation.y = Math.sin(k * 5) * 0.25; relax.inBalilla++;
+        } else if (pos && pos.azione === "libero") {                       // in piedi a chiacchierare: braccia rilassate, si guarda attorno
+          sx.rotation.set(0.15, 0, 0.35); dx.rotation.set(0.2 + Math.max(0, Math.sin(k * 3)) * 0.9, 0, -0.35);
+          testa.rotation.y = Math.sin(k * 0.6) * 0.5;
         } else if (pos && pos.azione === "caffe") {
           u.tazza.visible = true;
           const sorso = Math.sin((t - u.giro.inizio) * 1.4) > 0.3;
           dx.rotation.set(sorso ? 2.3 : 1.2, 0, -0.1);
           if (!sorso) { sx.rotation.set(0, 0, 2.6 + Math.sin(k * 2) * 0.2); }  // si stiracchia
         }
+      } else if (pos && pos.azione === "divano") {                         // seduto sul divano: mani dietro la testa, guarda la TV
+        sx.rotation.set(-2.7, 0, -0.5); dx.rotation.set(-2.7, 0, 0.5); testa.rotation.x = -0.12;
       } else if (s.stato === "lavora") { sx.rotation.x = 1.25 + Math.sin(k * 18) * 0.12; dx.rotation.x = 1.25 + Math.cos(k * 18) * 0.12; }
       else if (s.stato === "pensa") { testa.rotation.z = Math.sin(k * 1.2) * 0.15; dx.rotation.set(2.3, 0, 0.5); }
       else if (s.stato === "aspetta") { dx.rotation.set(-2.9, 0, 0.25 + Math.sin(k * 6) * 0.35); }
@@ -2080,7 +2123,7 @@
       if (fuori || e.style.visibility === "hidden" || !e.textContent) continue;
       if (!e._mt || t - e._mt > 2) { e._mt = t; e._w = e.offsetWidth; e._h = e.offsetHeight; }   // misura ogni tanto, non a ogni giro
       const c = e.className;                                             // chi aspetta Stefano viene prima di tutto
-      const p = /st-aspetta|st-allarme|chiama/.test(c) ? 0 : / st-/.test(c) || /⚠️|🔥|❌/.test(e.textContent) ? 1 : /nome|riep/.test(c) ? 2 : 3;
+      const p = /st-aspetta|st-allarme|chiama/.test(c) ? 0 : /st-finito/.test(c) ? 3 : / st-/.test(c) || /⚠️|🔥|❌/.test(e.textContent) ? 1 : /nome|riep/.test(c) ? 2 : 3;
       visti.push({ e, p, x0: px - e._w / 2, x1: px + e._w / 2, y0: py - e._h, y1: py, z: v.z });
     }
     // una sola etichetta per punto: se due si coprono resta la piu' importante (a pari importanza la piu' vicina);
@@ -2123,7 +2166,7 @@
   // clic su una persona o una scrivania: mini-scheda con lo stato e il pulsante per aprire il thread
   const scheda = document.createElement("div");
   scheda.className = "scheda3d"; scheda.hidden = true; wrap.append(scheda);
-  const NOMI = { aspetta: "✋ Ti aspetta", lavora: "⚙️ Lavora", pensa: "💭 Pensa", "ferma?": "⏳ Fermo da un po'", finito: "💤 Ha finito", supervisore: "📋 Supervisiona" };
+  const NOMI = { aspetta: "✋ Ti aspetta", lavora: "⚙️ Lavora", pensa: "💭 Pensa", "ferma?": "⏳ Fermo da un po'", finito: "🛋️ Ha finito: tempo libero", supervisore: "📋 Supervisiona" };
   function miniScheda(k, x, y) {
     if (!k) { scheda.hidden = true; return; }
     const s = k.s || {}, gr = k.gr, sc = gr && gr.scheda;
