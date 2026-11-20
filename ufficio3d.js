@@ -1413,7 +1413,10 @@
   }
 
   // ---------- animazione ----------
-  const COL = Object.assign({}, U.COLORI_STATO, { supervisore: "#9fd2f0", spento: "#2a2e3a", inattiva: "#2a2e3a", vuota: "#2a2e3a" });
+  // colore del bordo dietro lo schermo = situazione dell'omino, coerente con scrivania e sedia:
+  // verde = ha finito (come scrivania e sedia verdi), blu = lavora, viola = pensa, arancio = fermo, rosso lampeggiante = ti aspetta
+  const COL = Object.assign({}, U.COLORI_STATO, { lavora: "#3b82f6", pensa: "#a283e3", finito: "#4fb06a",
+    supervisore: "#9fd2f0", spento: "#2a2e3a", inattiva: "#2a2e3a", vuota: "#2a2e3a" });
   const v = new T.Vector3();
   let t = 0, ultimo = 0, attivo = false, fps = 40, costo = 8;
   let tSemplice = -10;
