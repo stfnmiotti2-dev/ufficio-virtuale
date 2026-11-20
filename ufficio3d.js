@@ -1525,6 +1525,7 @@
     supervisore: "#9fd2f0", spento: "#2a2e3a", inattiva: "#2a2e3a", vuota: "#2a2e3a" });
   const v = new T.Vector3();
   let t = 0, ultimo = 0, attivo = false, fps = 40, costo = 8;
+  let velT = 1, tBase = 0, msBase = 0;
   let tSemplice = -10;
   // a riposo: dopo 60 s senza dati nuovi e senza che Stefano tocchi la pagina, 5 fotogrammi al secondo
   var ultimaAttivita = performance.now();
@@ -1682,7 +1683,7 @@
     // fluido ma leggero: punta a 40 fotogrammi al secondo; se il PC fatica scende da solo a 30 o 24
     const passo = ms - ultimaAttivita > 60000 ? 5 : fps;
     if (!attivo || document.hidden || ms - ultimo < 1000 / passo - 2) return;
-    ultimo = ms; t = ms / 1000;
+    ultimo = ms; t = tBase + (ms - msBase) / 1000 * velT;            // velT < 1 solo nelle prove (GIF al rallentatore)
     const inizioFrame = performance.now();
     const dt = Math.min(0.1, t - tPrec || 0.04); tPrec = t;
     const eSera = sera(), eVen = venerdi();
@@ -2336,6 +2337,7 @@
     provaPostinoCapo() { avviaPostino("capo:r:capo"); },
     provaCtrl(az, prima) { if (!ispettore) return; const i = ispettore.punti.findIndex(p => p[3] === (az || "scrive")); const d = durata(ispettore.punti.slice(0, i), 1.3) - (prima || 3); ispettore.anticipo = ((d - t) % ispettore.durata + ispettore.durata) % ispettore.durata; },
     provaPostino(n) { const ids = [...bersagli.keys()].filter(k => !k.startsWith("capo:")); avviaPostino(ids[n || 0]); },
+    set rallenta(v) { tBase = t; msBase = ultimo; velT = v; },
     get ispettrice() { return ispe && ispe.o; }, get ispViaggio() { return ispVisite.viaggio; }, set ispFermo(v) { ispVisite.fermo = v; }, get ispCasa() { return ispe && ispe.casa; },
     provaIspettrice(id, prima) { ispVisite.subito = prima == null ? null : prima; if (!ispDati) ispDati = { per_sessione: {} }; ispDati.visita = Object.assign({ chiesta: Date.now() / 1000, titolo: "prova" }, ispDati.visita, { sessione: id }); ispVisite.ultima = -1; creaIspettriceDiNuovo(); },
     get effetti() { return effetti.length; }, get ispettore() { return ispettore && ispettore.o.position; }, get dati() { return ultimiDati; }, get scrivanie() { return [...bersagli.keys()].filter(k => !k.startsWith("capo:")); }, get postini() { return postini.map(p => [p.id, p.inizio, p.fine]); }, get giocatore() { return gioc && gioc.g.position; },
