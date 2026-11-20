@@ -56,14 +56,13 @@
   }
 
   // ---------- stato ----------
-  // squadra di supereroi ORIGINALE in stile film (muscoli, armature lucide, pose da eroe): ruoli, poteri,
-  // colori e nomi inventati qui, non presi da nessuna squadra esistente
-  const LOOK = [["maree", "🌊 Pilota delle maree"], ["solare", "☀️ Sentinella solare"], ["cometa", "☄️ Cacciatrice di comete"],
-    ["vulcano", "🌋 Corazza vulcanica"], ["vento", "🌪️ Custode del vento"], ["cristallo", "💎 Ombra di cristallo"]];
+  // supereroi ORIGINALI, inventati qui, con sagome molto diverse tra loro (niente copie di personaggi esistenti)
+  const LOOK = [["robot", "🤖 Robot cingolato"], ["colosso", "🪨 Colosso di pietra"], ["argento", "🦋 Eroina d'argento"],
+    ["mago", "🔮 Mago del mantello"], ["scheggia", "💨 Scheggia"], ["cavaliere", "🛡️ Cavaliere smeraldo"], ["energia", "🔵 Uomo d'energia"]];
   const leggi = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
   const salva = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
-  let attivo = false, primaPersona = leggi("gdrVista", "3") === "1", look = leggi("gdrLook", "maree");
-  if (!LOOK.some(l => l[0] === look)) look = "maree";
+  let attivo = false, primaPersona = leggi("gdrVista", "3") === "1", look = leggi("gdrLook", "robot");
+  if (!LOOK.some(l => l[0] === look)) look = "robot";
   let av = null, x = 0, z = 0, yaw = 0, pitch = -0.12, passo = 0, alto = 1.5, distCam = 3.2;
   const tasti = new Set();
   let salvaCam = null;
@@ -72,102 +71,125 @@
     if (av) { av.parent && av.parent.remove(av); }
     av = U3.nuovoOmino({ id: "gdr-eroe", donna: false }, x, z, "dip");
     av.userData.giocatore = true;
-    vestiEroe(av.userData, look);
-    const bb = new T.Box3().setFromObject(av); alto = Math.max(1.2, Math.min(2.2, bb.max.y));
+    vestiEroe(av, look);
+    const bb = new T.Box3().setFromObject(av); alto = Math.max(1.1, Math.min(3, bb.max.y));
     for (const l of av.userData.sedute) l.visible = false;
     for (const l of av.userData.gambe) l.visible = true;
     av.visible = !primaPersona;
   }
 
   // ---------- costumi da supereroe (sopra un omino normale: si nascondono polo, capelli, occhiali e barba) ----------
-  function vestiEroe(u, tipo) {
-    const { palla, tondo, box, m } = U3.aiuti;
+  function vestiEroe(g, tipo) {
+    const u = g.userData, { palla, tondo, box, m } = U3.aiuti;
     const { corpo, testa, sx, dx, gambe } = u;
-    const metallo = { metalness: 0.6, roughness: 0.25 }, luce = c => ({ emissive: c, emissiveIntensity: 1.2 });
-    const K = {
-      maree: { c: "#1d4f91", gambe: "#163d70", guanti: "#3fa9d6", stivali: "#3fa9d6", spalle: "#3fa9d6" },
-      solare: { c: "#f3efe6", gambe: "#e6dfcf", guanti: "#d9a521", stivali: "#d9a521", spalle: "#d9a521" },
-      cometa: { c: "#3b2466", gambe: "#2c1a4d", guanti: "#ff6fb1", stivali: "#ff6fb1", spalle: "#5a3a94" },
-      vulcano: { c: "#2b2a2e", gambe: "#2b2a2e", guanti: "#4a4448", stivali: "#4a4448", spalle: "#ff7a1a" },
-      vento: { c: "#2a9d8f", gambe: "#1f6f66", guanti: "#e8f6f3", stivali: "#e8f6f3", spalle: "#e8f6f3" },
-      cristallo: { c: "#1e2433", gambe: "#1e2433", guanti: "#2bbf87", stivali: "#151a24", spalle: null },
-    }[tipo];
-    const ex = metallo;
+    const metallo = { metalness: 0.6, roughness: 0.25 }, luce = (c, k) => ({ emissive: c, emissiveIntensity: k || 1.2 });
+    const vetro = (c, e) => ({ transparent: true, opacity: 0.55, roughness: 0.1, emissive: e || c, emissiveIntensity: 0.7, depthWrite: false });
     for (const o of corpo.children.slice()) if (o.isMesh) o.visible = false;          // polo, logo, cordino
     testa.children.forEach((o, i) => { if (i > 0) o.visible = false; });               // resta solo la faccia
     const viso = () => { for (const o of u.occhi) o.visible = true; u.sorriso.visible = true; };
+    const faccia = testa.children[0];
     const gC = new T.Group(); corpo.add(gC);
-    // fisico da film: torace largo, pettorali, spalline lucide
-    palla(0.272, K.c, 0, 0.78, 0, gC, tipo === "vulcano" ? 1.35 : 1.18, 1.32, 0.95, ex);
-    for (const x_ of [-0.11, 0.11]) palla(0.13, K.c, x_, 0.9, -0.13, gC, 1.1, 0.8, 0.6, ex);
-    if (K.spalle) for (const x_ of [-0.33, 0.33]) palla(0.15, K.spalle, x_, 1.0, 0, gC, 1.05, 0.75, 1.05, ex);
-    for (const [g] of [[sx], [dx]]) {
-      const c = new T.Mesh(new T.CylinderGeometry(0.1, 0.095, 0.4, 12), m(K.c, ex)); c.position.y = -0.18; g.add(c);
-      palla(0.105, K.guanti, 0, -0.42, 0, g, 1, 1, 1, ex);
-    }
-    for (const a of gambe) {
-      for (const o of a.children) o.visible = false;
-      const c = new T.Mesh(new T.CylinderGeometry(0.1, 0.09, 0.45, 10), m(K.gambe, ex)); c.position.y = -0.24; a.add(c);
-      palla(0.115, K.stivali, 0, -0.47, -0.04, a, 1, 0.65, 1.45, ex);
-    }
-    tondo(0.56, 0.07, 0.46, "#2b2b33", 0, 0.5, 0, gC, 0.03, ex);                      // cintura con lo stemma della squadra (inventato:
-    { const st = new T.Mesh(new T.CylinderGeometry(0.06, 0.06, 0.03, 6), m("#f28c28", luce("#f28c28")));   // esagono arancione dell'ufficio)
-      st.rotation.x = Math.PI / 2; st.position.set(0, 0.535, -0.235); gC.add(st); }
-    const mantello = (c, e) => {
-      const mt = new T.Mesh(new T.CylinderGeometry(0.3, 0.5, 1.0, 20, 1, true, -Math.PI * 0.4, Math.PI * 0.8), m(c, Object.assign({ side: T.DoubleSide }, e)));
-      mt.position.set(0, 0.6, 0.06); mt.castShadow = true; gC.add(mt); u.mantello = mt;
-    };
+    // pezzi comuni: tuta sul busto, maniche e guanti, gambe e stivali (ognuno poi cambia la sagoma)
+    const tuta = (c, e, sx_, sy_, sz_) => palla(0.272, c, 0, 0.78, 0, gC, sx_ || 1, sy_ || 1.32, sz_ || 0.9, e);
+    const braccia = (c, gu, e, r, rg) => { for (const b of [sx, dx]) { const q = new T.Mesh(new T.CylinderGeometry(r || 0.09, r || 0.095, 0.4, 12), m(c, e)); q.position.y = -0.18; b.add(q);
+      palla(rg || 0.1, gu, 0, -0.42, 0, b, 1, 1, 1, e); } };
+    const gambeTuta = (c, st, e, r) => { for (const a of gambe) { for (const o of a.children) o.visible = false;
+      const q = new T.Mesh(new T.CylinderGeometry(r || 0.095, 0.09, 0.45, 10), m(c, e)); q.position.y = -0.24; a.add(q);
+      palla(0.11, st, 0, -0.47, -0.04, a, 1, 0.65, 1.45, e); } };
     const calotta = (c, fino, e) => { const q = new T.Mesh(new T.SphereGeometry(0.292, 24, 16, 0, Math.PI * 2, 0, Math.PI * fino), m(c, e)); q.scale.set(1, 1.06, 1); testa.add(q); return q; };
-    const mento = (c, e) => palla(0.2, c, 0, -0.12, -0.08, testa, 1.25, 0.8, 1.2, e);
-    const lenti = (c, w) => { for (const x_ of [-0.1, 0.1]) palla(0.06 * w, c, x_, 0.04, -0.27, testa, 1.3, 0.9, 0.45, luce(c)); };
+    u.extra = [];                                                                      // pezzi animati
     switch (tipo) {
-      case "maree":                                                            // pinne sulle spalle, visiera d'acqua, sfera d'onda in mano
-        u.sorriso.visible = true; calotta(K.c, 0.55, ex);
-        tondo(0.44, 0.1, 0.08, "#7fe0ff", 0, -0.0, -0.25, testa, 0.04, luce("#3fc8ff"));
-        for (const x_ of [-0.36, 0.36]) { const f = new T.Mesh(new T.ConeGeometry(0.08, 0.32, 4), m("#3fa9d6", ex)); f.position.set(x_, 1.12, 0.08); f.rotation.set(-0.5, 0, x_ < 0 ? 0.3 : -0.3); f.scale.z = 0.35; gC.add(f); }
-        for (let i = 0; i < 3; i++) { const o = new T.Mesh(new T.TorusGeometry(0.09 + i * 0.05, 0.012, 6, 24, Math.PI), m("#7fe0ff", luce("#3fc8ff"))); o.position.set(0, 0.82 - i * 0.02, -0.26); gC.add(o); }
-        u.sfera = palla(0.11, "#7fe0ff", 0, -0.62, -0.05, dx, 1, 1, 1, { transparent: true, opacity: 0.75, emissive: "#3fc8ff", emissiveIntensity: 0.9 });
-        break;
-      case "solare":                                                           // armatura perla e oro, alone di luce dietro la testa
-        viso(); calotta("#7a4a20", 0.45).rotation.x = 0.35;
-        { const al = new T.Mesh(new T.TorusGeometry(0.42, 0.025, 8, 32), m("#ffd34d", luce("#ffbf00"))); al.position.set(0, 0.05, 0.25); testa.add(al); u.alone = al;
-          for (let i = 0; i < 8; i++) { const r = box(0.03, 0.12, 0.02, "#ffd34d", 0, 0, 0, al, luce("#ffbf00")); const a = i / 8 * Math.PI * 2; r.position.set(Math.cos(a) * 0.5, Math.sin(a) * 0.5, 0); r.rotation.z = a - Math.PI / 2; } }
-        for (const [y_, w] of [[0.95, 0.42], [0.72, 0.34]]) tondo(w, 0.04, 0.05, "#d9a521", 0, y_, -0.24, gC, 0.02, ex);
-        mantello("#f3efe6", { roughness: 0.6 });
-        break;
-      case "cometa":                                                           // mantello a coda di cometa, visiera rosa, scie sulle braccia
-        u.sorriso.visible = true; calotta(K.c, 0.55, ex);
-        { const v = tondo(0.46, 0.09, 0.08, "#ff6fb1", 0, -0.0, -0.25, testa, 0.04, luce("#ff3d9a")); v.rotation.z = 0.08; }
-        for (let i = 0; i < 5; i++) palla(0.03, "#fff3b0", -0.12 + i * 0.06, 0.25 + Math.sin(i) * 0.03, -0.12, testa, 1, 1, 1, luce("#fff3b0"));   // diadema di stelline
-        mantello("#ff6fb1", { emissive: "#7a2a8a", emissiveIntensity: 0.6 });
-        for (const g of [sx, dx]) box(0.03, 0.34, 0.02, "#ff6fb1", 0, -0.38, -0.1, g, luce("#ff3d9a"));
-        break;
-      case "vulcano":                                                          // armatura pesante con crepe di lava e camini sulle spalle
-        u.sorriso.visible = true; calotta(K.c, 0.6, ex);
-        tondo(0.4, 0.07, 0.06, "#ffb000", 0, 0.0, -0.26, testa, 0.03, luce("#ff8a00"));
-        for (const [x_, y_, r] of [[-0.12, 0.95, 0.4], [0.13, 0.8, -0.6], [-0.06, 0.65, 0.9], [0.15, 1.0, 0.2], [0.02, 0.58, -0.3]]) {
-          const q = box(0.025, 0.15, 0.02, "#ff7a1a", x_, y_, -0.29, gC, luce("#ff5a00")); q.rotation.z = r; }
-        for (const x_ of [-0.33, 0.33]) { const cm = new T.Mesh(new T.CylinderGeometry(0.05, 0.06, 0.16, 10), m("#4a4448", ex)); cm.position.set(x_, 1.17, 0.06); gC.add(cm);
-          palla(0.045, "#ff7a1a", x_, 1.26, 0.06, gC, 1, 0.5, 1, luce("#ff5a00")); }
-        break;
-      case "vento":                                                            // anelli d'aria che girano sugli avambracci, sciarpa lunga
-        viso(); calotta("#e8f6f3", 0.45).rotation.x = 0.35;
-        tondo(0.34, 0.06, 0.06, "#1f6f66", 0, 0.0, -0.25, testa, 0.03);
-        u.anelli = [];
-        for (const g of [sx, dx]) for (const y_ of [-0.3, -0.4]) { const a = new T.Mesh(new T.TorusGeometry(0.15, 0.012, 6, 24), m("#e8f6f3", { transparent: true, opacity: 0.8, emissive: "#bff6ec", emissiveIntensity: 0.6 }));
-          a.position.y = y_; a.rotation.x = Math.PI / 2; g.add(a); u.anelli.push(a); }
-        { const sc = new T.Mesh(new T.TorusGeometry(0.2, 0.06, 8, 20), m("#e8f6f3")); sc.rotation.x = Math.PI / 2; sc.position.y = 1.07; gC.add(sc);
-          const coda = tondo(0.12, 0.6, 0.04, "#e8f6f3", 0.1, 0.45, 0.24, gC, 0.02); coda.rotation.z = -0.12; u.mantello = coda; }
-        break;
-      case "cristallo":                                                        // spalline e maschera di cristallo smeraldo
-        u.sorriso.visible = true; calotta(K.c, 0.55);
-        palla(0.2, "#2bbf87", 0, 0.02, -0.17, testa, 1.15, 0.55, 0.65, { transparent: true, opacity: 0.85, roughness: 0.1, emissive: "#0f8f5f", emissiveIntensity: 0.5 });
-        for (const x_ of [-0.33, 0.33]) for (let i = 0; i < 4; i++) {
-          const q = new T.Mesh(new T.OctahedronGeometry(0.09 + (i % 2) * 0.03), m("#2bbf87", { transparent: true, opacity: 0.85, roughness: 0.1, emissive: "#0f8f5f", emissiveIntensity: 0.4 }));
-          q.position.set(x_ + (x_ < 0 ? -1 : 1) * (i % 2) * 0.05, 1.02 + i * 0.05, (i - 1.5) * 0.07); q.scale.y = 1.6; q.rotation.z = x_ < 0 ? 0.4 : -0.4; gC.add(q); }
-        box(0.03, 0.5, 0.02, "#2bbf87", 0, 0.55, -0.245, gC, luce("#0f8f5f"));
-        break;
+      case "robot": {                                                                  // corpo squadrato, testa a schermo, cingoli
+        tondo(0.66, 0.84, 0.46, "#eef2f7", 0, 0.24, 0, gC, 0.08, metallo);
+        tondo(0.3, 0.2, 0.03, "#2563eb", 0, 0.78, -0.24, gC, 0.03, luce("#2563eb", 0.6));
+        faccia.visible = false;
+        tondo(0.6, 0.48, 0.5, "#2563eb", 0, -0.26, 0, testa, 0.08, metallo);
+        tondo(0.48, 0.32, 0.03, "#0b1630", 0, -0.18, -0.26, testa, 0.04);
+        for (const x_ of [-0.1, 0.1]) palla(0.05, "#5ff3ff", x_, -0.01, -0.28, testa, 1.2, 1, 0.4, luce("#5ff3ff", 1.5));
+        box(0.18, 0.025, 0.02, "#5ff3ff", 0, -0.13, -0.28, testa, luce("#5ff3ff", 1.5));
+        tondo(0.03, 0.22, 0.03, "#94a3b8", 0.18, 0.2, 0, testa, 0.01); palla(0.045, "#ff4d4d", 0.18, 0.44, 0, testa, 1, 1, 1, luce("#ff4d4d"));
+        braccia("#94a3b8", "#2563eb", metallo, 0.07, 0.11);
+        for (const a of gambe) for (const o of a.children) o.visible = false;
+        for (const x_ of [-0.2, 0.2]) { tondo(0.2, 0.26, 0.6, "#334155", x_, 0.0, 0, gC, 0.1);   // cingoli
+          for (const z_ of [-0.2, 0, 0.2]) { const r = new T.Mesh(new T.CylinderGeometry(0.07, 0.07, 0.2, 12), m("#94a3b8", metallo)); r.rotation.z = Math.PI / 2; r.position.set(x_, 0.11, z_); gC.add(r); u.extra.push(["ruota", r]); } }
+        u.cingoli = true;
+        break; }
+      case "colosso": {                                                                // il doppio degli altri, tutto rocce
+        const pietra = "#8a7f72", scura = "#6b6157";
+        tuta(pietra, { roughness: 0.95 }, 1.35, 1.35, 1.05); faccia.material = m(pietra, { roughness: 0.95 });
+        for (const o of u.occhi) { o.visible = true; o.material = m("#ffa733", luce("#ff8a00", 1.5)); }
+        for (const [x_, y_, z_, r] of [[-0.36, 1.02, 0, 0.17], [0.36, 1.02, 0, 0.17], [0, 1.0, 0.2, 0.15], [-0.18, 0.62, -0.22, 0.09], [0.2, 0.85, -0.24, 0.08], [0, 0.4, 0.15, 0.12]]) {
+          const q = new T.Mesh(new T.DodecahedronGeometry(r), m(x_ ? scura : pietra, { roughness: 0.95 })); q.position.set(x_, y_, z_); q.rotation.set(x_, y_, z_); gC.add(q); }
+        for (const b of [sx, dx]) { const q = new T.Mesh(new T.CylinderGeometry(0.14, 0.12, 0.42, 9), m(pietra, { roughness: 0.95 })); q.position.y = -0.18; b.add(q);
+          const pu = new T.Mesh(new T.DodecahedronGeometry(0.2), m(scura, { roughness: 0.95 })); pu.position.y = -0.48; b.add(pu); }
+        gambeTuta(pietra, scura, { roughness: 0.95 }, 0.13);
+        u.scala = 1.5;
+        break; }
+      case "argento": {                                                                // eroina slanciata, capelli lunghi argento, ali luminose
+        viso();
+        calotta("#d9dde6", 0.5, { metalness: 0.4, roughness: 0.3 }).rotation.x = 0.3;
+        palla(0.27, "#d9dde6", 0, -0.2, 0.1, testa, 1.08, 1.5, 0.8, { metalness: 0.4, roughness: 0.3 });   // capelli lunghi dietro
+        for (const x_ of [-0.25, 0.25]) palla(0.09, "#d9dde6", x_, -0.15, 0.02, testa, 0.7, 2.1, 1, { metalness: 0.4, roughness: 0.3 });
+        tuta("#f4f4f8", undefined, 0.92, 1.32, 0.85);
+        { const v = palla(0.2, "#7c3aed", 0, 0.8, -0.1, gC, 0.9, 1.4, 0.6); }                // fascia viola sul petto
+        braccia("#f4f4f8", "#7c3aed", undefined, 0.08, 0.09); gambeTuta("#f4f4f8", "#7c3aed", undefined, 0.085);
+        tondo(0.46, 0.05, 0.38, "#7c3aed", 0, 0.52, 0, gC, 0.02);
+        for (const x_ of [-1, 1]) { const ala = new T.Group(); ala.position.set(x_ * 0.08, 0.9, 0.22); gC.add(ala);
+          palla(0.3, "#c4b5fd", x_ * 0.3, 0.12, 0.05, ala, 1, 0.75, 0.08, vetro("#c4b5fd", "#8b5cf6"));
+          palla(0.2, "#c4b5fd", x_ * 0.24, -0.28, 0.05, ala, 1, 0.8, 0.08, vetro("#c4b5fd", "#8b5cf6"));
+          ala.rotation.y = x_ * 0.5; u.extra.push(["ala", ala, x_]); }
+        corpo.scale.set(0.92, 1.03, 0.92);
+        break; }
+      case "mago": {                                                                   // mantello fino a terra, cappuccio, occhi nell'ombra
+        const blu = "#123c4a", oro = "#c9a227";
+        const veste = new T.Mesh(new T.CylinderGeometry(0.26, 0.5, 1.25, 20), m(blu)); veste.position.y = 0.62; gC.add(veste);
+        const bordo = new T.Mesh(new T.TorusGeometry(0.5, 0.025, 6, 32), m(oro, metallo)); bordo.rotation.x = Math.PI / 2; bordo.position.y = 0.03; gC.add(bordo);
+        box(0.06, 1.2, 0.02, oro, 0, 0.03, -0.37, gC, metallo).rotation.x = -0.2;
+        faccia.material = m("#0b1418");
+        const cap = calotta(blu, 0.62); cap.scale.set(1.15, 1.25, 1.2); cap.position.y = 0.02;
+        const punta = new T.Mesh(new T.ConeGeometry(0.2, 0.3, 14), m(blu)); punta.position.set(0, 0.33, 0.12); punta.rotation.x = 0.6; testa.add(punta);
+        for (const x_ of [-0.09, 0.09]) palla(0.035, "#7df9ff", x_, 0.0, -0.27, testa, 1.3, 0.8, 0.5, luce("#7df9ff", 2));
+        braccia(blu, "#0b1418", undefined, 0.12, 0.08);
+        for (const a of gambe) for (const o of a.children) o.visible = false;
+        tondo(0.04, 1.5, 0.04, "#4a3020", 0, -1.25, -0.05, dx, 0.02);                   // bastone con sfera
+        u.extra.push(["sfera", palla(0.09, "#7df9ff", 0, 0.32, -0.05, dx, 1, 1, 1, luce("#22d3ee", 1.6))]);
+        u.veste = true;
+        break; }
+      case "scheggia": {                                                               // piccolo e velocissimo, caschetto e scia
+        viso();
+        const casco = calotta("#a3e635", 0.55, metallo); casco.scale.set(1.08, 1.12, 1.12);
+        tondo(0.4, 0.1, 0.06, "#e0f2fe", 0, 0.02, -0.27, testa, 0.04, { transparent: true, opacity: 0.6 });
+        for (const x_ of [-0.3, 0.3]) { const p_ = new T.Mesh(new T.ConeGeometry(0.04, 0.22, 6), m("#ffffff")); p_.position.set(x_, 0.1, 0.12); p_.rotation.set(1.3, 0, 0); testa.add(p_); }
+        tuta("#ffffff"); palla(0.15, "#a3e635", 0, 0.82, -0.17, gC, 1.4, 0.35, 0.6);
+        braccia("#a3e635", "#ffffff", undefined, 0.08, 0.09); gambeTuta("#a3e635", "#ffffff", undefined, 0.085);
+        for (let i = 0; i < 4; i++) { const sc = palla(0.25 - i * 0.04, "#d9f99d", 0, 0.75, 0.45 + i * 0.32, gC, 1, 1.3, 1.6, { transparent: true, opacity: 0.45 - i * 0.09, emissive: "#a3e635", emissiveIntensity: 0.5, depthWrite: false });
+          sc.visible = false; u.extra.push(["scia", sc]); }
+        u.scala = 0.72;
+        break; }
+      case "cavaliere": {                                                              // armatura smeraldo, elmo con cresta, ali meccaniche
+        const sm = "#0f7a55", ar = "#cbd5e1", ma = { metalness: 0.75, roughness: 0.22 };
+        tuta(sm, ma, 1.15, 1.32, 0.95);
+        for (const x_ of [-0.34, 0.34]) palla(0.16, ar, x_, 1.0, 0, gC, 1.1, 0.7, 1.1, ma);
+        tondo(0.3, 0.35, 0.03, ar, 0, 0.62, -0.25, gC, 0.04, ma);
+        braccia(sm, ar, ma, 0.1, 0.11); gambeTuta(sm, ar, ma, 0.1);
+        calotta(sm, 1, ma); palla(0.2, sm, 0, -0.12, -0.08, testa, 1.25, 0.8, 1.2, ma);
+        box(0.36, 0.035, 0.03, "#111827", 0, 0.0, -0.3, testa);
+        for (let i = 0; i < 5; i++) palla(0.05, ar, 0, 0.3 - i * 0.015, -0.12 + i * 0.07, testa, 0.6, 1.3, 1, ma);   // cresta
+        for (const x_ of [-1, 1]) { const ala = new T.Group(); ala.position.set(x_ * 0.12, 1.0, 0.24); gC.add(ala);
+          for (let i = 0; i < 4; i++) { const pn = box(0.08, 0.6 - i * 0.1, 0.02, i % 2 ? ar : sm, 0, -0.1, 0, ala, ma); pn.position.x = x_ * (0.12 + i * 0.1); pn.rotation.z = x_ * (0.9 + i * 0.25); }
+          ala.rotation.y = x_ * 0.35; u.extra.push(["ala", ala, x_]); }
+        u.scala = 1.1;
+        break; }
+      case "energia": {                                                                // tutto blu luminoso, scintille che girano
+        const bl = "#38bdf8", e = luce("#1d9bf0", 1.6);
+        tuta(bl, e); faccia.material = m(bl, e);
+        for (const o of u.occhi) { o.visible = true; o.material = m("#ffffff", luce("#ffffff", 2)); }
+        braccia(bl, "#7dd3fc", e); gambeTuta(bl, "#7dd3fc", e);
+        palla(0.4, "#7dd3fc", 0, 0.85, 0, gC, 1.3, 1.9, 1.1, { transparent: true, opacity: 0.12, emissive: "#38bdf8", emissiveIntensity: 1, depthWrite: false });   // alone
+        for (let i = 0; i < 8; i++) u.extra.push(["scintilla", palla(0.035, "#e0f2fe", Math.cos(i * 0.785) * 0.45, 0.25 + (i * 0.37) % 1.4, Math.sin(i * 0.785) * 0.45, gC, 1, 1, 1, luce("#bae6fd", 2)), i]);
+        break; }
     }
+    if (u.scala) g.scale.setScalar(u.scala);
   }
   function partenza() {                                                  // dalla porta d'ingresso, un passo dentro
     const p = U3.portaPos, c = U3.centro;
@@ -269,11 +291,15 @@
       if (va) { u.sx.rotation.set(-o * 0.5, 0, 0.12); u.dx.rotation.set(o * 0.5, 0, -0.12); }
       else { u.sx.rotation.set(0.15, 0, 0.42); u.dx.rotation.set(0.15, 0, -0.42); }   // fermo: posa da eroe, pugni sui fianchi
       tAn += dt;
-      if (u.anelli) u.anelli.forEach((r, i) => { r.rotation.z = tAn * (i % 2 ? -6 : 6); r.scale.setScalar(1 + Math.sin(tAn * 5 + i) * 0.08); });
-      if (u.sfera) u.sfera.scale.setScalar(1 + Math.sin(tAn * 4) * 0.12);
-      if (u.alone) u.alone.rotation.z = tAn * 0.6;
-      u.corpo.position.y = va ? Math.abs(Math.cos(passo)) * 0.03 : 0;
-      if (u.mantello) u.mantello.rotation.x = va ? -0.35 - Math.abs(Math.sin(passo)) * 0.15 : 0;   // mantello o sciarpa svolazzano
+      u.corpo.position.y = va && !u.cingoli && !u.veste ? Math.abs(Math.cos(passo)) * 0.03 : 0;   // chi va su cingoli o in veste scivola
+      if (u.cingoli || u.veste) { u.gambe[0].rotation.x = u.gambe[1].rotation.x = 0; }
+      for (const [tipo, o, k] of u.extra || []) {
+        if (tipo === "ruota") o.rotation.x += va ? dt * 12 : 0;
+        else if (tipo === "ala") o.rotation.y = k * (0.45 + Math.sin(tAn * (va ? 9 : 2.5)) * (va ? 0.3 : 0.1));
+        else if (tipo === "sfera") o.scale.setScalar(1 + Math.sin(tAn * 4) * 0.15);
+        else if (tipo === "scia") o.visible = va;
+        else if (tipo === "scintilla") { const a = tAn * 3 + k * 0.785, r = 0.45 + Math.sin(tAn * 2 + k) * 0.08; o.position.set(Math.cos(a) * r, 0.25 + ((k * 0.37 + tAn * 0.5) % 1.4), Math.sin(a) * r); }
+      }
     }
     // telecamera
     const occhio = alto * 0.86;
@@ -331,7 +357,7 @@
     get pos() { return [x, z, yaw]; }, set pos(p) { [x, z, yaw] = p; },  // per le prove
     get griglia() { return { griglia, gx0, gz0, gnx, gnz, CELLA }; },
     galleria(x0, z0) {                                                   // per le prove: tutti gli eroi in fila
-      return LOOK.map(([k], i) => { const o = U3.nuovoOmino({ id: "gdr-eroe", donna: false }, x0 + i * 1.0, z0, "dip"); vestiEroe(o.userData, k);
+      return LOOK.map(([k], i) => { const o = U3.nuovoOmino({ id: "gdr-eroe", donna: false }, x0 + i * 1.15, z0, "dip"); vestiEroe(o, k);
         o.userData.sedute.forEach(q => q.visible = false); o.userData.gambe.forEach(q => q.visible = true); o.userData.sx.rotation.set(0.15, 0, 0.42); o.userData.dx.rotation.set(0.15, 0, -0.42); o.rotation.y = 0; return k; });
     },
     vista(prima) { if (prima !== primaPersona) cambiaVista(); },
