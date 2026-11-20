@@ -2208,7 +2208,7 @@
     inquadra,
     camera, controlli, omini: () => animati,
     // per la modalita' GDR (gdr.js, caricato solo quando si entra)
-    mondo, renderer, wrap, cliccaIn, sveglia, nuovoOmino: (s, x, z, ruolo) => omino(s, scena, x, z, ruolo),
+    mondo, renderer, wrap, cliccaIn, sveglia, aiuti: { palla, tondo, box, m }, nuovoOmino: (s, x, z, ruolo) => omino(s, scena, x, z, ruolo),
     get portaPos() { return portaPos; }, get porta() { return porta; }, get centro() { return centro; }, get misure() { return [larg, prof]; },                          // per le prove (viste ravvicinate)
     provaDivertenti() {
       const dip = animati.filter(a => a.userData.caffe), lav = dip.filter(a => a.userData.s.stato === "lavora");

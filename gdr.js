@@ -56,22 +56,104 @@
   }
 
   // ---------- stato ----------
-  const LOOK = [["capo", "👑 Stefano"], ["dip", "👕 Dipendente"], ["resp", "👔 Responsabile"], ["controllore", "🧡 Controllore"], ["operaio", "👷 Operaio"]];
+  // supereroi solo "ispirati": colori e forme generiche, niente nomi e niente loghi veri (repo pubblico)
+  const LOOK = [["mantello", "🦸 Eroe col mantello"], ["ragnatela", "🕸️ Eroe ragnatela"], ["armatura", "🤖 Armatura rosso-oro"],
+    ["oscuro", "🦇 Cavaliere oscuro"], ["velocista", "⚡ Velocista"], ["gigante", "💪 Gigante verde"]];
   const leggi = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
   const salva = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
-  let attivo = false, primaPersona = leggi("gdrVista", "3") === "1", look = leggi("gdrLook", "capo");
+  let attivo = false, primaPersona = leggi("gdrVista", "3") === "1", look = leggi("gdrLook", "mantello");
+  if (!LOOK.some(l => l[0] === look)) look = "mantello";
   let av = null, x = 0, z = 0, yaw = 0, pitch = -0.12, passo = 0, alto = 1.5, distCam = 3.2;
   const tasti = new Set();
   let salvaCam = null;
 
   function creaAvatar() {
     if (av) { av.parent && av.parent.remove(av); }
-    av = U3.nuovoOmino({ id: "gdr-" + look }, x, z, look);
+    av = U3.nuovoOmino({ id: "gdr-eroe", donna: false }, x, z, "dip");
     av.userData.giocatore = true;
-    const bb = new T.Box3().setFromObject(av); alto = Math.max(1.2, bb.max.y);
+    vestiEroe(av.userData, look);
+    const bb = new T.Box3().setFromObject(av); alto = Math.max(1.2, Math.min(2.2, bb.max.y));
     for (const l of av.userData.sedute) l.visible = false;
     for (const l of av.userData.gambe) l.visible = true;
     av.visible = !primaPersona;
+  }
+
+  // ---------- costumi da supereroe (sopra un omino normale: si nascondono polo, capelli, occhiali e barba) ----------
+  function vestiEroe(u, tipo) {
+    const { palla, tondo, box, m } = U3.aiuti;
+    const { corpo, testa, sx, dx, gambe } = u;
+    const metallo = { metalness: 0.55, roughness: 0.3 }, luce = c => ({ emissive: c, emissiveIntensity: 1.2 });
+    const K = {
+      mantello: { c: "#2f5fd0", gambe: "#2f5fd0", guanti: "#c62828", stivali: "#c62828", cintura: "#f2c230" },
+      ragnatela: { c: "#d0202a", gambe: "#2346b8", guanti: "#d0202a", stivali: "#d0202a" },
+      armatura: { c: "#b3121c", gambe: "#b3121c", guanti: "#e0b23a", stivali: "#e0b23a", ex: metallo },
+      oscuro: { c: "#33363d", gambe: "#33363d", guanti: "#1b1b20", stivali: "#1b1b20", cintura: "#e0b23a" },
+      velocista: { c: "#d0202a", gambe: "#d0202a", guanti: "#d0202a", stivali: "#f2c230", cintura: "#f2c230" },
+      gigante: { c: "#4f9a3a", gambe: "#6a3d9a", guanti: "#4f9a3a", stivali: "#4f9a3a" },
+    }[tipo];
+    const ex = K.ex;
+    for (const o of corpo.children.slice()) if (o.isMesh) o.visible = false;          // polo, logo, cordino
+    testa.children.forEach((o, i) => { if (i > 0) o.visible = false; });               // resta solo la faccia
+    const viso = () => { for (const o of u.occhi) o.visible = true; u.sorriso.visible = true; };
+    const gC = new T.Group(); corpo.add(gC);
+    const gigante = tipo === "gigante";
+    const busto = palla(0.272, K.c, 0, 0.78, 0, gC, 1, 1.32, 0.9, ex);
+    if (gigante) { busto.scale.set(1.45, 1.35, 1.1); for (const x_ of [-0.36, 0.36]) palla(0.16, K.c, x_, 1.02, 0, gC); }
+    for (const [g, lato] of [[sx, -1], [dx, 1]]) {
+      const c = new T.Mesh(new T.CylinderGeometry(gigante ? 0.12 : 0.09, gigante ? 0.11 : 0.095, 0.4, 12), m(K.c, ex)); c.position.y = -0.18; g.add(c);
+      palla(gigante ? 0.14 : 0.1, K.guanti, 0, -0.42, 0, g, 1, 1, 1, ex);
+    }
+    for (const a of gambe) {
+      for (const o of a.children) o.visible = false;
+      const c = new T.Mesh(new T.CylinderGeometry(gigante ? 0.12 : 0.095, 0.09, 0.45, 10), m(K.gambe, ex)); c.position.y = -0.24; a.add(c);
+      palla(0.11, K.stivali, 0, -0.47, -0.04, a, 1, 0.65, 1.45, ex);
+      if (gigante) for (let i = 0; i < 3; i++) palla(0.03, K.gambe, (i - 1) * 0.07, -0.4, -0.08, a, 1, 1.6, 0.6);   // pantaloni strappati
+    }
+    if (K.cintura) tondo(0.54, 0.07, 0.44, K.cintura, 0, 0.5, 0, gC, 0.03);
+    const calotta = (c, fino, e) => { const q = new T.Mesh(new T.SphereGeometry(0.292, 24, 16, 0, Math.PI * 2, 0, Math.PI * fino), m(c, e)); q.scale.set(1, 1.06, 1); testa.add(q); return q; };
+    const mento = (c, e) => palla(0.2, c, 0, -0.12, -0.08, testa, 1.25, 0.8, 1.2, e);
+    const lenti = (c, w) => { for (const x_ of [-0.1, 0.1]) palla(0.06 * w, c, x_, 0.04, -0.27, testa, 1.3, 0.9, 0.45, luce(c)); };
+    const mantello = c => {
+      const mt = new T.Mesh(new T.CylinderGeometry(0.28, 0.48, 1.05, 20, 1, true, -Math.PI * 0.42, Math.PI * 0.84), m(c, { side: T.DoubleSide }));
+      mt.position.set(0, 0.6, 0.04); mt.castShadow = true; gC.add(mt); u.mantello = mt;
+    };
+    switch (tipo) {
+      case "mantello":
+        viso(); mantello("#c62828");
+        calotta("#1c1714", 0.45).rotation.x = 0.35;                                    // capelli scuri pettinati
+        tondo(0.32, 0.07, 0.06, "#1b1b20", 0, 0.0, -0.25, testa, 0.03);                // mascherina
+        tondo(0.17, 0.17, 0.03, "#f2c230", 0, 0.77, -0.235, gC, 0.03);                 // stemma semplice, senza lettere
+        break;
+      case "ragnatela":                                                        // niente emblemi sul petto: solo colori e maschera
+        calotta(K.c, 1); mento(K.c);
+        for (const x_ of [-0.11, 0.11]) { const l = palla(0.075, "#ffffff", x_, 0.04, -0.27, testa, 1.1, 1.4, 0.4); l.rotation.z = x_ < 0 ? 0.5 : -0.5; }
+        for (let i = 0; i < 4; i++) { const r = new T.Mesh(new T.TorusGeometry(0.1 + i * 0.07, 0.006, 4, 20), m("#1b1b20")); r.position.set(0, 0.02, -0.12 + i * 0.02); testa.add(r); }
+        for (const x_ of [-0.24, 0.24]) palla(0.1, K.gambe, x_, 0.72, 0, gC, 0.5, 2.6, 1.4);
+        break;
+      case "armatura":
+        calotta(K.c, 1, ex); mento(K.c, ex);
+        palla(0.2, "#e0b23a", 0, -0.04, -0.2, testa, 1, 1.2, 0.55, metallo);           // maschera dorata
+        for (const x_ of [-0.08, 0.08]) box(0.1, 0.03, 0.02, "#bff4ff", x_, 0.03, -0.31, testa, luce("#7fe7ff"));
+        { const c = new T.Mesh(new T.CylinderGeometry(0.07, 0.07, 0.03, 18), m("#bff4ff", luce("#7fe7ff"))); c.rotation.x = Math.PI / 2; c.position.set(0, 0.86, -0.245); gC.add(c); }
+        for (const g of [sx, dx]) palla(0.06, "#bff4ff", 0, -0.47, 0, g, 1, 0.4, 1, luce("#7fe7ff"));
+        break;
+      case "oscuro":
+        u.sorriso.visible = true; mantello("#15151a"); calotta(K.c, 0.52);
+        for (const x_ of [-0.15, 0.15]) { const o = new T.Mesh(new T.ConeGeometry(0.06, 0.2, 8), m(K.c)); o.position.set(x_, 0.33, 0); testa.add(o); }
+        lenti("#ffffff", 0.6);
+        break;
+      case "velocista":
+        u.sorriso.visible = true; calotta(K.c, 0.52);
+        for (const x_ of [-0.29, 0.29]) { const a = new T.Mesh(new T.ConeGeometry(0.05, 0.18, 6), m("#f2c230", { metalness: 0.5 })); a.position.set(x_, 0.12, 0); a.rotation.z = x_ < 0 ? 0.6 : -0.6; testa.add(a); }
+        lenti("#ffffff", 0.55);
+        break;
+      case "gigante":
+        viso(); testa.children[0].material = m(K.c);                                   // pelle verde
+        calotta("#1c1714", 0.45).rotation.x = 0.35;
+        for (const x_ of [-0.1, 0.1]) { const s_ = box(0.12, 0.03, 0.02, "#1c1714", x_, 0.11, -0.26, testa); s_.rotation.z = x_ < 0 ? -0.35 : 0.35; }   // sopracciglia arrabbiate
+        corpo.scale.set(1.12, 1.08, 1.12);
+        break;
+    }
   }
   function partenza() {                                                  // dalla porta d'ingresso, un passo dentro
     const p = U3.portaPos, c = U3.centro;
@@ -171,6 +253,7 @@
       u.gambe[0].rotation.x = o * 0.5; u.gambe[1].rotation.x = -o * 0.5;
       u.sx.rotation.set(-o * 0.5, 0, 0.12); u.dx.rotation.set(o * 0.5, 0, -0.12);
       u.corpo.position.y = va ? Math.abs(Math.cos(passo)) * 0.03 : 0;
+      if (u.mantello) u.mantello.rotation.x = va ? -0.25 - Math.abs(Math.sin(passo)) * 0.1 : 0;   // il mantello svolazza
     }
     // telecamera
     const occhio = alto * 0.86;
@@ -227,6 +310,10 @@
     ricostruito() { sporca = true; },                                    // i dati sono cambiati: muri e mobili da rifare
     get pos() { return [x, z, yaw]; }, set pos(p) { [x, z, yaw] = p; },  // per le prove
     get griglia() { return { griglia, gx0, gz0, gnx, gnz, CELLA }; },
+    galleria(x0, z0) {                                                   // per le prove: tutti gli eroi in fila
+      return LOOK.map(([k], i) => { const o = U3.nuovoOmino({ id: "gdr-eroe", donna: false }, x0 + i * 1.0, z0, "dip"); vestiEroe(o.userData, k);
+        o.userData.sedute.forEach(q => q.visible = false); o.userData.gambe.forEach(q => q.visible = true); o.rotation.y = 0; return k; });
+    },
     vista(prima) { if (prima !== primaPersona) cambiaVista(); },
   };
 })();
