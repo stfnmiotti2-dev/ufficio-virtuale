@@ -1105,7 +1105,7 @@
       }
       schermi.push({ mesh: scr.userData.schermo, s });
       const link = gr.link || (gr.s0 && gr.s0.link);
-      cliccabili.push({ obj: g, apri: () => link && apriLink(link) });
+      cliccabili.push({ obj: g, apri: () => link && apriLink(link), gr, s: nelVetro[0] });
       const sc = gr.scheda;
       marcati.push(etichetta("nome uff", U.nomeIsola(gr), new T.Vector3(x, HV + 0.55 + alto, z - LD / 2)));
       marcati.push(etichetta("riep" + (stato === "aspetta" ? " chiama" : ""), U.riepilogo(gr).split("\n").slice(0, stato === "aspetta" ? 3 : 2).map(r => U.corto(r, 18)).join("\n"), new T.Vector3(x, 0.05 + alto, z + LD / 2 + (capo ? 0.3 : 0.9)),
@@ -1121,9 +1121,14 @@
     let usate = 0;
     // i colleghi degli altri progetti (Ufficio virtuale, KUKA, GX Works) stanno a parte, in un open space tutto loro
     const aParte = isole.filter(q => q.fuori.some(s => s.fisso || s.altro_progetto));
-    for (const q of isole) {
-      if (aParte.includes(q)) continue;
-      if (usate && usate + q.fuori.length > rigaMax) { file.push([]); usate = 0; }
+    // pianta su 2 file al massimo (critica 19/11, B3): in prima fila il capo e chi ti aspetta, poi gli altri
+    // nell'ordine degli uffici (sempre lo stesso); le file si allargano invece di moltiplicarsi
+    const qui = isole.filter(q => !aParte.includes(q)), ordUff = new Map(capi.map((g, i) => [g.chiave, i]));
+    const urgente = q => q.gr.chiave === "r:capo" || q.fuori.some(s => s.stato === "aspetta");
+    qui.sort((a, b) => urgente(b) - urgente(a) || (ordUff.get(a.gr.chiave) ?? 99) - (ordUff.get(b.gr.chiave) ?? 99));
+    const totale = qui.reduce((n, q) => n + q.fuori.length, 0), cap = Math.max(rigaMax, Math.ceil(totale / 2));
+    for (const q of qui) {
+      if (usate && usate + q.fuori.length > cap && file.length < 2 && !urgente(q)) { file.push([]); usate = 0; }
       file[file.length - 1].push(q); usate += q.fuori.length;
     }
     if (aParte.length) { const fa = [...aParte]; fa.aParte = true; file.push(fa); }
@@ -1183,7 +1188,8 @@
           }
           schermi.push({ mesh: scr.userData.schermo, s: presente ? s : { stato: "spento" } });
           const apri = () => s.link ? apriLink(s.link) : s.fisso ? null : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
-          cliccabili.push({ obj: scr, apri });
+          cliccabili.push({ obj: scr, apri, s, gr });
+          if (om) cliccabili.push({ obj: om, apri, s, gr });               // anche cliccando la persona
           if (presente) {
             const [ic, testo] = U.testoFumetto(s);
             marcati.push(etichetta("f3d st-" + (s.download ? "allarme" : s.stato.replace("?", "")),
@@ -2084,7 +2090,8 @@
     const tocca = (q, dy) => tenuti.some(k => q.x0 < k.x1 - 2 && q.x1 > k.x0 + 2 && q.y0 + dy < k.y1 - 2 && q.y1 + dy > k.y0 + 2);
     for (const q of visti) {
       // prima prova a spostarla un po' sotto o sopra; se non c'e' posto la nasconde (riappare avvicinandosi)
-      const dy = q.p === 0 ? 0 : [0, q.y1 - q.y0 + 3, -(q.y1 - q.y0 + 3)].find(d => !tocca(q, d));
+      let dy = [0, q.y1 - q.y0 + 3, -(q.y1 - q.y0 + 3)].find(d => !tocca(q, d));
+      if (q.p === 0 && dy === undefined) dy = 0;                         // chi ti aspetta non si nasconde mai
       const copre = dy === undefined;
       q.e.style.opacity = copre ? "0" : ""; q.e.style.pointerEvents = copre ? "none" : "";
       if (dy) q.e.style.transform += ` translateY(${dy}px)`;
@@ -2105,9 +2112,36 @@
     const colpi = ray.intersectObjects(mondo.children, true);
     for (const c of colpi) {
       let o = c.object;
-      while (o) { const k = cliccabili.find(q => q.obj === o); if (k) return k.apri(); o = o.parent; }
+      while (o) { const k = cliccabili.find(q => q.obj === o); if (k) return k.s || k.gr ? miniScheda(k, e.clientX - r.left, e.clientY - r.top) : k.apri(); o = o.parent; }
     }
+    miniScheda(null);
   });
+  // clic su una persona o una scrivania: mini-scheda con lo stato e il pulsante per aprire il thread
+  const scheda = document.createElement("div");
+  scheda.className = "scheda3d"; scheda.hidden = true; wrap.append(scheda);
+  const NOMI = { aspetta: "✋ Ti aspetta", lavora: "⚙️ Lavora", pensa: "💭 Pensa", "ferma?": "⏳ Fermo da un po'", finito: "💤 Ha finito", supervisore: "📋 Supervisiona" };
+  function miniScheda(k, x, y) {
+    if (!k) { scheda.hidden = true; return; }
+    const s = k.s || {}, gr = k.gr, sc = gr && gr.scheda;
+    const da = s.aspetta_dal || s.modificato, min = da ? Math.max(1, Math.round((Date.now() / 1000 - da) / 60)) : null;
+    const quanto = min == null ? "" : min < 60 ? min + " min" : Math.floor(min / 60) + " h " + (min % 60) + " min";
+    const riga = (cls, t) => { if (!t) return; const d = document.createElement("div"); d.className = cls; d.textContent = t; scheda.append(d); };
+    scheda.replaceChildren();
+    riga("t", (s.cloud ? "☁️ " : "") + (s.titolo || (gr && U.nomeIsola(gr)) || "Postazione"));
+    riga("st st-" + String(s.stato || "").replace("?", ""), (NOMI[s.stato] || s.stato || "") + (quanto ? " · da " + quanto : "") + (s.attesa_lunga ? " ⏳" : ""));
+    riga("a", s.attivita);
+    riga("p", s.prossimo && "➡️ " + s.prossimo);
+    riga("p", s.versione && "🧩 " + s.versione);
+    if (sc) riga("p", "📌 " + sc.nome + " · " + sc.stato + (sc.disaccordo ? " ⚠️ (la scheda diceva: " + sc.stato_scheda + ")" : ""));
+    const b = document.createElement("button");
+    b.textContent = s.stato === "aspetta" ? "Rispondi nel thread ↗" : "Apri il thread ↗";
+    b.onclick = () => { k.apri(); scheda.hidden = true; };
+    scheda.append(b);
+    scheda.hidden = false;
+    const W = wrap.clientWidth, H = wrap.clientHeight;
+    scheda.style.left = Math.min(x + 12, W - 290) + "px"; scheda.style.top = Math.min(y + 12, H - scheda.offsetHeight - 8) + "px";
+  }
+  window.addEventListener("keydown", e => { if (e.key === "Escape") miniScheda(null); });
 
   function misura() {
     const w = wrap.clientWidth || 1000, h = Math.max(420, Math.min(760, Math.round(w * 0.55)));

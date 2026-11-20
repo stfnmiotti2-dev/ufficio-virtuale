@@ -94,6 +94,13 @@
   .spia.rossa { background: #5a1f1f; color: #ffb3b3; }
   #aspettano { margin: 14px 20px 0; border: 2px solid #c62828; border-radius: 10px; background: #2a1618; padding: 10px 14px; }
   #aspettano[hidden] { display: none; }
+  .scheda3d { position: absolute; z-index: 5; width: 270px; background: #fff; color: #2a3142; border-radius: 10px; padding: 10px 12px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.25); font: 13px/1.35 "Segoe UI", system-ui, sans-serif; }
+  .scheda3d[hidden] { display: none; }
+  .scheda3d .t { font-weight: 700; margin-bottom: 4px; }
+  .scheda3d .st { font-weight: 600; margin-bottom: 4px; } .scheda3d .st-aspetta { color: #c62828; }
+  .scheda3d .a { margin-bottom: 4px; } .scheda3d .p { color: #5a6378; font-size: 12px; }
+  .scheda3d button { margin-top: 8px; width: 100%; padding: 6px; border: 0; border-radius: 6px; background: #c62828; color: #fff; font-weight: 600; cursor: pointer; }
   header h1, header label, .spia, .tia, .live { white-space: nowrap; }
   #ufficio3d { position: relative; margin: 16px 20px 0; border-radius: 8px; overflow: hidden; }
   #ufficio3d[hidden], #ufficio[hidden] { display: none; }
