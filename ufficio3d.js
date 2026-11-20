@@ -1021,6 +1021,7 @@
 
   function costruisci(sessioni, extra) {
     ultimaAttivita = performance.now();                                  // dati nuovi: si torna fluidi
+    mondo.traverse(o => { if (o.userData.unito) o.geometry.dispose(); });  // i pezzi uniti sono nuovi a ogni giro: si liberano
     mondo.clear();
     etichette.replaceChildren();
     animati = []; marcati = []; cliccabili = []; schermi = []; camminatori = [];
@@ -1277,6 +1278,7 @@
       creaGiocatore(xm + 2.9, zp + 3.9);                                     // angolo PlayStation vicino all'ingresso
       creaSegretaria();
     }
+    unisciFermi();
     const ora = new Map(schermi.map(q => [q.s.id, q.s.stato]));
     const primaVoltaDati = statiPrima.size === 0;
     let nuovi = false;
@@ -1317,6 +1319,45 @@
     }
     if (nuovi && ultimiDati) { const d = ultimiDati; setTimeout(() => costruisci(d[0], d[1]), 0); }   // ricostruisce con il cantiere aperto
     if (primaVolta) inquadra();
+  }
+
+  // Arredo fermo unito in pochi pezzi (critica 19/11, B: meno chiamate di disegno). Si uniscono solo le parti
+  // che non si muovono, non spariscono e non vengono tolte: omini, porta, orologio, calcio balilla, cantieri,
+  // sala riunioni, segretaria e giocatore restano come sono. Il materiale resta lo stesso oggetto, quindi
+  // colori e luci che cambiano (schermi, lampade) continuano a funzionare. Un pezzo per ogni zona cliccabile.
+  function unisciFermi() {
+    const BGU = T.BufferGeometryUtils, unisci = BGU && (BGU.mergeGeometries || BGU.mergeBufferGeometries);
+    if (!unisci) return;
+    const vietati = new Set([porta, orologio, segr && segr.g, segr && segr.corn, gioc && gioc.g, ispettore && ispettore.o,
+      ...(relax ? [relax.pall, ...relax.aste] : []), ...riunione, ...lavori.flatMap(l => [...(l.parti || []), ...(l.operai || [])])].filter(Boolean));
+    const radici = new Set(cliccabili.map(c => c.obj));
+    mondo.updateMatrixWorld(true);
+    const secchi = new Map(), inv = new T.Matrix4();
+    mondo.traverse(o => {
+      if (!o.isMesh || Array.isArray(o.material) || o.userData.plus) return;
+      let a = o, radice = mondo;
+      for (; a && a !== mondo; a = a.parent) {
+        if (vietati.has(a) || (a.userData && a.userData.corpo) || !a.visible || a.layers.mask !== 1) return;
+        if (radice === mondo && radici.has(a)) radice = a;
+      }
+      if (!a) return;
+      const k = o.material.uuid + "|" + o.castShadow + o.receiveShadow + "|" + (o.geometry.index ? 1 : 0) + "|" + radice.uuid;
+      if (!secchi.has(k)) secchi.set(k, { radice, mat: o.material, ombra: o.castShadow, riceve: o.receiveShadow, pezzi: [] });
+      secchi.get(k).pezzi.push(o);
+    });
+    for (const sc of secchi.values()) {
+      if (sc.pezzi.length < 2) continue;
+      inv.copy(sc.radice.matrixWorld).invert();
+      const geos = sc.pezzi.map(o => { const g = o.geometry.clone(); g.applyMatrix4(new T.Matrix4().multiplyMatrices(inv, o.matrixWorld)); return g; });
+      const nomi = Object.keys(geos[0].attributes).sort().join();
+      if (geos.some(g => Object.keys(g.attributes).sort().join() !== nomi)) { geos.forEach(g => g.dispose()); continue; }
+      const unita = unisci.call(BGU, geos, false);
+      geos.forEach(g => g.dispose());
+      if (!unita) continue;
+      const m = new T.Mesh(unita, sc.mat); m.castShadow = sc.ombra; m.receiveShadow = sc.riceve; m.userData.unito = true;
+      for (const o of sc.pezzi) o.parent.remove(o);
+      sc.radice.add(m);
+    }
   }
 
   function inquadra() {

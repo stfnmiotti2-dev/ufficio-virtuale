@@ -187,7 +187,7 @@
 (function () {
   try { localStorage.setItem("vista3dplus", "0"); } catch (e) {}       // 3D+ tolto (19/11): chi l'aveva acceso torna al 3D
   var pp = false; try { pp = localStorage.getItem("vista3dpp") === "1"; } catch (e) {}
-  var f = pp ? ["/lib/three170.js"] : ["/lib/three.min.js", "/lib/OrbitControls.js"];   // 3D: solo il necessario (3D+ tolto)
+  var f = pp ? ["/lib/three170.js"] : ["/lib/three.min.js", "/lib/OrbitControls.js", "/lib/BufferGeometryUtils.js"];   // 3D: solo il necessario (3D+ tolto)
   for (var i = 0; i < f.length; i++) document.write('<script src="' + f[i] + '"><\/script>');
 })();
 </script>
@@ -238,8 +238,11 @@ function el(tag, cls, text) {
 
 function render() {
   const attive = ["aspetta", "lavora", "pensa", "ferma?"];
-  // chi aspetta te viene sempre per primo
-  sessioni = [...sessioni].sort((a, b) => (b.stato === "aspetta") - (a.stato === "aspetta"));
+  // per urgenza: chi aspetta te (da piu' tempo prima), chi e' fermo, chi lavora, chi ha finito
+  const URG = { "aspetta": 0, "ferma?": 1, "lavora": 2, "pensa": 2, "finito": 3 };
+  const urg = s => URG[s.stato] ?? 4;
+  sessioni = [...sessioni].sort((a, b) => urg(a) - urg(b) ||
+    (urg(a) === 0 ? (a.aspetta_dal || a.modificato) - (b.aspetta_dal || b.modificato) : b.modificato - a.modificato));
   const nAspetta = sessioni.filter(s => s.stato === "aspetta").length;
   // TIA aperti: processi veri del PC (dal server); se non disponibili, stima dalle sessioni
   const tiaEl = document.getElementById("tia");
