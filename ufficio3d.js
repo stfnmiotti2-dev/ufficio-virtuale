@@ -1020,6 +1020,7 @@
   let primaVolta = true, centro = new T.Vector3(), larg = 20, prof = 10;
 
   function costruisci(sessioni, extra) {
+    ultimaAttivita = performance.now();                                  // dati nuovi: si torna fluidi
     mondo.clear();
     etichette.replaceChildren();
     animati = []; marcati = []; cliccabili = []; schermi = []; camminatori = [];
@@ -1106,7 +1107,7 @@
       cliccabili.push({ obj: g, apri: () => link && apriLink(link) });
       const sc = gr.scheda;
       marcati.push(etichetta("nome uff", U.nomeIsola(gr), new T.Vector3(x, HV + 0.55 + alto, z - LD / 2)));
-      marcati.push(etichetta("riep" + (stato === "aspetta" ? " chiama" : ""), U.riepilogo(gr), new T.Vector3(x, 0.05 + alto, z + LD / 2 + (capo ? 0.3 : 0.9)),
+      marcati.push(etichetta("riep" + (stato === "aspetta" ? " chiama" : ""), U.riepilogo(gr).split("\n").slice(0, stato === "aspetta" ? 3 : 2).map(r => U.corto(r, 18)).join("\n"), new T.Vector3(x, 0.05 + alto, z + LD / 2 + (capo ? 0.3 : 0.9)),
         sc ? [sc.fatto && "Fatto: " + sc.fatto, sc.in_corso && "In corso: " + sc.in_corso, sc.aspetta && "Aspetta: " + sc.aspetta].filter(Boolean).join("\n\n") : ""));
     });
     // 2) open space davanti: un'isola per gruppo, scrivanie in fila; ogni fila centrata sotto gli uffici
@@ -1333,6 +1334,10 @@
   const v = new T.Vector3();
   let t = 0, ultimo = 0, attivo = false, fps = 40, costo = 8;
   let tSemplice = -10;
+  // a riposo: dopo 60 s senza dati nuovi e senza che Stefano tocchi la pagina, 5 fotogrammi al secondo
+  var ultimaAttivita = performance.now();
+  const sveglia = () => { ultimaAttivita = performance.now(); };
+  for (const ev of ["pointermove", "pointerdown", "wheel", "keydown"]) window.addEventListener(ev, sveglia, { passive: true });
   // percorso a tappe: punti = [[x, z, pausa, azione]]; restituisce dove si trova l'omino dopo e secondi
   function durata(punti, vel) {
     let tt = 0;
@@ -1483,7 +1488,8 @@
   function anima(ms) {
     requestAnimationFrame(anima);
     // fluido ma leggero: punta a 40 fotogrammi al secondo; se il PC fatica scende da solo a 30 o 24
-    if (!attivo || document.hidden || ms - ultimo < 1000 / fps - 2) return;
+    const passo = ms - ultimaAttivita > 60000 ? 5 : fps;
+    if (!attivo || document.hidden || ms - ultimo < 1000 / passo - 2) return;
     ultimo = ms; t = ms / 1000;
     const inizioFrame = performance.now();
     const dt = Math.min(0.1, t - tPrec || 0.04); tPrec = t;
@@ -2017,11 +2023,31 @@
     costo = costo * 0.95 + (performance.now() - inizioFrame) * 0.05;     // media del tempo di disegno
     fps = costo > 16 ? 24 : costo > 11 ? 30 : 40;
     const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
+    const visti = [];
     for (const { e, pos } of marcati) {                                  // etichette HTML sopra la scena
       v.copy(pos).project(camera);
       const fuori = v.z > 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1;
       e.style.display = fuori ? "none" : "";
-      e.style.transform = `translate(${(v.x + 1) / 2 * w}px, ${(1 - v.y) / 2 * h}px) translate(-50%, -100%)`;
+      const px = (v.x + 1) / 2 * w, py = (1 - v.y) / 2 * h;
+      e.style.transform = `translate(${px}px, ${py}px) translate(-50%, -100%)`;
+      if (fuori || e.style.visibility === "hidden" || !e.textContent) continue;
+      if (!e._mt || t - e._mt > 2) { e._mt = t; e._w = e.offsetWidth; e._h = e.offsetHeight; }   // misura ogni tanto, non a ogni giro
+      const c = e.className;                                             // chi aspetta Stefano viene prima di tutto
+      const p = /st-aspetta|st-allarme|chiama/.test(c) ? 0 : / st-/.test(c) || /⚠️|🔥|❌/.test(e.textContent) ? 1 : /nome|riep/.test(c) ? 2 : 3;
+      visti.push({ e, p, x0: px - e._w / 2, x1: px + e._w / 2, y0: py - e._h, y1: py, z: v.z });
+    }
+    // una sola etichetta per punto: se due si coprono resta la piu' importante (a pari importanza la piu' vicina);
+    // nessuna gag o nuvoletta copre mai un'attesa
+    visti.sort((a, b) => a.p - b.p || a.z - b.z);
+    const tenuti = [];
+    const tocca = (q, dy) => tenuti.some(k => q.x0 < k.x1 - 2 && q.x1 > k.x0 + 2 && q.y0 + dy < k.y1 - 2 && q.y1 + dy > k.y0 + 2);
+    for (const q of visti) {
+      // prima prova a spostarla un po' sotto o sopra; se non c'e' posto la nasconde (riappare avvicinandosi)
+      const dy = q.p === 0 ? 0 : [0, q.y1 - q.y0 + 3, -(q.y1 - q.y0 + 3)].find(d => !tocca(q, d));
+      const copre = dy === undefined;
+      q.e.style.opacity = copre ? "0" : ""; q.e.style.pointerEvents = copre ? "none" : "";
+      if (dy) q.e.style.transform += ` translateY(${dy}px)`;
+      if (!copre) { q.y0 += dy; q.y1 += dy; tenuti.push(q); }
     }
   }
   requestAnimationFrame(anima);
@@ -2053,7 +2079,7 @@
     disegna(sessioni, extra) { misura(); ultimiDati = [sessioni, extra || {}]; costruisci(sessioni, extra || {}); },
     attiva(si) { attivo = si; if (si) misura(); },
     inquadra,
-    camera, controlli,
+    camera, controlli, omini: () => animati,                          // per le prove (viste ravvicinate)
     provaDivertenti() {
       const dip = animati.filter(a => a.userData.caffe), lav = dip.filter(a => a.userData.s.stato === "lavora");
       if (dip[0]) momento(dip[0].userData.s.id, "festa", 4.5);

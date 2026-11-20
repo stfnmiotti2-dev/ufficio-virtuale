@@ -272,7 +272,7 @@
     if (s.stato === "aspetta") {                       // da quanto aspetta (campo di Agente TIA, se c'e')
       const da = s.aspetta_dal || s.modificato, min = da ? Math.max(1, Math.round((Date.now() / 1000 - da) / 60)) : 0;
       const quanto = !min ? "" : (min < 60 ? min + "'" : Math.floor(min / 60) + "h" + (min % 60 ? String(min % 60).padStart(2, "0") : "")) + " · ";
-      return ["✋", quanto + (s.attivita || "Aspetta te")];
+      return ["✋", (s.attesa_lunga ? "⏳ " : "") + quanto + (s.attivita || "Aspetta te")];
     }
     if (s.stato === "pensa") return ["💭", "Sta pensando…"];
     if (s.stato === "finito") return ["✅", "Ha finito"];
@@ -312,7 +312,7 @@
     // da piu' di un'ora va a casa (resta nelle schede sotto)
     const ora = Date.now() / 1000;
     sessioni = sessioni.filter(s => PRESENTI.includes(s.stato) && s.stato !== "finito" ||
-      (s.stato === "finito" && ora - s.modificato < 3 * 3600) || ora - s.modificato < 3600);
+      s.stato === "finito" || ora - s.modificato < 3600);           // i finiti troppo vecchi li toglie gia' il server
     const scelte = sessioni.filter(s => s.stato === "aspetta")
       .concat(sessioni.filter(s => PRESENTI.includes(s.stato) && s.stato !== "aspetta"))
       .concat(sessioni.filter(s => !PRESENTI.includes(s.stato)))
@@ -367,7 +367,8 @@
     const sc = gr.scheda;
     if (sc) {                                         // la scheda della dashboard Commesse PLC
       const n = gr.sessioni.filter(s => ["lavora", "pensa"].includes(s.stato)).length;
-      return (sc.priorita && /^(alt|urg)/i.test(sc.priorita) ? "🔥 " : "") + (STATI_COMMESSA[sc.stato] || sc.stato) + (n ? " · ⚙️ " + n : "") +
+      return (sc.priorita && /^(alt|urg)/i.test(sc.priorita) ? "🔥 " : "") + (STATI_COMMESSA[sc.stato] || sc.stato) +
+        (sc.disaccordo ? " ⚠️" : "") + (n ? " · ⚙️ " + n : "") +
         (sc.versione ? "\n🧩 " + corto(String(sc.versione), 20) : sc.progetto_tia ? "\n🧩 " + corto(sc.progetto_tia, 26) : "") +
         (sc.aspetta ? "\n🔜 " + corto(String(sc.aspetta), 20) : "");
     }
@@ -412,7 +413,8 @@
       st.title = "✋ ti aspettano · ⚙️ lavorano · ⏳ fermi da un po' · 💤 hanno finito";
       if (gr.scheda) {
         const sc = gr.scheda;
-        st.title = [sc.nome + " · " + (STATI_COMMESSA[sc.stato] || sc.stato), sc.progetto_tia,
+        st.title = [sc.nome + " · " + (STATI_COMMESSA[sc.stato] || sc.stato),
+          sc.disaccordo && "⚠️ La scheda dice \"" + (STATI_COMMESSA[sc.stato_scheda] || sc.stato_scheda) + "\", il thread dice altro: vale il thread", sc.progetto_tia,
           sc.fatto && "Fatto: " + sc.fatto, sc.in_corso && "In corso: " + sc.in_corso,
           sc.domande.length && "Domande aperte:\n- " + sc.domande.join("\n- "),
           sc.aspetta && "Aspetta: " + sc.aspetta, sc.testo].filter(Boolean).join("\n\n");
@@ -429,7 +431,7 @@
         const nome = prompt("Nome del responsabile di queste sessioni (es. 24_247 op20).\nLascia vuoto per toglierlo.", s.responsabile || "");
         if (nome === null) return;
         try {
-          await fetch("/api/nome-isola?thread=" + encodeURIComponent(s.thread) + "&nome=" + encodeURIComponent(nome.trim()));
+          await fetch("/api/nome-isola?thread=" + encodeURIComponent(s.thread) + "&nome=" + encodeURIComponent(nome.trim()), { method: "POST" });
         } catch (e) {}
       };
       c.append(b);

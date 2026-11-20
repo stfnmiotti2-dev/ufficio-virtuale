@@ -13,3 +13,6 @@ commesse.json
 progetti-link.json
 connettore-stato.json
 connettore-stato.tmp
+.backup/
+.in-prova
+.versione-scartata

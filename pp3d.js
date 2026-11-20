@@ -140,6 +140,18 @@
   }
   function accessori(v) {
     const lk = v.look;
+    attacca(v, "RightHand", g => {                                       // cornetta: si vede solo quando l'omino telefona
+      v.tel = new T.Group(); g.add(v.tel); v.tel.visible = false;
+      mesh(new T.BoxGeometry(0.05, 0.2, 0.045), "#22252c", 0.0, 0.09, 0.03, v.tel, { roughness: 0.4 });
+      mesh(new T.BoxGeometry(0.06, 0.05, 0.05), "#22252c", 0.0, 0.2, 0.05, v.tel);
+      mesh(new T.BoxGeometry(0.06, 0.05, 0.05), "#22252c", 0.0, -0.01, 0.05, v.tel);
+    });
+    if (lk.ruolo === "postino") attacca(v, "Head", g => {                // il giocatore: cuffione da gamer
+      const arco = mesh(new T.TorusGeometry(0.105, 0.012, 6, 20, Math.PI), "#1e1e24", 0, 0.1, 0, g, { roughness: 0.4 });
+      arco.rotation.y = Math.PI / 2;
+      for (const sx of [-0.1, 0.1]) { const c = mesh(new T.CylinderGeometry(0.05, 0.05, 0.035, 16), "#2f9e44", sx, 0.06, 0.0, g, { roughness: 0.4 });
+        c.rotation.z = Math.PI / 2; }
+    });
     if (lk.occhiali) attacca(v, "Head", g => {
       const q = g;
       const r = new T.TorusGeometry(0.026, 0.0035, 6, 20);
@@ -159,8 +171,7 @@
 
   // ---------- creazione (uno alla volta, per non bloccare la pagina) ----------
   function registra(g, corpo, look, base) {
-    for (const ms of base) ms.layers.set(NASCOSTO);
-    voci.push({ g, corpo, look, fig: null });
+    voci.push({ g, corpo, look, base, fig: null });                // il vecchio omino resta visibile finche' il personaggio non e' pronto
   }
 
   async function crea(v) {
@@ -186,6 +197,9 @@
     Object.assign(v, { av, fig, ossa, S, anca, riposo: av.bones.map(b => [b, b.position.clone(), b.quaternion.clone()]), fase: Math.random() * 10 });
     prepara(v);
     accessori(v);
+    for (const ms of v.base) ms.layers.set(NASCOSTO);                  // pronto: adesso si puo' nascondere l'omino disegnato
+    const tv = v.g.userData.telefono;                                  // anche la cornetta grande del 3D: qui c'e' quella in mano
+    if (tv) tv.traverse(m => m.layers.set(NASCOSTO));
   }
 
   // ---------- pose ----------
@@ -247,7 +261,11 @@
       }
       if (st.dorme) gira(o.Head, lato, 0.35);
     }
-    if (st.alza) { gira(o.RightArm, avanti, -2.3); gira(o.RightForeArm, lato, -0.3); }   // braccio alzato: aspetta Stefano
+    if (st.telefona) {                                                 // cornetta all'orecchio: gomito giu' di lato, mano alla testa
+      const testa = o.Head.getWorldPosition(new T.Vector3()), sp = o.RightArm.getWorldPosition(new T.Vector3());
+      punta(o.RightArm, o.RightForeArm, sp.clone().addScaledVector(su, -0.2).addScaledVector(avanti, 0.2).addScaledVector(lato, -0.06));
+      punta(o.RightForeArm, o.RightHand, testa.addScaledVector(lato, -0.1).addScaledVector(su, 0.08));
+    } else if (st.alza) { gira(o.RightArm, avanti, -2.3); gira(o.RightForeArm, lato, -0.3); }   // braccio alzato: aspetta Stefano
   }
 
   function inScena(o, scena) { while (o) { if (o === scena) return true; o = o.parent; } return false; }
@@ -273,6 +291,9 @@
       };
       st.scrive = seduto && !st.dorme && !st.alza && !!u.s && ["lavora", "supervisore"].includes(u.s.stato);
       st.parla = st.seduto && !u.s;                                  // in riunione: parlano
+      st.telefona = !!(u.telefono && u.telefono.visible);
+      if (st.telefona) st.alza = false;
+      if (v.tel) v.tel.visible = st.telefona;
       posa(v, st, tempo, dt);
     }
   }

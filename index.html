@@ -187,11 +187,10 @@
 (function () {
   try { localStorage.setItem("vista3dplus", "0"); } catch (e) {}       // 3D+ tolto (19/11): chi l'aveva acceso torna al 3D
   var pp = false; try { pp = localStorage.getItem("vista3dpp") === "1"; } catch (e) {}
-  var f = pp ? ["/lib/three170.js"] : ["/lib/three.min.js", "/lib/OrbitControls.js", "/lib/GLTFLoader.js", "/lib/meshopt_decoder.js", "/lib/SkeletonUtils.js", "/lib/BufferGeometryUtils.js"];
+  var f = pp ? ["/lib/three170.js"] : ["/lib/three.min.js", "/lib/OrbitControls.js"];   // 3D: solo il necessario (3D+ tolto)
   for (var i = 0; i < f.length; i++) document.write('<script src="' + f[i] + '"><\/script>');
 })();
 </script>
-<script src="/plus3d.js"></script>
 <script src="/pp3d.js"></script>
 <script src="/ufficio3d.js"></script>
 <script>
@@ -263,8 +262,12 @@ function render() {
       Object.entries(perVer).sort().map(([v, l]) => " · " + v + ": " + l.length).join("");
   }
   tiaEl.classList.toggle("troppi", nTia > 3 || Object.values(perVer).some(l => l.length > 2));
-  document.querySelector("#aspettano h2").textContent = "✋ TI ASPETTANO" + (extra.cloud_aggiornato ?
-    "  ·  ☁️ thread cloud aggiornati alle " + new Date(extra.cloud_aggiornato * 1000).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) : "");
+  const nAz = (extra.azioni_per_te || []).length;
+  document.querySelector("#aspettano h2").textContent = "✋ " + (nAz ? nAz + (nAz > 1 ? " AZIONI" : " AZIONE") + " PER TE" : "TI ASPETTANO") +
+    (extra.cloud_aggiornato ? "  ·  ☁️ thread cloud aggiornati alle " + new Date(extra.cloud_aggiornato * 1000).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) +
+      (extra.dati_vecchi ? " ⏳ dati vecchi: chiedi ad Agente TIA di aggiornare" : "") : "") +
+    (extra.pc === "off" ? "  ·  🌙 PC spento (\\pc off)" : "");
+  document.querySelector("#aspettano h2").title = (extra.problemi_dati || []).length ? "Dati da sistemare:\n" + extra.problemi_dati.join("\n") : "";
   aspettano();
   commesse();
   spia();
@@ -329,11 +332,11 @@ function render() {
 function aspettano() {
   const chi = sessioni.filter(s => s.stato === "aspetta").sort((a, b) => a.modificato - b.modificato);
   const box = document.getElementById("aspettano"), lista = document.getElementById("aspettano-lista");
-  box.hidden = !chi.length;
+  box.hidden = !chi.length && !extra.dati_vecchi && extra.pc !== "off";
   lista.replaceChildren();
   for (const s of chi) {
     const riga = el("div", "attesa-riga");
-    riga.append(el("span", "t", (s.cloud ? "☁️ " : "") + (s.titolo || s.responsabile || "(senza titolo)")),
+    riga.append(el("span", "t", (s.attesa_lunga ? "⏳ " : "") + (s.cloud ? "☁️ " : "") + (s.titolo || s.responsabile || "(senza titolo)")),
                 el("span", "cosa", s.attivita || "ti aspetta"));
     const q = el("span", "da quando", fa(s.modificato));
     q.dataset.ts = s.modificato;
@@ -464,7 +467,7 @@ function collega() {
   const es = new EventSource("/api/stream");
   es.addEventListener("ufficio", ev => { extra = JSON.parse(ev.data); });
   es.addEventListener("sessioni", ev => {
-    sessioni = JSON.parse(ev.data);
+    sessioni = JSON.parse(ev.data).filter(s => s.visibile !== false);   // il server decide chi non si vede piu'
     render();
     disegnaUfficio();
   });

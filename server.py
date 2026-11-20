@@ -39,9 +39,11 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.57 (thread del cloud senza notizie da più di 1 ora: omino arancione con ⏳ dato vecchio?)"
+VERSIONE = "task 9.58 (critica 19/11, opzione A: aggiornamento protetto, una sola verità, etichette 3D ordinate, 3D a riposo)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 VECCHIO_S = 3600        # un thread del cloud "al lavoro" senza notizie da piu' di cosi' diventa "dato vecchio?"
+ATTESA_LUNGA_S = 2 * 3600   # chi aspetta Stefano da piu' di cosi' (o dati cloud piu' vecchi di cosi'): ⏳
+FINITI_ORE = 24         # chi ha finito da piu' di cosi' non si vede piu' (stessa regola per 2D e 3D)
 POLL_S = 1.5            # ogni quanto ricontrollo i file
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
 
@@ -643,7 +645,34 @@ def _extra(sessions):
         resp.append({"nome": scheda["nome"] if scheda else nome, "chiave": nome, "thread": thread, "link": link,
                      "scheda": scheda})
     cloud, comm = _stato_cloud(), _commesse()
-    return {"responsabili": resp, "chan": chan, "commesse": schede,
+    ora = time.time()
+    # Una sola verita' (critica 19/11): lo stato vero e' quello del thread; commesse.json e' l'anagrafica.
+    sess_thread = {str(s.get("thread") or "").lower(): s for s in sessions if s.get("thread") and not s.get("sottoagente")}
+    for r in resp:
+        sc, st = r["scheda"], sess_thread.get(str(r["thread"] or "").lower())
+        if not sc or not st:
+            continue
+        dal_thread = {"aspetta": "aspetta stefano", "finito": "fatto"}.get(st.get("stato"),
+                     "in lavorazione" if st.get("stato") in ("lavora", "pensa", "ferma?") else None)
+        scheda_aspetta = sc["stato"] in ("aspetta stefano", "domande aperte")
+        if dal_thread and (scheda_aspetta != (dal_thread == "aspetta stefano") or (dal_thread == "fatto") != (sc["stato"] == "fatto")):
+            r["scheda"] = dict(sc, stato_scheda=sc["stato"], stato=dal_thread, disaccordo=True,
+                               colore=COLORI_COMMESSA.get(dal_thread, sc["colore"]))
+    for s in sessions:                       # chi aspetta da troppo, e chi ha finito da troppo (non si vede)
+        if s.get("stato") == "aspetta" and ora - (s.get("aspetta_dal") or s.get("modificato") or ora) > ATTESA_LUNGA_S:
+            s["attesa_lunga"] = True
+        if s.get("stato") == "finito" and not s.get("fisso") and ora - (s.get("modificato") or ora) > FINITI_ORE * 3600:
+            s["visibile"] = False
+    azioni = sorted(({"titolo": s.get("titolo"), "link": s.get("link"), "da": s.get("aspetta_dal") or s.get("modificato"),
+                      "cosa": s.get("attivita")} for s in sessions if s.get("stato") == "aspetta" and s.get("visibile", True)),
+                    key=lambda a: a["da"] or 0)
+    ids = {str(s.get("thread") or "").lower() for s in sessions}
+    problemi = [f"commessa {c['nome']} senza thread" for c in schede if not c["thread"]] + \
+               [f"commessa {c['nome']}: thread non trovato" for c in schede if c["thread"] and c["thread"].lower() not in ids
+                and c["stato"] != "fatto"]
+    agg = _iso(cloud.get("aggiornato_utc")) if cloud else None
+    return {"responsabili": resp, "azioni_per_te": azioni, "finiti_ore": FINITI_ORE, "problemi_dati": problemi[:10],
+            "dati_vecchi": bool(agg and ora - agg > ATTESA_LUNGA_S), "chan": chan, "commesse": schede,
             "commesse_aggiornate": _iso(comm.get("aggiornato_utc")) if comm else None,
             "tia": _tia_con_proprietario(sessions) if _tia["ok"] else None,
             "cloud_aggiornato": _iso(cloud.get("aggiornato_utc")) if cloud else None,
@@ -671,8 +700,8 @@ def _watcher(hours):
             limite = time.time() - FERMI_ORE * 3600
             cloud = _sessioni_cloud(locali)
             sessions = [s for s in _con_nomi(locali + cloud) + _progetti_fissi(locali, cloud) if s.get("modificato", 0) >= limite]
+            extra = json.dumps(_extra(sessions), ensure_ascii=False).encode("utf-8")   # prima: aggiunge campi alle sessioni
             data = json.dumps(sessions, ensure_ascii=False).encode("utf-8")
-            extra = json.dumps(_extra(sessions), ensure_ascii=False).encode("utf-8")
             with _cond:
                 if data != _snapshot["json"] or extra != _snapshot.get("extra"):
                     _snapshot.update(versione=_snapshot["versione"] + 1, sessioni=sessions, json=data, extra=extra)
@@ -707,8 +736,60 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _chiamata_lecita(self):
+        """Solo la pagina dell'ufficio (o i programmi del PC) possono usare il server:
+        - Host deve essere localhost/127.0.0.1 (blocca il "DNS rebinding" di un sito esterno);
+        - una richiesta partita da un ALTRO sito (Sec-Fetch-Site: cross-site, o Origin diverso)
+          viene rifiutata (blocca un sito che prova a chiamare localhost:8787 dal browser)."""
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
+        if host not in ("localhost", "127.0.0.1", "::1", ""):
+            return False
+        sito = (self.headers.get("Sec-Fetch-Site") or "").lower()
+        if sito in ("cross-site", "same-site"):
+            return False
+        origin = (self.headers.get("Origin") or "").lower()
+        if origin and origin != "null":
+            o = urlparse(origin)
+            if o.hostname not in ("localhost", "127.0.0.1", "::1"):
+                return False
+        return True
+
+    def do_POST(self):
+        if not self._chiamata_lecita():
+            return self._send(403, b"vietato", "text/plain; charset=utf-8")
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if n:
+                self.rfile.read(min(n, 65536))
+        except (ValueError, OSError):
+            pass
+        return self._azione(self.path.split("?", 1)[0])
+
+    def _azione(self, path):
+        """Le richieste che CAMBIANO qualcosa (scrivono un file, riavviano)."""
+        if path == "/api/nome-isola":       # ?thread=cmsg_...&nome=24_247 op20 (nome vuoto = cancella)
+            q = parse_qs(urlparse(self.path).query)
+            thread, nome = q.get("thread", [""])[0], q.get("nome", [""])[0].strip()[:60]
+            if not _THREAD_ID.match(thread):
+                return self._send(400, b'{"errore": "thread non valido"}', "application/json")
+            nomi = dict(_nomi_isole())
+            if nome:
+                nomi[thread] = nome
+            else:
+                nomi.pop(thread, None)
+            NOMI_FILE.write_text(json.dumps(nomi, ensure_ascii=False, indent=1), encoding="utf-8")
+            return self._send(200, b'{"ok": true}', "application/json")
+        if path == "/api/riavvia":          # usato da avvio.pyw dopo un aggiornamento
+            self._send(200, b'{"ok": true}', "application/json")
+            if _SERVER:
+                threading.Thread(target=_riavvia, args=(_SERVER,), daemon=True).start()
+            return
+        self._send(404, b"non trovato", "text/plain; charset=utf-8")
+
     def do_GET(self):
         path = self.path.split("?", 1)[0]
+        if not self._chiamata_lecita():
+            return self._send(403, b"vietato", "text/plain; charset=utf-8")
         if path in STATIC:
             name, ctype = STATIC[path]
             return self._send(200, (HERE / name).read_bytes(), ctype)
@@ -731,23 +812,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, body, "application/json; charset=utf-8")
         if path == "/api/chat":
             return self._chat()
-        if path == "/api/nome-isola":       # ?thread=cmsg_...&nome=24_247 op20 (nome vuoto = cancella)
-            q = parse_qs(urlparse(self.path).query)
-            thread, nome = q.get("thread", [""])[0], q.get("nome", [""])[0].strip()[:60]
-            if not _THREAD_ID.match(thread):
-                return self._send(400, b'{"errore": "thread non valido"}', "application/json")
-            nomi = dict(_nomi_isole())
-            if nome:
-                nomi[thread] = nome
-            else:
-                nomi.pop(thread, None)
-            NOMI_FILE.write_text(json.dumps(nomi, ensure_ascii=False, indent=1), encoding="utf-8")
-            return self._send(200, b'{"ok": true}', "application/json")
-        if path == "/api/riavvia":          # usato da avvio.pyw dopo un aggiornamento
-            self._send(200, b'{"ok": true}', "application/json")
-            if _SERVER:
-                threading.Thread(target=_riavvia, args=(_SERVER,), daemon=True).start()
-            return
+        if path in ("/api/nome-isola", "/api/riavvia"):
+            # compatibilita': le versioni vecchie di avvio.pyw chiamano /api/riavvia con GET.
+            # Una richiesta GET dal browser arriva solo dalla pagina stessa (controllo sopra).
+            return self._azione(path)
         self._send(404, b"non trovato", "text/plain; charset=utf-8")
 
     def _chat(self):
@@ -794,7 +862,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def _riavvia(server):
-    """Dopo un aggiornamento: libero la porta e riparto con il codice nuovo."""
+    """Dopo un aggiornamento: libero la porta e riparto con il codice nuovo.
+    Prima lancio la verifica (con il codice vecchio): se il nuovo non parte, torna indietro."""
+    aggiorna.lancia_verifica(PORTA_ATTIVA)
     print("Versione nuova installata: riavvio il server.", flush=True)
     time.sleep(0.3)                  # lascio partire la risposta HTTP in corso
     server.server_close()
@@ -802,6 +872,23 @@ def _riavvia(server):
     subprocess.Popen([sys.executable] + sys.argv, cwd=HERE, creationflags=flags,
                      stdout=sys.stdout if _ha_console() else None)
     os._exit(0)
+
+
+PORTA_ATTIVA = 8787
+
+
+def _conferma_avvio(porta):
+    """Il server nuovo risponde davvero: confermo la versione (toglie .in-prova)."""
+    time.sleep(5)
+    try:
+        import urllib.request
+        with urllib.request.urlopen(f"http://127.0.0.1:{porta}/api/versione", timeout=10) as r:
+            json.loads(r.read())
+        with urllib.request.urlopen(f"http://127.0.0.1:{porta}/api/sessions", timeout=30) as r:
+            json.loads(r.read())
+        aggiorna.conferma()
+    except Exception as exc:
+        print("avvio non confermato:", exc, file=sys.stderr)
 
 
 def _ha_console():
@@ -850,8 +937,10 @@ def main():
             print("Chiudi le altre finestre del server (o termina python.exe dal Task Manager) e riprova.")
             input("Premi Invio per chiudere questa finestra...")
         return
-    global _SERVER
+    global _SERVER, PORTA_ATTIVA
     _SERVER = server
+    PORTA_ATTIVA = args.porta
+    threading.Thread(target=_conferma_avvio, args=(args.porta,), daemon=True).start()
     threading.Thread(target=_watcher, args=(args.ore,), daemon=True).start()
     threading.Thread(target=_tia_processi, daemon=True).start()
     if not args.senza_aggiornamenti:

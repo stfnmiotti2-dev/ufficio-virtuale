@@ -23,6 +23,14 @@ PORTA = 8787
 URL = f"http://localhost:{PORTA}"
 
 
+def _scrivi_log(msg):
+    try:
+        with open(HERE / "aggiorna.log", "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + msg + "\n")
+    except OSError:
+        pass
+
+
 def server_acceso():
     try:
         with socket.create_connection(("127.0.0.1", PORTA), timeout=1):
@@ -42,18 +50,18 @@ def main():
     try:
         import aggiorna
         changed = aggiorna.update()
-    except Exception:
-        pass
+    except Exception as exc:
+        _scrivi_log(f"aggiornamento: errore {exc}")
     try:                                  # connettore Ufficio per le chat dei progetti (Claude Desktop)
         import registra_connettore
         registra_connettore.registra()
-    except Exception:
-        pass
+    except Exception as exc:
+        _scrivi_log(f"connettore: errore {exc}")
     if changed and server_acceso():
         # il server acceso ha il codice vecchio: gli chiedo di ripartire
         try:
             import urllib.request
-            urllib.request.urlopen(URL + "/api/riavvia", timeout=3).read()
+            urllib.request.urlopen(urllib.request.Request(URL + "/api/riavvia", data=b"", method="POST"), timeout=3).read()
         except Exception:
             pass
         for _ in range(20):
@@ -65,6 +73,11 @@ def main():
                 break
             time.sleep(0.25)
     if not server_acceso():
+        if changed:
+            try:
+                aggiorna.lancia_verifica(PORTA)
+            except Exception:
+                pass
         flags = 0
         if sys.platform == "win32":
             flags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
