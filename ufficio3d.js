@@ -2110,10 +2110,14 @@
     mouse.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
     ray.setFromCamera(mouse, camera);
     const colpi = ray.intersectObjects(mondo.children, true);
-    for (const c of colpi) {
-      let o = c.object;
-      while (o) { const k = cliccabili.find(q => q.obj === o); if (k) return k.s || k.gr ? miniScheda(k, e.clientX - r.left, e.clientY - r.top) : k.apri(); o = o.parent; }
-    }
+    const trova = soloPersone => {                                        // prima le persone (anche dietro un vetro), poi il resto
+      for (const c of colpi) for (let o = c.object; o; o = o.parent) {
+        const k = cliccabili.find(q => q.obj === o);
+        if (k && (!soloPersone || (o.userData && o.userData.corpo))) return k;
+      }
+    };
+    const k = trova(true) || trova(false);
+    if (k) return k.s || k.gr ? miniScheda(k, e.clientX - r.left, e.clientY - r.top) : k.apri();
     miniScheda(null);
   });
   // clic su una persona o una scrivania: mini-scheda con lo stato e il pulsante per aprire il thread
