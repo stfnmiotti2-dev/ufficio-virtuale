@@ -39,12 +39,15 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.61 (bordo dietro lo schermo col colore della situazione: verde finito come scrivania e sedia, blu lavora, viola pensa, arancio fermo, rosso aspetta)"
+VERSIONE = "task 9.62 (ispettrice: gira per l'ufficio e chiede davvero un resoconto al thread di un omino tramite il connettore)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 VECCHIO_S = 3600        # un thread del cloud "al lavoro" senza notizie da piu' di cosi' diventa "dato vecchio?"
 ATTESA_LUNGA_S = 2 * 3600   # chi aspetta Stefano da piu' di cosi' (o dati cloud piu' vecchi di cosi'): ⏳
 FINITI_ORE = 24         # chi ha finito da piu' di cosi' non si vede piu' (stessa regola per 2D e 3D)
 POLL_S = 1.5            # ogni quanto ricontrollo i file
+ISPETTRICE_MIN = 20     # l'ispettrice chiede un resoconto a un omino ogni tanti minuti (solo a ufficio aperto)
+ISPETTRICE_MAX = 3      # richieste ancora senza risposta oltre le quali non ne fa altre
+ISPETTRICE_ORE = 8      # dopo tante ore una richiesta senza risposta si lascia perdere
 AGGIORNA_MIN = 15       # ogni quanto controllo se su GitHub c'e' una versione nuova
 
 _cache = {}             # file -> ((mtime, size), info)
@@ -679,6 +682,70 @@ def _extra(sessions):
             "pc": (cloud.get("pc") or "on") if cloud else "on"}           # "\\pc off" / "\\pc on" scritti da Agente TIA
 
 
+# ---------- l'ispettrice: chiede davvero un resoconto al thread di un omino ----------
+# Scrive solo ispettrice.json (personale). La richiesta arriva al thread la prossima volta che usa
+# il connettore (ufficio_aggiorna / ufficio_guarda); la risposta torna in connettore-stato.json.
+ISP_FILE = HERE / "ispettrice.json"
+_isp = {"dati": None}
+
+
+def _isp_leggi():
+    if _isp["dati"] is None:
+        try:
+            d = json.loads(ISP_FILE.read_text(encoding="utf-8"))
+            _isp["dati"] = d if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            _isp["dati"] = {}
+        _isp["dati"].setdefault("richieste", [])
+    return _isp["dati"]
+
+
+def _isp_scrivi(d):
+    try:
+        tmp = ISP_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, ISP_FILE)
+    except OSError:
+        pass
+
+
+def _ispettrice(sessions, ora=None):
+    """Ogni ISPETTRICE_MIN minuti sceglie a caso un omino con un thread e gli chiede il resoconto."""
+    import random
+    ora = ora or time.time()
+    d, cambiato = _isp_leggi(), False
+    risposte = {str(t.get("id") or "").lower(): t for t in _stato_connettore().get("thread") or []
+                if isinstance(t, dict) and t.get("resoconto")}
+    for r in d["richieste"]:                                    # chi ha risposto?
+        v = risposte.get(r["thread"].lower())
+        q = _iso(v.get("resoconto_utc")) if v else None
+        if q and q >= r["chiesta"] - 5 and not r.get("risposta"):
+            r.update(risposta=str(v["resoconto"])[:600], risposto=q); cambiato = True
+    tieni = [r for r in d["richieste"] if ora - r["chiesta"] < (24 * 3600 if r.get("risposta") else ISPETTRICE_ORE * 3600)]
+    cambiato |= len(tieni) != len(d["richieste"])
+    d["richieste"] = tieni
+    aperte = [r for r in tieni if not r.get("risposta")]
+    if ora - (d.get("ultima") or 0) >= ISPETTRICE_MIN * 60 and len(aperte) < ISPETTRICE_MAX:
+        gia = {r["thread"].lower() for r in tieni}
+        scelti = [s for s in sessions if s.get("thread") and not s.get("sottoagente") and not s.get("fisso")
+                  and s.get("visibile", True) and s.get("stato") in ("lavora", "aspetta", "pensa", "ferma?")
+                  and str(s["thread"]).lower() not in gia]
+        if scelti:
+            pesi = [3 if s.get("stato") == "ferma?" or s.get("vecchio") else 1 for s in scelti]   # i dati vecchi prima
+            s = random.choices(scelti, pesi)[0]
+            d["richieste"].append({"thread": str(s["thread"]), "sessione": s.get("id"), "titolo": s.get("titolo"),
+                                   "progetto": s.get("progetto_claude") or "", "chiesta": ora,
+                                   "mostrato": {"stato": s.get("stato"), "attivita": s.get("attivita"),
+                                                "prossimo": s.get("prossimo")}})
+        d["ultima"] = ora; cambiato = True
+    if cambiato:
+        _isp_scrivi(d)
+    ultima = max(d["richieste"], key=lambda r: r["chiesta"], default=None)
+    return {"visita": {k: ultima.get(k) for k in ("sessione", "titolo", "chiesta", "risposto")} if ultima else None,
+            "per_sessione": {r["sessione"]: {"chiesta": r["chiesta"], "risposta": r.get("risposta"), "risposto": r.get("risposto")}
+                             for r in d["richieste"] if r.get("sessione")}}
+
+
 def _diagnosi(sessions, extra=None):
     """Quello che vede la pagina (sessioni + dati dell'ufficio), per rifare la stessa schermata
     da fuori senza screenshot. Niente percorsi dei file e niente dettagli dei comandi."""
@@ -700,7 +767,9 @@ def _watcher(hours):
             limite = time.time() - FERMI_ORE * 3600
             cloud = _sessioni_cloud(locali)
             sessions = [s for s in _con_nomi(locali + cloud) + _progetti_fissi(locali, cloud) if s.get("modificato", 0) >= limite]
-            extra = json.dumps(_extra(sessions), ensure_ascii=False).encode("utf-8")   # prima: aggiunge campi alle sessioni
+            ex = _extra(sessions)
+            ex["ispettrice"] = _ispettrice(sessions)
+            extra = json.dumps(ex, ensure_ascii=False).encode("utf-8")   # prima: aggiunge campi alle sessioni
             data = json.dumps(sessions, ensure_ascii=False).encode("utf-8")
             with _cond:
                 if data != _snapshot["json"] or extra != _snapshot.get("extra"):

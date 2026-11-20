@@ -20,7 +20,8 @@ HERE = Path(__file__).resolve().parent
 STATO = HERE / "connettore-stato.json"          # scritto qui, letto da server.py
 DIAGNOSI = HERE / "diagnosi-sessioni.json"      # scritto da server.py: quello che mostra la pagina
 CLOUD_TIA = HERE / "stato-thread.json"          # il file storico di Agente TIA (resta valido)
-VERSIONE = "1.0"
+ISPETTRICE = HERE / "ispettrice.json"           # scritto da server.py: le richieste di resoconto dell'ispettrice
+VERSIONE = "1.1"
 TENGO_GIORNI = 7                                # le voci piu' vecchie si cancellano
 
 STATI = ["lavora", "aspetta", "finito", "chiuso"]
@@ -47,6 +48,8 @@ STRUMENTI = [
                 "versione": {"type": "string", "description": "Versione del progetto su cui lavori, es. 'OP60 V12'."},
                 "errori_compilazione": {"type": "integer", "description": "Solo se la compilazione e' KO: numero di errori (0 = tutto ok)."},
                 "link": {"type": "string", "description": "Link https://claude.ai/... del thread, se lo conosci."},
+                "resoconto": {"type": "string", "description": "Risposta all'ispettrice dell'ufficio, quando te la chiede: "
+                              "3-5 righe su cosa hai fatto, a che punto sei, cosa manca e cosa aspetti da Stefano."},
                 "sottoagenti": {"type": "array", "description": "Sottoagenti lanciati da questa chat.",
                                 "items": {"type": "object", "properties": {"nome": {"type": "string"}, "stato": {"type": "string", "enum": ["lavora", "aspetta", "finito"]}}}},
             },
@@ -60,7 +63,8 @@ STRUMENTI = [
             "Usalo quando Stefano ti chiede di guardare l'ufficio, o per sapere cosa fanno gli altri progetti."),
         "inputSchema": {
             "type": "object",
-            "properties": {"progetto": {"type": "string", "description": "Facoltativo: solo questo progetto (basta una parte del nome)."}},
+            "properties": {"progetto": {"type": "string", "description": "Facoltativo: solo questo progetto (basta una parte del nome)."},
+                           "thread": {"type": "string", "description": "Facoltativo: il tuo thread (cmsg_...), per sapere se l'ispettrice ti ha chiesto un resoconto."}},
         },
     },
 ]
@@ -127,6 +131,9 @@ def aggiorna(arg):
             voce["compilazione"] = {"errori": max(0, int(arg["errori_compilazione"]))}
         except (TypeError, ValueError):
             pass
+    if arg.get("resoconto"):
+        voce["resoconto"] = _testo(arg["resoconto"], 600)
+        voce["resoconto_utc"] = _ora_utc()
     if isinstance(arg.get("sottoagenti"), list):
         voce["sottoagenti"] = [{"nome": _testo(s.get("nome"), 40) or f"Sottoagente {i + 1}",
                                 "stato": str(s.get("stato") or "lavora")}
@@ -144,7 +151,39 @@ def aggiorna(arg):
     return (f"Fatto: in ufficio '{voce.get('titolo') or thread}' ({progetto}) ora e' '{voce['stato']}'"
             + (f" - {voce.get('attesa') if voce['stato'] == 'aspetta' and voce.get('attesa') else voce.get('attivita')}"
                if voce.get("attivita") or voce.get("attesa") else "") + "."
-            + ("" if acceso else " (L'ufficio adesso e' chiuso: lo vedra' quando Stefano lo apre.)") + nota)
+            + (" Resoconto consegnato all'ispettrice, grazie." if arg.get("resoconto") else "")
+            + ("" if acceso else " (L'ufficio adesso e' chiuso: lo vedra' quando Stefano lo apre.)") + nota
+            + _richieste_ispettrice(progetto, thread))
+
+
+def _richieste_ispettrice(progetto, thread):
+    """Le richieste di resoconto ancora senza risposta per chi chiama (o per il suo progetto)."""
+    r = [q for q in _leggi(ISPETTRICE).get("richieste") or [] if isinstance(q, dict) and not q.get("risposta")]
+    if not r:
+        return ""
+    stato = {str(t.get("id") or "").lower(): t for t in _leggi(STATO).get("thread") or [] if isinstance(t, dict)}
+    def gia(q):                                        # risposta scritta ma l'ufficio non l'ha ancora vista
+        t = stato.get(str(q.get("thread")).lower())
+        return bool(t and (_ts(t.get("resoconto_utc")) or 0) >= (q.get("chiesta") or 0) - 5)
+    r = [q for q in r if not gia(q)]
+    mia = next((q for q in r if thread and str(q.get("thread")).lower() == thread.lower()), None)
+    out = ""
+    if mia:
+        m = mia.get("mostrato") or {}
+        out += ("\n\n📋 RICHIESTA DELL'ISPETTRICE (ufficio virtuale di Stefano): fai un resoconto di questo thread. "
+                f"L'ufficio adesso ti mostra cosi': stato '{m.get('stato') or '?'}'"
+                + (f", attivita' '{m['attivita']}'" if m.get("attivita") else "")
+                + (f", prossimo passo '{m['prossimo']}'" if m.get("prossimo") else "")
+                + ". Richiama ufficio_aggiorna con lo stesso 'thread' e il campo 'resoconto' (3-5 righe: fatto, a che punto, "
+                  "cosa manca, cosa aspetti da Stefano). Se quello che mostra l'ufficio non e' vero, nella stessa chiamata "
+                  "correggi anche stato, attivita e prossimo. Non serve scrivere a Stefano per questo.")
+    altri = [q for q in r if q is not mia and progetto and (str(q.get("progetto") or "").lower() == progetto.lower()
+             or ("tia" in progetto.lower() and "tia" in str(q.get("progetto") or "").lower()))]
+    if altri:
+        out += ("\n\n📋 L'ispettrice aspetta un resoconto anche da questi thread del tuo progetto: "
+                + "; ".join(f"{q.get('titolo') or q['thread']} ({q['thread']})" for q in altri[:5])
+                + ". Se li gestisci tu e sai a che punto sono, rispondi per loro con ufficio_aggiorna (stesso 'thread', campo 'resoconto').")
+    return out
 
 
 def _ts(s):
@@ -209,7 +248,7 @@ def guarda(arg):
                          + (f" (da {_da_quanto(p['quando'])})" if p["quando"] else ""))
     if len(righe) == 1:
         righe.append("Nessuno al lavoro" + (f" per '{filtro}'." if filtro else "."))
-    return "\n".join(righe)
+    return "\n".join(righe) + _richieste_ispettrice(arg.get("progetto") or "", arg.get("thread") or "")
 
 
 def _risposta(id_, result=None, errore=None):
@@ -230,7 +269,8 @@ def gestisci(msg):
         ver = (msg.get("params") or {}).get("protocolVersion") or "2025-06-18"
         _risposta(id_, {"protocolVersion": ver, "capabilities": {"tools": {}},
                         "serverInfo": {"name": "ufficio", "version": VERSIONE},
-                        "instructions": "Ufficio virtuale di Stefano: aggiorna il tuo omino con ufficio_aggiorna a ogni cambio di stato."})
+                        "instructions": "Ufficio virtuale di Stefano: aggiorna il tuo omino con ufficio_aggiorna a ogni cambio di stato. "
+                                        "Se la risposta contiene una richiesta dell'ispettrice, rispondi col campo 'resoconto'."})
     elif metodo == "ping":
         _risposta(id_, {})
     elif metodo == "tools/list":
