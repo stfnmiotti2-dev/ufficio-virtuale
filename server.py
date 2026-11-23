@@ -40,7 +40,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.65 (interruttore 📋 dei resoconti dell ispettrice: spento = zero token; ispettrice sui tacchi a spillo con camminata da passerella; modalita GDR)"
+VERSIONE = "task 9.66 (pulsante AGGIORNA nascosto se non configurato; interruttore 📋 dei resoconti dell ispettrice: spento = zero token; ispettrice sui tacchi a spillo con camminata da passerella; modalita GDR)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 VECCHIO_S = 3600        # un thread del cloud "al lavoro" senza notizie da piu' di cosi' diventa "dato vecchio?"
 ATTESA_LUNGA_S = 2 * 3600   # chi aspetta Stefano da piu' di cosi' (o dati cloud piu' vecchi di cosi'): ⏳
@@ -800,6 +800,7 @@ def _watcher(hours):
             # 23/11 Stefano: l'ispettrice gira sempre (grafica), ma chiede i resoconti ai thread (token) solo se l'interruttore e' acceso
             ex["ispettrice"] = _ispettrice(sessions) if isp_resoconti() else {"visita": None, "per_sessione": {}}
             ex["ispettrice"]["resoconti"] = isp_resoconti()
+            ex["aggiorna_pronto"] = TOKEN_FILE.exists()   # 23/11 Stefano: il pulsante 🔄 (spende token) si vede solo se configurato
             extra = json.dumps(ex, ensure_ascii=False).encode("utf-8")   # prima: aggiunge campi alle sessioni
             data = json.dumps(sessions, ensure_ascii=False).encode("utf-8")
             with _cond:
