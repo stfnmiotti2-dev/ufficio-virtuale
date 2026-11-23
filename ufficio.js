@@ -34,6 +34,45 @@
   strato.className = "strato";
   wrap.append(canvas, strato);
   const g = canvas.getContext("2d");
+  // 23/11 Stefano: clic sull'omino = scheda con le informazioni; clic sulla scrivania = apre il thread
+  const scheda = document.createElement("div");
+  scheda.className = "scheda3d"; scheda.hidden = true; wrap.append(scheda);
+  const NOMI_ST = { aspetta: "✋ Ti aspetta", lavora: "⚙️ Lavora", pensa: "💭 Pensa", "ferma?": "⏳ Fermo da un po'", finito: "🛋️ Ha finito", supervisore: "📋 Supervisiona" };
+  function mostraScheda(s, titolo, apri, ev) {
+    const da = s.aspetta_dal || s.modificato, min = da ? Math.max(1, Math.round((Date.now() / 1000 - da) / 60)) : null;
+    const quanto = min == null ? "" : min < 60 ? min + " min" : Math.floor(min / 60) + " h " + (min % 60) + " min";
+    const riga = (cls, t) => { if (!t) return; const d = document.createElement("div"); d.className = cls; d.textContent = t; scheda.append(d); };
+    scheda.replaceChildren();
+    riga("t", (s.cloud ? "☁️ " : "") + (titolo || s.titolo || "Postazione"));
+    riga("st st-" + String(s.stato || "").replace("?", ""), (NOMI_ST[s.stato] || s.stato || "") + (quanto ? " · da " + quanto : ""));
+    riga("a", s.attivita);
+    riga("p", s.prossimo && "➡️ " + s.prossimo);
+    riga("p", s.versione && "🧩 " + s.versione);
+    if (apri) {
+      const b = document.createElement("button");
+      b.textContent = s.stato === "aspetta" ? "Rispondi nel thread ↗" : "Apri il thread ↗";
+      b.onclick = e => { e.stopPropagation(); scheda.hidden = true; apri(); };
+      scheda.append(b);
+    }
+    riga("p", "Clic sulla scrivania: apre subito il thread");
+    scheda.hidden = false;
+    const r = wrap.getBoundingClientRect();
+    const x = ev.clientX - r.left, y = ev.clientY - r.top;
+    scheda.style.left = Math.max(4, Math.min(x + 12, wrap.clientWidth - 284)) + "px";
+    scheda.style.top = Math.max(4, Math.min(y + 12, wrap.clientHeight - scheda.offsetHeight - 8)) + "px";
+  }
+  document.addEventListener("click", e => { if (!scheda.hidden && !scheda.contains(e.target) && !e.target.closest(".persona")) scheda.hidden = true; });
+  window.addEventListener("keydown", e => { if (e.key === "Escape") scheda.hidden = true; });
+  function zonaPersona(padre, s, titolo, apri, scala) {      // la persona dentro il posto (x 22-42, y 2-29 del posto)
+    const p = document.createElement("div");
+    p.className = "persona";
+    Object.assign(p.style, { position: "absolute", left: 22 * scala + "px", top: 2 * scala + "px",
+                             width: 20 * scala + "px", height: 27 * scala + "px", cursor: "help" });
+    p.title = "Clic: informazioni";
+    p.onclick = e => { e.stopPropagation(); mostraScheda(s, titolo, apri, e); };
+    padre.append(p);
+    return p;
+  }
   const sfondo = document.createElement("canvas");     // stanza ferma, disegnata una volta sola
   const FPS = 8;                                       // pochi fotogrammi: stile pixel art e CPU quasi a zero
   let ultime = [];
@@ -526,6 +565,10 @@
                                    width: UFF_W * scala + "px", height: UFF_H * scala + "px" });
       porta.title = link ? "Apri la chat di " + (u.gr.chiave === "r:capo" ? "Capo" : (s0.responsabile || "questo responsabile")) + " su claude.ai" : "";
       if (link) porta.onclick = () => apriLink(link);
+      if (PRESENTI.includes(u.s.stato) || u.s.stato === "supervisore") {
+        const pz = zonaPersona(porta, Object.assign({}, s0, u.s), nomeIsola(u.gr), link ? () => apriLink(link) : null, scala);
+        pz.style.left = (4 + 22) * scala + "px"; pz.style.top = (6 + 2) * scala + "px";
+      }
       strato.append(porta);
     }
     for (const a of aree) cartello(a.gr, a.x, a.y + 3, a.w, scala, false);
@@ -542,17 +585,20 @@
         zona = document.createElement("div");
         zona.append(document.createElement("div"), document.createElement("div"));
         zona.lastChild.className = "targa";
-        zona.onclick = () => s.link ? apriLink(s.link) : s.fisso ? null
-          : window.open("/chat?id=" + encodeURIComponent(s.id), "chat-" + s.id);
+        zona.onclick = () => { scheda.hidden = true; const q = zona._s || s; q.link ? apriLink(q.link) : q.fisso ? null
+          : window.open("/chat?id=" + encodeURIComponent(q.id), "chat-" + q.id); };
         zone.set(s.id, zona);
         strato.append(zona);
       }
       const presente = PRESENTI.includes(s.stato);
+      zona._s = s;                                        // dati sempre freschi per i clic
+      const vecchia = zona.querySelector(".persona"); if (vecchia) vecchia.remove();
+      if (presente) zona.insertBefore(zonaPersona(document.createDocumentFragment(), s, s.titolo, () => zona.onclick(), scala), zona.lastChild);
       zona.className = "posto " + (presente ? "presente" : "assente");
       Object.assign(zona.style, { left: x * scala + "px", top: y * scala + "px",
                                   width: SLOT_W * scala + "px", height: SLOT_H * scala + "px" });
       zona.title = (s.cloud ? "☁️ Thread nel cloud: " : "") + (s.titolo || "(senza titolo)") +
-        (s.sottotitolo ? "\n" + s.sottotitolo : "") + (s.cloud ? (s.link ? "\nClic: apri su claude.ai" : "") : "\nClic: apri la chat");
+        (s.sottotitolo ? "\n" + s.sottotitolo : "") + (s.cloud ? (s.link ? "\nClic sulla scrivania: apri su claude.ai · clic sull'omino: informazioni" : "") : "\nClic: apri la chat");
       const f = zona.firstChild;
       const [ic, testo] = presente ? testoFumetto(s) : ["", ""];
       const nuovo = presente ? ic + " " + corto(testo, s.stato === "aspetta" ? 52 : 34) : "";

@@ -39,7 +39,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.63 (3D++: barbe vere, mantello del capo, controllore, operai, meccanico, anziano, segretaria e ispettrice con le loro caratteristiche)"
+VERSIONE = "task 9.64 (pulsante AGGIORNA, niente ispettrice, clic omino = scheda, clic scrivania = thread)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 VECCHIO_S = 3600        # un thread del cloud "al lavoro" senza notizie da piu' di cosi' diventa "dato vecchio?"
 ATTESA_LUNGA_S = 2 * 3600   # chi aspetta Stefano da piu' di cosi' (o dati cloud piu' vecchi di cosi'): ⏳
@@ -768,7 +768,7 @@ def _watcher(hours):
             cloud = _sessioni_cloud(locali)
             sessions = [s for s in _con_nomi(locali + cloud) + _progetti_fissi(locali, cloud) if s.get("modificato", 0) >= limite]
             ex = _extra(sessions)
-            ex["ispettrice"] = _ispettrice(sessions)
+            ex["ispettrice"] = {"visita": None, "per_sessione": {}}   # 23/11 Stefano: ispettrice spenta (costava token)
             extra = json.dumps(ex, ensure_ascii=False).encode("utf-8")   # prima: aggiunge campi alle sessioni
             data = json.dumps(sessions, ensure_ascii=False).encode("utf-8")
             with _cond:
@@ -779,6 +779,45 @@ def _watcher(hours):
         except Exception as exc:  # non deve mai fermarsi
             print("errore durante la scansione:", exc, file=sys.stderr)
         time.sleep(POLL_S)
+
+
+# ---------- pulsante AGGIORNA ----------
+# aggiorna-token.json (personale, resta sul PC): {"url": "https://api.anthropic.com/v1/claude_code/routines/trig_.../fire",
+# "token": "sk-ant-oat01-..."}. Il POST avvia l'attivita' "Ufficio: pulsante AGGIORNA": apre un thread
+# "Capo › Giro AGGIORNA ufficio" che rilegge lo stato di tutti i thread, riscrive stato-thread.json e si chiude da solo.
+TOKEN_FILE = HERE / "aggiorna-token.json"
+_agg = {"ultima": 0}
+
+
+def _chiedi_aggiornamento():
+    import urllib.request
+    import urllib.error
+    if time.time() - _agg["ultima"] < 60:
+        return {"ok": True, "nota": "Aggiornamento gia' chiesto meno di un minuto fa: arriva tra poco."}
+    try:
+        cfg = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
+        url, token = str(cfg["url"]).strip(), str(cfg["token"]).strip()
+    except (OSError, ValueError, KeyError, TypeError):
+        return {"ok": False, "errore": "Manca aggiorna-token.json nella cartella dell'ufficio (vedi LEGGIMI-AGGIORNA.md)."}
+    if not url.startswith("https://api.anthropic.com/") or not url.endswith("/fire"):
+        return {"ok": False, "errore": "L'indirizzo in aggiorna-token.json non e' quello giusto (deve finire con /fire)."}
+    req = urllib.request.Request(url, data=json.dumps({"text": "pulsante AGGIORNA dall'ufficio sul PC"}).encode("utf-8"),
+                                 method="POST", headers={
+                                     "Authorization": "Bearer " + token,
+                                     "anthropic-version": "2023-06-01",
+                                     "anthropic-beta": "experimental-cc-routine-2026-04-01",
+                                     "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            r.read()
+    except urllib.error.HTTPError as e:
+        motivo = {401: "codice non valido o rigenerato", 403: "accesso negato", 404: "attivita' non trovata",
+                  429: "troppe richieste, riprova tra poco"}.get(e.code, "errore " + str(e.code))
+        return {"ok": False, "errore": "Aggiornamento non partito: " + motivo + "."}
+    except (urllib.error.URLError, OSError) as e:
+        return {"ok": False, "errore": "Aggiornamento non partito: internet non raggiungibile (" + str(e)[:80] + ")."}
+    _agg["ultima"] = time.time()
+    return {"ok": True, "nota": "Aggiornamento chiesto: arriva in 1-2 minuti."}
 
 
 class Server(ThreadingHTTPServer):
@@ -848,6 +887,10 @@ class Handler(BaseHTTPRequestHandler):
                 nomi.pop(thread, None)
             NOMI_FILE.write_text(json.dumps(nomi, ensure_ascii=False, indent=1), encoding="utf-8")
             return self._send(200, b'{"ok": true}', "application/json")
+        if path == "/api/aggiorna":         # pulsante AGGIORNA: sveglia il thread che rilegge lo stato dei thread
+            esito = _chiedi_aggiornamento()
+            return self._send(200 if esito.get("ok") else 502, json.dumps(esito, ensure_ascii=False).encode("utf-8"),
+                              "application/json; charset=utf-8")
         if path == "/api/riavvia":          # usato da avvio.pyw dopo un aggiornamento
             self._send(200, b'{"ok": true}', "application/json")
             if _SERVER:

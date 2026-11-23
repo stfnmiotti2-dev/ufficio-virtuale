@@ -30,9 +30,10 @@ STRUMENTI = [
     {
         "name": "ufficio_aggiorna",
         "description": (
-            "Dice all'ufficio virtuale di Stefano cosa sta facendo questa chat: il suo omino cambia subito. "
-            "Chiamalo quando inizi un lavoro, quando ti fermi per aspettare Stefano (stato 'aspetta' + cosa "
-            "aspetti in 'attesa'), quando riprendi e quando finisci. Basta il campo che cambia: gli altri restano. "
+            "Dice all'ufficio virtuale di Stefano che questa chat si e' fermata: il suo omino cambia subito. "
+            "Per non sprecare token chiamalo SOLO in due momenti, alla fine del turno: quando hai finito "
+            "(stato 'finito') e quando ti fermi ad aspettare Stefano (stato 'aspetta' + cosa aspetti in 'attesa'). "
+            "Non chiamarlo per 'lavora', per i sottoagenti o per altri cambi: quelli li legge il pulsante AGGIORNA. "
             "Usa sempre lo stesso 'thread' (l'id cmsg_... del thread, o il titolo se non lo conosci)."),
         "inputSchema": {
             "type": "object",
@@ -142,9 +143,7 @@ def aggiorna(arg):
     dati.update(aggiornato_utc=_ora_utc(), thread=voci)
     _scrivi(dati)
     acceso = _diagnosi_fresca() is not None
-    # chi chiama vede anche i thread del suo progetto fermi da piu' di un'ora: se puo', li aggiorna lui
-    vecchi = [v for v in voci if v is not voce and str(v.get("progetto", "")).lower() == progetto.lower()
-              and v.get("stato") == "lavora" and time.time() - (_ts(v.get("ultima_attivita_utc")) or 0) > 3600]
+    vecchi = []     # 23/11 Stefano: niente richieste agli altri thread (costavano token)
     nota = ("\nAttenzione: in ufficio questi thread del tuo progetto risultano 'al lavoro' ma senza notizie da piu' di un'ora "
             "(dato vecchio?): " + "; ".join(f"{v.get('titolo') or v['id']} ({v['id']})" for v in vecchi[:10])
             + ". Se sai com'e' andata, aggiornali con ufficio_aggiorna.") if vecchi else ""
@@ -152,8 +151,7 @@ def aggiorna(arg):
             + (f" - {voce.get('attesa') if voce['stato'] == 'aspetta' and voce.get('attesa') else voce.get('attivita')}"
                if voce.get("attivita") or voce.get("attesa") else "") + "."
             + (" Resoconto consegnato all'ispettrice, grazie." if arg.get("resoconto") else "")
-            + ("" if acceso else " (L'ufficio adesso e' chiuso: lo vedra' quando Stefano lo apre.)") + nota
-            + _richieste_ispettrice(progetto, thread))
+            + ("" if acceso else " (L'ufficio adesso e' chiuso: lo vedra' quando Stefano lo apre.)") + nota)
 
 
 def _richieste_ispettrice(progetto, thread):
@@ -248,7 +246,7 @@ def guarda(arg):
                          + (f" (da {_da_quanto(p['quando'])})" if p["quando"] else ""))
     if len(righe) == 1:
         righe.append("Nessuno al lavoro" + (f" per '{filtro}'." if filtro else "."))
-    return "\n".join(righe) + _richieste_ispettrice(arg.get("progetto") or "", arg.get("thread") or "")
+    return "\n".join(righe)
 
 
 def _risposta(id_, result=None, errore=None):
@@ -269,8 +267,8 @@ def gestisci(msg):
         ver = (msg.get("params") or {}).get("protocolVersion") or "2025-06-18"
         _risposta(id_, {"protocolVersion": ver, "capabilities": {"tools": {}},
                         "serverInfo": {"name": "ufficio", "version": VERSIONE},
-                        "instructions": "Ufficio virtuale di Stefano: aggiorna il tuo omino con ufficio_aggiorna a ogni cambio di stato. "
-                                        "Se la risposta contiene una richiesta dell'ispettrice, rispondi col campo 'resoconto'."})
+                        "instructions": "Ufficio virtuale di Stefano: chiama ufficio_aggiorna SOLO quando hai finito o ti fermi ad aspettare Stefano. "
+                                        "Nient'altro: il resto lo aggiorna il pulsante AGGIORNA dell'ufficio."})
     elif metodo == "ping":
         _risposta(id_, {})
     elif metodo == "tools/list":

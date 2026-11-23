@@ -35,7 +35,7 @@ IN_PROVA = HERE / ".in-prova"             # c'e' finche' il server nuovo non con
 SCARTATA = HERE / ".versione-scartata"    # versione rotta: non la riscarico
 # file che restano sempre quelli del PC, anche se il repo ne ha una copia
 PERSONALI = {"etichette-mie.json", "links.json", "nomi-isole.json", "stato-thread.json", "commesse.json",
-             "progetti-link.json", "connettore-stato.json", "diagnosi-sessioni.json"}
+             "progetti-link.json", "connettore-stato.json", "diagnosi-sessioni.json", "aggiorna-token.json"}
 UA = {"User-Agent": "ufficio-virtuale-aggiorna"}
 
 

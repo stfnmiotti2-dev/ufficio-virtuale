@@ -170,6 +170,8 @@
 <body>
 <header>
   <h1>Ufficio virtuale</h1>
+  <button id="aggiorna" title="Chiede lo stato aggiornato di tutti i thread nel cloud (arriva in 1-2 minuti). I thread avvisano da soli solo quando finiscono o ti aspettano.">🔄 AGGIORNA</button>
+  <span class="conta" id="aggiornaEsito" style="font-size:12px"></span>
   <span class="conta" id="conta"></span>
   <span class="tia" id="tia" title="Stima dalle sessioni delle ultime 2 ore: TIA aperti e non ancora chiusi. Regola: massimo 2 per versione e 3 in totale."></span>
   <span class="spia" id="spia"></span>
@@ -273,10 +275,15 @@ function render() {
       Object.entries(perVer).sort().map(([v, l]) => " · " + v + ": " + l.length).join("");
   }
   tiaEl.classList.toggle("troppi", nTia > 3 || Object.values(perVer).some(l => l.length > 2));
+  if (extra.cloud_aggiornato && extra.cloud_aggiornato !== window._cloudVisto) {     // arrivato l'aggiornamento chiesto
+    const ae = document.getElementById("aggiornaEsito");
+    if (window._cloudVisto && ae && ae.textContent.startsWith("⏳")) ae.textContent = "✓ aggiornato";
+    window._cloudVisto = extra.cloud_aggiornato;
+  }
   const nAz = (extra.azioni_per_te || []).length;
   document.querySelector("#aspettano h2").textContent = "✋ " + (nAz ? nAz + (nAz > 1 ? " AZIONI" : " AZIONE") + " PER TE" : "TI ASPETTANO") +
     (extra.cloud_aggiornato ? "  ·  ☁️ thread cloud aggiornati alle " + new Date(extra.cloud_aggiornato * 1000).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) +
-      (extra.dati_vecchi ? " ⏳ dati vecchi: chiedi ad Agente TIA di aggiornare" : "") : "") +
+      (extra.dati_vecchi ? " ⏳ dati vecchi: premi 🔄 AGGIORNA" : "") : "") +
     (extra.pc === "off" ? "  ·  🌙 PC spento (\\pc off)" : "");
   document.querySelector("#aspettano h2").title = (extra.problemi_dati || []).length ? "Dati da sistemare:\n" + extra.problemi_dati.join("\n") : "";
   aspettano();
@@ -446,6 +453,19 @@ try {
   canale.postMessage({ nuova: true, id: mio });
 } catch (e) { /* browser vecchio: pazienza */ }
 const btnIntero = document.getElementById("schermoIntero");
+// pulsante AGGIORNA: il server sveglia il thread "Capo › Aggiornare ufficio a richiesta" (l'unico che spende token)
+const btnAgg = document.getElementById("aggiorna"), aggEsito = document.getElementById("aggiornaEsito");
+let aggTimer = null;
+btnAgg.onclick = async () => {
+  btnAgg.disabled = true; aggEsito.textContent = "chiedo…";
+  let esito;
+  try { esito = await (await fetch("/api/aggiorna", { method: "POST" })).json(); }
+  catch (e) { esito = { ok: false, errore: "server dell'ufficio non raggiungibile" }; }
+  aggEsito.textContent = esito.ok ? "⏳ " + (esito.nota || "aggiornamento chiesto") : "⚠️ " + (esito.errore || "non riuscito");
+  clearTimeout(aggTimer);
+  aggTimer = setTimeout(() => { aggEsito.textContent = ""; }, esito.ok ? 180000 : 30000);
+  setTimeout(() => { btnAgg.disabled = false; }, esito.ok ? 60000 : 3000);
+};
 btnIntero.onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {});
 document.addEventListener("fullscreenchange", () => {
   const si = !!document.fullscreenElement;

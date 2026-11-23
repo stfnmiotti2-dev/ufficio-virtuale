@@ -1242,6 +1242,7 @@
       schermi.push({ mesh: scr.userData.schermo, s });
       const link = gr.link || (gr.s0 && gr.s0.link);
       cliccabili.push({ obj: g, apri: () => link && apriLink(link), gr, s: nelVetro[0] });
+      cliccabili.push({ obj: capoOm, apri: () => link && apriLink(link), gr, s: nelVetro[0] });   // la persona: scheda (la stanza apre il thread)
       const sc = gr.scheda;
       marcati.push(etichetta("nome uff", U.nomeIsola(gr), new T.Vector3(x, HV + 0.55 + alto, z - LD / 2)));
       marcati.push(etichetta("riep" + (stato === "aspetta" ? " chiama" : ""), U.riepilogo(gr).split("\n").slice(0, stato === "aspetta" ? 3 : 2).map(r => U.corto(r, 18)).join("\n"), new T.Vector3(x, 0.05 + alto, z + LD / 2 + (capo ? 0.3 : 0.9)),
@@ -2271,11 +2272,14 @@
         if (k && (!soloPersone || (o.userData && o.userData.corpo))) return k;
       }
     };
-    const k = trova(true) || trova(false);
-    if (k) return k.s || k.gr ? miniScheda(k, e.clientX - r.left, e.clientY - r.top) : k.apri();
+    // 23/11 Stefano: clic sulla persona = scheda con le informazioni; clic sulla scrivania (o sull'ufficio) = apre il thread
+    const persona = trova(true);
+    if (persona) return miniScheda(persona, e.clientX - r.left, e.clientY - r.top);
+    const k = trova(false);
     miniScheda(null);
+    if (k) k.apri();
   });
-  // clic su una persona o una scrivania: mini-scheda con lo stato e il pulsante per aprire il thread
+  // clic su una persona: mini-scheda con lo stato e il pulsante per aprire il thread
   const scheda = document.createElement("div");
   scheda.className = "scheda3d"; scheda.hidden = true; wrap.append(scheda);
   const NOMI = { aspetta: "✋ Ti aspetta", lavora: "⚙️ Lavora", pensa: "💭 Pensa", "ferma?": "⏳ Fermo da un po'", finito: "🛋️ Ha finito: tempo libero", supervisore: "📋 Supervisiona" };
