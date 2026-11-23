@@ -40,7 +40,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.67 (motivo esatto se il pulsante AGGIORNA viene rifiutato; il pulsante AGGIORNA chiede il codice e lo salva da solo; interruttore 📋 dei resoconti dell ispettrice: spento = zero token; ispettrice sui tacchi a spillo con camminata da passerella; modalita GDR)"
+VERSIONE = "task 9.68 (pulsante AGGIORNA nascosto: zero token; motivo esatto se il pulsante AGGIORNA viene rifiutato; il pulsante AGGIORNA chiede il codice e lo salva da solo; interruttore 📋 dei resoconti dell ispettrice: spento = zero token; ispettrice sui tacchi a spillo con camminata da passerella; modalita GDR)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 VECCHIO_S = 3600        # un thread del cloud "al lavoro" senza notizie da piu' di cosi' diventa "dato vecchio?"
 ATTESA_LUNGA_S = 2 * 3600   # chi aspetta Stefano da piu' di cosi' (o dati cloud piu' vecchi di cosi'): ⏳

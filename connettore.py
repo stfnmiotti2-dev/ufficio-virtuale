@@ -34,7 +34,7 @@ STRUMENTI = [
             "Dice all'ufficio virtuale di Stefano che questa chat si e' fermata: il suo omino cambia subito. "
             "Per non sprecare token chiamalo SOLO in due momenti, alla fine del turno: quando hai finito "
             "(stato 'finito') e quando ti fermi ad aspettare Stefano (stato 'aspetta' + cosa aspetti in 'attesa'). "
-            "Non chiamarlo per 'lavora', per i sottoagenti o per altri cambi: quelli li legge il pulsante AGGIORNA. "
+            "Non chiamarlo per 'lavora', per i sottoagenti o per altri cambi. "
             "Usa sempre lo stesso 'thread' (l'id cmsg_... del thread, o il titolo se non lo conosci)."),
         "inputSchema": {
             "type": "object",
@@ -272,7 +272,7 @@ def gestisci(msg):
         _risposta(id_, {"protocolVersion": ver, "capabilities": {"tools": {}},
                         "serverInfo": {"name": "ufficio", "version": VERSIONE},
                         "instructions": "Ufficio virtuale di Stefano: chiama ufficio_aggiorna SOLO quando hai finito o ti fermi ad aspettare Stefano. "
-                                        "Nient'altro: il resto lo aggiorna il pulsante AGGIORNA dell'ufficio."})
+                                        "Nient'altro."})
     elif metodo == "ping":
         _risposta(id_, {})
     elif metodo == "tools/list":
