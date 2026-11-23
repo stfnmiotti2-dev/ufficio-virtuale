@@ -22,7 +22,7 @@ DIAGNOSI = HERE / "diagnosi-sessioni.json"      # scritto da server.py: quello c
 CLOUD_TIA = HERE / "stato-thread.json"          # il file storico di Agente TIA (resta valido)
 ISPETTRICE = HERE / "ispettrice.json"           # scritto da server.py: le richieste di resoconto dell'ispettrice
 IMPOSTAZIONI = HERE / "impostazioni.json"       # interruttore 📋 della pagina: i resoconti dell'ispettrice (spendono token)
-VERSIONE = "1.2"
+VERSIONE = "1.3"
 TENGO_GIORNI = 7                                # le voci piu' vecchie si cancellano
 
 STATI = ["lavora", "aspetta", "finito", "chiuso"]
@@ -31,10 +31,13 @@ STRUMENTI = [
     {
         "name": "ufficio_aggiorna",
         "description": (
-            "Dice all'ufficio virtuale di Stefano che questa chat si e' fermata: il suo omino cambia subito. "
-            "Per non sprecare token chiamalo SOLO in due momenti, alla fine del turno: quando hai finito "
-            "(stato 'finito') e quando ti fermi ad aspettare Stefano (stato 'aspetta' + cosa aspetti in 'attesa'). "
-            "Non chiamarlo per 'lavora', per i sottoagenti o per altri cambi. "
+            "Dice all'ufficio virtuale di Stefano cosa fa questa chat: il suo omino cambia subito. "
+            "Per non sprecare token chiamalo UNA volta per momento, e solo in questi: "
+            "1) quando inizi una richiesta nuova di Stefano (stato 'lavora', attivita' con un verbo, titolo, responsabile); "
+            "2) alla fine del turno se ti fermi ad aspettare Stefano (stato 'aspetta' + cosa serve in 'attesa'); "
+            "3) alla fine del turno quando hai finito (stato 'finito', attivita' = cosa hai fatto in una riga, e se ci sono "
+            "versione, errori_compilazione solo se KO, prossimo); 4) quando il thread viene chiuso (stato 'chiuso'). "
+            "Niente chiamate durante il lavoro, niente ufficio_guarda se Stefano non lo chiede. "
             "Usa sempre lo stesso 'thread' (l'id cmsg_... del thread, o il titolo se non lo conosci)."),
         "inputSchema": {
             "type": "object",
@@ -271,8 +274,8 @@ def gestisci(msg):
         ver = (msg.get("params") or {}).get("protocolVersion") or "2025-06-18"
         _risposta(id_, {"protocolVersion": ver, "capabilities": {"tools": {}},
                         "serverInfo": {"name": "ufficio", "version": VERSIONE},
-                        "instructions": "Ufficio virtuale di Stefano: chiama ufficio_aggiorna SOLO quando hai finito o ti fermi ad aspettare Stefano. "
-                                        "Nient'altro."})
+                        "instructions": "Ufficio virtuale di Stefano: chiama ufficio_aggiorna solo quando inizi una richiesta nuova, "
+                                        "quando ti fermi ad aspettare Stefano, quando hai finito e quando il thread viene chiuso. Nient'altro."})
     elif metodo == "ping":
         _risposta(id_, {})
     elif metodo == "tools/list":
