@@ -380,12 +380,13 @@
     }
     let gonna = null;
     if (donna) {                                                         // gonna a campana
-      gonna = new T.Mesh(new T.CylinderGeometry(isp ? 0.23 : 0.22, segr ? 0.27 : isp ? 0.3 : 0.32, segr ? 0.24 : isp ? 0.44 : 0.3, 20), m(resp || segr || isp ? maglia : PASTELLI[(h >>> 14) % PASTELLI.length]));
-      gonna.position.y = isp ? 0.36 : 0.46; gonna.castShadow = true; corpo.add(gonna);
+      gonna = new T.Mesh(new T.CylinderGeometry(isp ? 0.23 : 0.22, segr ? 0.27 : isp ? 0.29 : 0.32, segr ? 0.24 : isp ? 0.36 : 0.3, 20), m(resp || segr || isp ? maglia : PASTELLI[(h >>> 14) % PASTELLI.length]));
+      gonna.position.y = isp ? 0.4 : 0.46;   // l'ispettrice: a meta' polpaccio, si vedono i tacchi
+      gonna.castShadow = true; corpo.add(gonna);
       if (isp) {                                                         // spacco sulla coscia destra
-        const sp = new T.Mesh(new T.PlaneGeometry(0.075, 0.3), m(pelle, { side: T.DoubleSide }));
-        sp.position.set(0.1, 0.28, -0.262); sp.rotation.set(-0.11, -0.38, 0); corpo.add(sp);
-        const sp2 = palla(0.04, pelle, 0.1, 0.16, -0.272, corpo, 1, 0.5, 0.3); sp2.castShadow = false;
+        const sp = new T.Mesh(new T.PlaneGeometry(0.075, 0.24), m(pelle, { side: T.DoubleSide }));
+        sp.position.set(0.1, 0.33, -0.255); sp.rotation.set(-0.11, -0.38, 0); corpo.add(sp);
+        const sp2 = palla(0.04, pelle, 0.1, 0.23, -0.265, corpo, 1, 0.5, 0.3); sp2.castShadow = false;
       }
     }
     const sedute = [palla(0.11, pantaloni, -0.12, 0.47, -0.2, corpo, 1, 0.9, 1.9),   // gambe sotto la scrivania (seduto)
