@@ -178,6 +178,7 @@
   <label title="Prova della versione 3D: trascina per girare, rotella per lo zoom"><input type="checkbox" id="vista3d"> 3D</label>
   <label title="3D++: personaggi realistici (MakeHuman) con animazioni vere. Più pesante del 3D+. Ricarica la pagina."><input type="checkbox" id="vista3dpp"> 3D++</label>
   <button id="demo3d" hidden title="Fa partire subito pausa caffè, bussate, postino con ordini e cantiere, per vederli senza aspettare">🎬 Prova animazioni</button>
+  <button id="gdr3d" hidden title="Entra nell'ufficio come un omino: WASD per camminare, mouse per guardare, V per 1ª/3ª persona">🎮 Entra</button>
   <button id="visuale3d" hidden title="Riporta la visuale 3D a quella iniziale (anche: doppio clic sull'ufficio)">🎯 Visuale iniziale</button>
   <label><input type="checkbox" id="soloAttive"> solo attive</label>
   <label title="Di base i link aprono l'app Claude per PC. Spunta se preferisci il browser."><input type="checkbox" id="linkBrowser"> link nel browser</label>
@@ -430,6 +431,8 @@ function disegnaUfficio() {
   if (window.Ufficio3D) Ufficio3D.attiva(tre);
   document.getElementById("demo3d").hidden = !tre;
   document.getElementById("visuale3d").hidden = !tre;
+  document.getElementById("gdr3d").hidden = !tre || !!(window.THREE && THREE.NUOVO);   // GDR solo nel 3D normale (il piu' leggero)
+  if (!tre && window.Gdr && Gdr.attivo) Gdr.esci();
   document.body.classList.toggle("tre", tre);
   const dash = document.getElementById("commesse");                      // in 3D la dashboard sta sotto l'ufficio, al posto delle schede
   if (tre) document.getElementById("ufficio3d").after(dash); else document.getElementById("ufficio").before(dash);
@@ -472,6 +475,11 @@ document.addEventListener("fullscreenchange", () => {
   btnIntero.textContent = si ? "🗗" : "⛶";
   btnIntero.title = si ? "Torna alla finestra (Esc)" : "Schermo intero (F11): ricliccalo, o premi Esc, per tornare alla finestra";
 });
+// modalita' GDR: il codice si scarica solo la prima volta che si entra, cosi' il 3D resta leggero
+document.getElementById("gdr3d").onclick = () => {
+  if (window.Gdr) return Gdr.attivo ? Gdr.esci() : Gdr.entra();
+  const sc = document.createElement("script"); sc.src = "/gdr.js"; sc.onload = () => window.Gdr && Gdr.entra(); document.head.append(sc);
+};
 document.getElementById("visuale3d").onclick = () => { if (window.Ufficio3D) Ufficio3D.inquadra(); };
 document.getElementById("demo3d").onclick = () => {
   if (!window.Ufficio3D) return;

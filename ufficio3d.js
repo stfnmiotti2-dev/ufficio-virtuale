@@ -25,7 +25,7 @@
   scena.fog = new T.Fog(new T.Color("#cfe6f5").convertSRGBToLinear(), 60, 140);
   const camera = new T.PerspectiveCamera(35, 2, 0.1, 400);
   const controlli = new T.OrbitControls(camera, renderer.domElement);
-  renderer.domElement.addEventListener("dblclick", () => inquadra());
+  renderer.domElement.addEventListener("dblclick", () => { if (!(window.Gdr && Gdr.attivo)) inquadra(); });
   controlli.enableDamping = true;
   controlli.maxPolarAngle = Math.PI * 0.44;          // mai sotto il pavimento
   controlli.minDistance = 6; controlli.maxDistance = 80;
@@ -1469,6 +1469,7 @@
     }
     if (nuovi && ultimiDati) { const d = ultimiDati; setTimeout(() => costruisci(d[0], d[1]), 0); }   // ricostruisce con il cantiere aperto
     if (primaVolta) inquadra();
+    if (window.Gdr) Gdr.ricostruito();                                   // modalita' GDR: muri e scrivanie da rifare
   }
 
   // Arredo fermo unito in pochi pezzi (critica 19/11, B: meno chiamate di disegno). Si uniscono solo le parti
@@ -2221,7 +2222,7 @@
       else mat.color.set(["finito", "spento", "inattiva", "vuota"].includes(s.stato) ? "#8f949c" : c).convertSRGBToLinear();
     }
     if (window.Plus3D) { Plus3D.aggiorna(dt, scena); if (t - tSemplice > 3) { tSemplice = t; Plus3D.semplifica(scena); } }
-    controlli.update();
+    if (window.Gdr && Gdr.attivo) Gdr.passo(dt); else controlli.update();   // GDR: la telecamera la muove chi gioca
     renderer.render(scena, camera);
     costo = costo * 0.95 + (performance.now() - inizioFrame) * 0.05;     // media del tempo di disegno
     fps = costo > 16 ? 24 : costo > 11 ? 30 : 40;
@@ -2262,7 +2263,11 @@
   renderer.domElement.addEventListener("pointerdown", e => { giu = [e.clientX, e.clientY]; });
   renderer.domElement.addEventListener("pointerup", e => {
     if (!giu || Math.hypot(e.clientX - giu[0], e.clientY - giu[1]) > 5) return;   // era un trascinamento
-    const r = renderer.domElement.getBoundingClientRect();
+    if (window.Gdr && Gdr.attivo) return;                               // in GDR il clic serve a guidare col mouse
+    cliccaIn(e.clientX, e.clientY);
+  });
+  function cliccaIn(cx, cy) {
+    const r = renderer.domElement.getBoundingClientRect(), e = { clientX: cx, clientY: cy };
     mouse.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
     ray.setFromCamera(mouse, camera);
     const colpi = ray.intersectObjects(mondo.children, true);
@@ -2278,7 +2283,7 @@
     const k = trova(false);
     miniScheda(null);
     if (k) k.apri();
-  });
+  }
   // clic su una persona: mini-scheda con lo stato e il pulsante per aprire il thread
   const scheda = document.createElement("div");
   scheda.className = "scheda3d"; scheda.hidden = true; wrap.append(scheda);
@@ -2322,7 +2327,10 @@
     disegna(sessioni, extra) { misura(); ultimiDati = [sessioni, extra || {}]; costruisci(sessioni, extra || {}); },
     attiva(si) { attivo = si; if (si) misura(); },
     inquadra,
-    camera, controlli, omini: () => animati,                          // per le prove (viste ravvicinate)
+    camera, controlli, omini: () => animati,
+    // per la modalita' GDR (gdr.js, caricato solo quando si entra)
+    mondo, renderer, wrap, cliccaIn, sveglia, aiuti: { palla, tondo, box, m }, nuovoOmino: (s, x, z, ruolo) => omino(s, scena, x, z, ruolo),
+    get portaPos() { return portaPos; }, get porta() { return porta; }, get centro() { return centro; }, get misure() { return [larg, prof]; },                          // per le prove (viste ravvicinate)
     provaDivertenti() {
       const dip = animati.filter(a => a.userData.caffe), lav = dip.filter(a => a.userData.s.stato === "lavora");
       if (dip[0]) momento(dip[0].userData.s.id, "festa", 4.5);
