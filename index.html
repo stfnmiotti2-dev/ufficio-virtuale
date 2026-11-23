@@ -171,7 +171,7 @@
 <body>
 <header>
   <h1>Ufficio virtuale</h1>
-  <button id="aggiorna" hidden title="Chiede lo stato aggiornato di tutti i thread nel cloud (arriva in 1-2 minuti). I thread avvisano da soli solo quando finiscono o ti aspettano.">🔄 AGGIORNA</button>
+  <button id="aggiorna" title="Chiede lo stato aggiornato di tutti i thread nel cloud (arriva in 1-2 minuti). I thread avvisano da soli solo quando finiscono o ti aspettano.">🔄 AGGIORNA</button>
   <span class="conta" id="aggiornaEsito" style="font-size:12px"></span>
   <button id="ispRes" title="L'ispettrice gira sempre per l'ufficio. Se accendi questo interruttore chiede davvero un resoconto ai thread (ogni 20 min, a uno solo): costa token. Spento = zero token.">📋 Resoconti: spenti</button>
   <span class="conta" id="conta"></span>
@@ -279,7 +279,6 @@ function render() {
   }
   tiaEl.classList.toggle("troppi", nTia > 3 || Object.values(perVer).some(l => l.length > 2));
   mostraIspRes(!!(extra.ispettrice && extra.ispettrice.resoconti));
-  document.getElementById("aggiorna").hidden = !extra.aggiorna_pronto;   // spende token: solo se Stefano l'ha configurato
   if (extra.cloud_aggiornato && extra.cloud_aggiornato !== window._cloudVisto) {     // arrivato l'aggiornamento chiesto
     const ae = document.getElementById("aggiornaEsito");
     if (window._cloudVisto && ae && ae.textContent.startsWith("⏳")) ae.textContent = "✓ aggiornato";
@@ -288,7 +287,7 @@ function render() {
   const nAz = (extra.azioni_per_te || []).length;
   document.querySelector("#aspettano h2").textContent = "✋ " + (nAz ? nAz + (nAz > 1 ? " AZIONI" : " AZIONE") + " PER TE" : "TI ASPETTANO") +
     (extra.cloud_aggiornato ? "  ·  ☁️ thread cloud aggiornati alle " + new Date(extra.cloud_aggiornato * 1000).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) +
-      (extra.dati_vecchi ? " ⏳ dati vecchi" + (extra.aggiorna_pronto ? ": premi 🔄 AGGIORNA" : "") : "") : "") +
+      (extra.dati_vecchi ? " ⏳ dati vecchi: premi 🔄 AGGIORNA" : "") : "") +
     (extra.pc === "off" ? "  ·  🌙 PC spento (\\pc off)" : "");
   document.querySelector("#aspettano h2").title = (extra.problemi_dati || []).length ? "Dati da sistemare:\n" + extra.problemi_dati.join("\n") : "";
   aspettano();
