@@ -468,13 +468,13 @@ btnAgg.onclick = async () => {
   try { esito = await (await fetch("/api/aggiorna", { method: "POST" })).json(); }
   catch (e) { esito = { ok: false, errore: "server dell'ufficio non raggiungibile" }; }
   if (esito.manca_token) {                                                 // prima volta: incolla il codice generato su claude.ai
-    const tok = (prompt("Incolla il codice del pulsante AGGIORNA (inizia con sk-ant-).\nLo generi su claude.ai/code/routines > \"Ufficio: pulsante AGGIORNA\" > Edit > Trigger > + > API > Generate token.") || "").trim();
+    const tok = (prompt((esito.errore && !esito.errore.startsWith("Manca") ? esito.errore + "\n\nSe vuoi riprovare con un codice nuovo, i" : "I") + "ncolla il codice del pulsante AGGIORNA (inizia con sk-ant-).\nLo generi su claude.ai/code/routines > \"Ufficio: pulsante AGGIORNA\" > Edit > Trigger > + > API > Generate token.") || "").trim();
     if (tok) {
       try {
         const r = await (await fetch("/api/aggiorna-token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: tok }) })).json();
         esito = r.ok ? await (await fetch("/api/aggiorna", { method: "POST" })).json() : r;
       } catch (e) { esito = { ok: false, errore: "server dell'ufficio non raggiungibile" }; }
-    } else esito = { ok: false, errore: "codice non inserito" };
+    } else if (!esito.errore || esito.errore.startsWith("Manca")) esito = { ok: false, errore: "codice non inserito" };
   }
   aggEsito.textContent = esito.ok ? "⏳ " + (esito.nota || "aggiornamento chiesto") : "⚠️ " + (esito.errore || "non riuscito");
   clearTimeout(aggTimer);

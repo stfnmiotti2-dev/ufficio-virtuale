@@ -40,7 +40,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.66 (il pulsante AGGIORNA chiede il codice e lo salva da solo; interruttore 📋 dei resoconti dell ispettrice: spento = zero token; ispettrice sui tacchi a spillo con camminata da passerella; modalita GDR)"
+VERSIONE = "task 9.67 (motivo esatto se il pulsante AGGIORNA viene rifiutato; il pulsante AGGIORNA chiede il codice e lo salva da solo; interruttore 📋 dei resoconti dell ispettrice: spento = zero token; ispettrice sui tacchi a spillo con camminata da passerella; modalita GDR)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 VECCHIO_S = 3600        # un thread del cloud "al lavoro" senza notizie da piu' di cosi' diventa "dato vecchio?"
 ATTESA_LUNGA_S = 2 * 3600   # chi aspetta Stefano da piu' di cosi' (o dati cloud piu' vecchi di cosi'): ⏳
@@ -845,7 +845,17 @@ def _chiedi_aggiornamento():
     except urllib.error.HTTPError as e:
         motivo = {401: "codice non valido o rigenerato", 403: "accesso negato", 404: "attivita' non trovata",
                   429: "troppe richieste, riprova tra poco"}.get(e.code, "errore " + str(e.code))
-        return {"ok": False, "errore": "Aggiornamento non partito: " + motivo + "."}
+        try:                                   # il motivo vero, dalla risposta di Anthropic (senza il codice)
+            dett = json.loads(e.read().decode("utf-8", "replace")).get("error", {}).get("message", "")
+        except (ValueError, OSError, AttributeError):
+            dett = ""
+        try:
+            with open(HERE / "aggiorna.log", "a", encoding="utf-8") as f:
+                f.write(time.strftime("%Y-%m-%d %H:%M:%S") + f" pulsante AGGIORNA: HTTP {e.code} {dett[:300]}\n")
+        except OSError:
+            pass
+        return {"ok": False, "manca_token": e.code in (401, 403),
+                "errore": "Aggiornamento non partito: " + motivo + (" (" + dett[:160] + ")" if dett else "") + "."}
     except (urllib.error.URLError, OSError) as e:
         return {"ok": False, "errore": "Aggiornamento non partito: internet non raggiungibile (" + str(e)[:80] + ")."}
     _agg["ultima"] = time.time()
