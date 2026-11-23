@@ -393,7 +393,15 @@
     const gambe = [-0.11, 0.11].map(lx => {                              // gambe in piedi, con l'anca come perno
       const a = new T.Group(); a.position.set(lx, 0.56, 0); corpo.add(a);
       const c = new T.Mesh(new T.CylinderGeometry(donna ? 0.055 : 0.075, donna ? 0.05 : 0.07, 0.42, 10), m(pantaloni)); c.position.y = -0.24; c.castShadow = true; a.add(c);
-      palla(0.09, scarpe, 0, -0.47, -0.04, a, 1, 0.6, 1.4);               // scarpa
+      if (isp) {                                                         // decollete' a spillo: piede in punta, tacco altissimo
+        const f = new T.Group(); f.position.set(0, -0.39, -0.02); f.rotation.x = -0.62; a.add(f);
+        palla(0.05, scarpe, 0, 0, -0.06, f, 0.9, 0.55, 1.9, { roughness: 0.25, metalness: 0.2 });   // scarpa lucida a punta
+        palla(0.04, scarpe, 0, 0.0, 0.025, f, 0.95, 0.6, 0.9, { roughness: 0.25 });                 // tallone
+        const tac = new T.Mesh(new T.CylinderGeometry(0.013, 0.005, 0.125, 8), m(scarpe, { roughness: 0.25, metalness: 0.2 }));
+        tac.position.set(0, -0.462, 0.0); tac.castShadow = true; a.add(tac);                          // il tacco a spillo, dritto
+        const cin = new T.Mesh(new T.TorusGeometry(0.052, 0.008, 6, 16), m("#e3b23c", { metalness: 0.7, roughness: 0.3 }));
+        cin.rotation.x = Math.PI / 2; cin.position.y = -0.37; a.add(cin);                               // cinturino dorato alla caviglia
+      } else palla(0.09, scarpe, 0, -0.47, -0.04, a, 1, 0.6, 1.4);       // scarpa
       a.visible = false; return a;
     });
     const testa = new T.Group(); testa.position.set(0, 1.33, 0); corpo.add(testa);
@@ -736,16 +744,19 @@
     else { ispVisite.viaggio = null; pos = lungo(ispe.giro, t % ispe.durata, 1.0); }
     o.visible = pcLuce > 0.5;
     o.position.set(pos.x, quota(pos.x, pos.z), pos.z);
-    const fermo = !pos.dir, w = fermo ? 0 : Math.sin(t * 7);
+    const fermo = !pos.dir, F = 5.2, w = fermo ? 0 : Math.sin(t * F);   // passo da passerella: piu' lento e deciso
     if (pos.dir) o.rotation.y = Math.atan2(-pos.dir[0], -pos.dir[1]);
     else if (ispVisite.fermo) o.rotation.y = ispVisite.fermo[2];
     else if (pos.azione === "chiede" && vg) { const pt = vg.punti.find(p => p[3] === "chiede"); o.rotation.y = pt[4]; }
-    u.gambe[0].rotation.x = w * 0.35; u.gambe[1].rotation.x = -w * 0.35;   // passi corti, sui tacchi
-    u.corpo.rotation.set(0, fermo ? 0 : Math.sin(t * 3.5) * 0.12, fermo ? Math.sin(t * 0.8) * 0.03 : Math.sin(t * 7) * 0.05);   // ancheggia
-    u.corpo.position.y = fermo ? 0 : Math.abs(Math.cos(t * 7)) * 0.02;
+    // un piede davanti all'altro, sulla stessa linea: le gambe si incrociano un po' a ogni passo
+    u.gambe[0].rotation.set(w * 0.42, 0, fermo ? 0.04 : 0.17 + Math.max(0, -w) * 0.06);
+    u.gambe[1].rotation.set(-w * 0.42, 0, fermo ? 0.1 : -0.17 - Math.max(0, w) * 0.06);
+    const anca = fermo ? Math.sin(t * 0.8) * 0.025 + 0.03 : w * 0.085;    // il fianco si alza dal lato della gamba d'appoggio
+    u.corpo.rotation.set(0, fermo ? 0 : -w * 0.16, anca);
+    u.corpo.position.set(fermo ? 0.015 : w * 0.035, fermo ? 0 : Math.abs(Math.cos(t * F)) * 0.025, 0);
     u.sx.rotation.set(0.95, 0, 0.3);                                       // cartellina davanti al petto
-    u.dx.rotation.set(fermo ? 0.2 : -w * 0.35, 0, -0.12);
-    u.testa.rotation.set(pos.azione === "legge" ? 0.35 : 0, fermo && pos.azione === "guarda" ? Math.sin(t * 1.2) * 0.45 : 0, 0);
+    u.dx.rotation.set(fermo ? 0.15 : w * 0.45, 0, fermo ? -0.42 : -0.16);  // il braccio libero oscilla; ferma: mano sul fianco
+    u.testa.rotation.set(pos.azione === "legge" ? 0.35 : -0.06, fermo && pos.azione === "guarda" ? Math.sin(t * 1.2) * 0.45 : w * 0.1, -anca * 0.9);   // mento alto, testa dritta
     for (const oc of u.occhi) oc.scale.y = (t % 4.1) < 0.12 ? 0.25 : 1.5;
     const chiede = fermo && pos.azione === "chiede";
     if (chiede) {                                                          // gesticola con la penna, testa piegata

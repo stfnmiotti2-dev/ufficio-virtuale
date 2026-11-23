@@ -16,6 +16,7 @@
            border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); }
   h1 { font-size: 18px; margin: 0; font-weight: 600; }
   .conta { color: var(--muted); }
+  #ispRes.acceso { background: #ffe3e3; border-color: #c62828; color: #8a1010; }
   .live { margin-left: auto; color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
   .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--inattiva); }
   .live.on::before { background: var(--lavora); }
@@ -172,6 +173,7 @@
   <h1>Ufficio virtuale</h1>
   <button id="aggiorna" title="Chiede lo stato aggiornato di tutti i thread nel cloud (arriva in 1-2 minuti). I thread avvisano da soli solo quando finiscono o ti aspettano.">🔄 AGGIORNA</button>
   <span class="conta" id="aggiornaEsito" style="font-size:12px"></span>
+  <button id="ispRes" title="L'ispettrice gira sempre per l'ufficio. Se accendi questo interruttore chiede davvero un resoconto ai thread (ogni 20 min, a uno solo): costa token. Spento = zero token.">📋 Resoconti: spenti</button>
   <span class="conta" id="conta"></span>
   <span class="tia" id="tia" title="Stima dalle sessioni delle ultime 2 ore: TIA aperti e non ancora chiusi. Regola: massimo 2 per versione e 3 in totale."></span>
   <span class="spia" id="spia"></span>
@@ -276,6 +278,7 @@ function render() {
       Object.entries(perVer).sort().map(([v, l]) => " · " + v + ": " + l.length).join("");
   }
   tiaEl.classList.toggle("troppi", nTia > 3 || Object.values(perVer).some(l => l.length > 2));
+  mostraIspRes(!!(extra.ispettrice && extra.ispettrice.resoconti));
   if (extra.cloud_aggiornato && extra.cloud_aggiornato !== window._cloudVisto) {     // arrivato l'aggiornamento chiesto
     const ae = document.getElementById("aggiornaEsito");
     if (window._cloudVisto && ae && ae.textContent.startsWith("⏳")) ae.textContent = "✓ aggiornato";
@@ -468,6 +471,20 @@ btnAgg.onclick = async () => {
   clearTimeout(aggTimer);
   aggTimer = setTimeout(() => { aggEsito.textContent = ""; }, esito.ok ? 180000 : 30000);
   setTimeout(() => { btnAgg.disabled = false; }, esito.ok ? 60000 : 3000);
+};
+// interruttore dei resoconti dell'ispettrice: acceso = i thread le rispondono (token), spento = solo grafica
+const btnIsp = document.getElementById("ispRes");
+function mostraIspRes(acceso) {
+  btnIsp.dataset.acceso = acceso ? "1" : "";
+  btnIsp.textContent = acceso ? "📋 Resoconti: accesi (token)" : "📋 Resoconti: spenti";
+  btnIsp.classList.toggle("acceso", acceso);
+}
+btnIsp.onclick = async () => {
+  const vuole = !btnIsp.dataset.acceso;
+  try {
+    const r = await (await fetch("/api/ispettrice?resoconti=" + (vuole ? 1 : 0), { method: "POST" })).json();
+    mostraIspRes(!!r.resoconti);
+  } catch (e) { /* server non raggiungibile: resta com'era */ }
 };
 btnIntero.onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {});
 document.addEventListener("fullscreenchange", () => {

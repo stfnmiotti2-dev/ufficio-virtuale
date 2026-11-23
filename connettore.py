@@ -21,7 +21,8 @@ STATO = HERE / "connettore-stato.json"          # scritto qui, letto da server.p
 DIAGNOSI = HERE / "diagnosi-sessioni.json"      # scritto da server.py: quello che mostra la pagina
 CLOUD_TIA = HERE / "stato-thread.json"          # il file storico di Agente TIA (resta valido)
 ISPETTRICE = HERE / "ispettrice.json"           # scritto da server.py: le richieste di resoconto dell'ispettrice
-VERSIONE = "1.1"
+IMPOSTAZIONI = HERE / "impostazioni.json"       # interruttore 📋 della pagina: i resoconti dell'ispettrice (spendono token)
+VERSIONE = "1.2"
 TENGO_GIORNI = 7                                # le voci piu' vecchie si cancellano
 
 STATI = ["lavora", "aspetta", "finito", "chiuso"]
@@ -151,11 +152,14 @@ def aggiorna(arg):
             + (f" - {voce.get('attesa') if voce['stato'] == 'aspetta' and voce.get('attesa') else voce.get('attivita')}"
                if voce.get("attivita") or voce.get("attesa") else "") + "."
             + (" Resoconto consegnato all'ispettrice, grazie." if arg.get("resoconto") else "")
-            + ("" if acceso else " (L'ufficio adesso e' chiuso: lo vedra' quando Stefano lo apre.)") + nota)
+            + ("" if acceso else " (L'ufficio adesso e' chiuso: lo vedra' quando Stefano lo apre.)") + nota
+            + _richieste_ispettrice(progetto, thread))
 
 
 def _richieste_ispettrice(progetto, thread):
     """Le richieste di resoconto ancora senza risposta per chi chiama (o per il suo progetto)."""
+    if not _leggi(IMPOSTAZIONI).get("ispettrice_resoconti"):    # spento dalla pagina (di base): nessuna richiesta
+        return ""
     r = [q for q in _leggi(ISPETTRICE).get("richieste") or [] if isinstance(q, dict) and not q.get("risposta")]
     if not r:
         return ""
@@ -246,7 +250,7 @@ def guarda(arg):
                          + (f" (da {_da_quanto(p['quando'])})" if p["quando"] else ""))
     if len(righe) == 1:
         righe.append("Nessuno al lavoro" + (f" per '{filtro}'." if filtro else "."))
-    return "\n".join(righe)
+    return "\n".join(righe) + _richieste_ispettrice(arg.get("progetto") or "", arg.get("thread") or "")
 
 
 def _risposta(id_, result=None, errore=None):

@@ -40,7 +40,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.64 (pulsante AGGIORNA, niente ispettrice, clic omino = scheda, clic scrivania = thread)"
+VERSIONE = "task 9.65 (interruttore 📋 dei resoconti dell ispettrice: spento = zero token; ispettrice sui tacchi a spillo con camminata da passerella; modalita GDR)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 VECCHIO_S = 3600        # un thread del cloud "al lavoro" senza notizie da piu' di cosi' diventa "dato vecchio?"
 ATTESA_LUNGA_S = 2 * 3600   # chi aspetta Stefano da piu' di cosi' (o dati cloud piu' vecchi di cosi'): ⏳
@@ -701,6 +701,34 @@ def _isp_leggi():
     return _isp["dati"]
 
 
+# interruttore dei resoconti (pulsante 📋 nella pagina): impostazioni.json, personale, letto anche da connettore.py
+IMPOSTAZIONI = HERE / "impostazioni.json"
+
+
+def isp_resoconti():
+    """True se l'ispettrice puo' chiedere davvero il resoconto ai thread (spende token). Di base: spento."""
+    try:
+        return bool(json.loads(IMPOSTAZIONI.read_text(encoding="utf-8")).get("ispettrice_resoconti"))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def isp_resoconti_imposta(acceso):
+    try:
+        d = json.loads(IMPOSTAZIONI.read_text(encoding="utf-8"))
+        d = d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        d = {}
+    d["ispettrice_resoconti"] = bool(acceso)
+    tmp = IMPOSTAZIONI.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(tmp, IMPOSTAZIONI)
+    if not acceso:                                   # spento: le richieste ancora aperte non arrivano piu' ai thread
+        d = _isp_leggi()
+        d["richieste"] = [r for r in d["richieste"] if r.get("risposta")]
+        _isp_scrivi(d)
+
+
 def _isp_scrivi(d):
     try:
         tmp = ISP_FILE.with_suffix(".tmp")
@@ -769,7 +797,9 @@ def _watcher(hours):
             cloud = _sessioni_cloud(locali)
             sessions = [s for s in _con_nomi(locali + cloud) + _progetti_fissi(locali, cloud) if s.get("modificato", 0) >= limite]
             ex = _extra(sessions)
-            ex["ispettrice"] = {"visita": None, "per_sessione": {}}   # 23/11 Stefano: ispettrice spenta (costava token)
+            # 23/11 Stefano: l'ispettrice gira sempre (grafica), ma chiede i resoconti ai thread (token) solo se l'interruttore e' acceso
+            ex["ispettrice"] = _ispettrice(sessions) if isp_resoconti() else {"visita": None, "per_sessione": {}}
+            ex["ispettrice"]["resoconti"] = isp_resoconti()
             extra = json.dumps(ex, ensure_ascii=False).encode("utf-8")   # prima: aggiunge campi alle sessioni
             data = json.dumps(sessions, ensure_ascii=False).encode("utf-8")
             with _cond:
@@ -888,6 +918,13 @@ class Handler(BaseHTTPRequestHandler):
                 nomi.pop(thread, None)
             NOMI_FILE.write_text(json.dumps(nomi, ensure_ascii=False, indent=1), encoding="utf-8")
             return self._send(200, b'{"ok": true}', "application/json")
+        if path == "/api/ispettrice":       # ?resoconti=1|0: interruttore dei resoconti chiesti ai thread
+            q = parse_qs(urlparse(self.path).query)
+            try:
+                isp_resoconti_imposta(q.get("resoconti", ["0"])[0] == "1")
+            except OSError:
+                return self._send(500, b'{"ok": false}', "application/json")
+            return self._send(200, json.dumps({"ok": True, "resoconti": isp_resoconti()}).encode("utf-8"), "application/json")
         if path == "/api/aggiorna":         # pulsante AGGIORNA: sveglia il thread che rilegge lo stato dei thread
             esito = _chiedi_aggiornamento()
             return self._send(200 if esito.get("ok") else 502, json.dumps(esito, ensure_ascii=False).encode("utf-8"),
