@@ -218,7 +218,7 @@
   <select title="Chi sei"></select>
   <button class="vista" title="Cambia visuale (tasto V)"></button>
   <button class="esci" title="Torna alla vista dall'alto">🚪 Esci</button>
-  <span class="gdr-aiuto">Clic sull'ufficio per guidare col mouse · WASD cammina · Shift corre · V visuale · E scheda di chi guardi · Esc libera il mouse</span>`;
+  <span class="gdr-aiuto"><b>Frecce</b> muovi · <b>mouse</b> gira (clic sull'ufficio per agganciarlo, Esc per sganciarlo) · Shift corre · V visuale · E scheda</span>`;
   const sel = pan.querySelector("select"), btnVista = pan.querySelector(".vista");
   for (const [k, n] of LOOK) { const o = document.createElement("option"); o.value = k; o.textContent = n; sel.append(o); }
   const mirino = document.createElement("div"); mirino.className = "gdr-mirino";
@@ -242,10 +242,15 @@
   }
   function su(e) { tasti.delete(e.code); }
   function clicTela() { if (attivo && document.pointerLockElement !== tela) tela.requestPointerLock && tela.requestPointerLock(); }
-  function muovi(e) {
-    if (!attivo || document.pointerLockElement !== tela) return;
-    yaw -= e.movementX * 0.0025;
-    pitch = Math.max(-1.2, Math.min(0.9, pitch - e.movementY * 0.0025));
+  let trascina = false;
+  function premi(e) { if (attivo && e.button === 0) trascina = true; }
+  function lascia() { trascina = false; }
+  function muovi(e) {                                                    // mouse agganciato, oppure tasto premuto e trascina
+    if (!attivo || (document.pointerLockElement !== tela && !trascina)) return;
+    const mx_ = Math.max(-60, Math.min(60, e.movementX)), my_ = Math.max(-60, Math.min(60, e.movementY));   // niente salti se il browser manda un valore pazzo
+    yaw -= mx_ * 0.0028;
+    pitch = Math.max(-1.0, Math.min(0.8, pitch - my_ * 0.0028));
+    U3.sveglia();
   }
   function scheda() {                                                    // la mini-scheda di chi sta al centro della vista
     if (document.pointerLockElement) document.exitPointerLock();
@@ -258,18 +263,16 @@
   function rotella(e) { if (!attivo || primaPersona) return; e.preventDefault(); e.stopPropagation(); distCam = Math.max(1.6, Math.min(7, distCam * (e.deltaY > 0 ? 1.12 : 0.9))); }
 
   // ---------- un fotogramma (chiamato dal 3D al posto dei controlli normali) ----------
-  const fuoco = new T.Vector3();
+  const fuoco = new T.Vector3(), voluta = new T.Vector3();
   let tAn = 0;
   function passoGdr(dt) {
     if (sporca || !griglia) costruisciGriglia();
     let av_ = 0, la = 0;
     if (tasti.has("KeyW") || tasti.has("ArrowUp")) av_ += 1;
     if (tasti.has("KeyS") || tasti.has("ArrowDown")) av_ -= 1;
-    if (tasti.has("KeyD")) la += 1;
-    if (tasti.has("KeyA")) la -= 1;
-    if (tasti.has("ArrowLeft")) yaw += 2.2 * dt;                         // frecce laterali: gira senza mouse
-    if (tasti.has("ArrowRight")) yaw -= 2.2 * dt;
-    const vel = (tasti.has("ShiftLeft") || tasti.has("ShiftRight") ? 4.2 : 2.2) * dt;
+    if (tasti.has("KeyD") || tasti.has("ArrowRight")) la += 1;          // frecce laterali: passo di lato (a girare ci pensa il mouse)
+    if (tasti.has("KeyA") || tasti.has("ArrowLeft")) la -= 1;
+    const vel = (tasti.has("ShiftLeft") || tasti.has("ShiftRight") ? 6 : 3) * dt;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
     let mx = fx * av_ + rx * la, mz = fz * av_ + rz * la;
     const n = Math.hypot(mx, mz), va = n > 0;
@@ -285,7 +288,10 @@
     if (av) {
       const u = av.userData;
       av.position.set(x, 0, z);
-      if (va) av.rotation.y = Math.atan2(-mx, -mz);
+      if (va) {                                                          // si gira verso dove cammina, senza scatti
+        const voluto = Math.atan2(-mx, -mz); let d = voluto - av.rotation.y;
+        d = Math.atan2(Math.sin(d), Math.cos(d)); av.rotation.y += d * Math.min(1, dt * 12);
+      }
       const o = va ? Math.sin(passo) : 0;
       u.gambe[0].rotation.x = o * 0.5; u.gambe[1].rotation.x = -o * 0.5;
       if (va) { u.sx.rotation.set(-o * 0.5, 0, 0.12); u.dx.rotation.set(o * 0.5, 0, -0.12); }
@@ -301,18 +307,19 @@
         else if (tipo === "scintilla") { const a = tAn * 3 + k * 0.785, r = 0.45 + Math.sin(tAn * 2 + k) * 0.08; o.position.set(Math.cos(a) * r, 0.25 + ((k * 0.37 + tAn * 0.5) % 1.4), Math.sin(a) * r); }
       }
     }
-    // telecamera
-    const occhio = alto * 0.86;
+    // telecamera (morbida: insegue il punto voluto invece di saltarci)
+    const occhio = alto * 0.86, k = primaPersona ? 1 : Math.min(1, dt * 10);
     if (primaPersona) {
       camera.position.set(x + fx * 0.15, occhio + (va ? Math.abs(Math.cos(passo)) * 0.025 : 0), z + fz * 0.15);
       fuoco.set(x + fx * Math.cos(pitch) * 5, occhio + Math.sin(pitch) * 5, z + fz * Math.cos(pitch) * 5);
     } else {
       // dietro le spalle, un po' dall'alto; se dietro c'e' un muro si avvicina
       let d = distCam;
-      for (let s = 0.4; s <= distCam; s += 0.2) if (pieno(x - fx * s, z - fz * s)) { d = Math.max(0.6, s - 0.3); break; }
-      const h = occhio + 0.45 - pitch * d * 0.6;
-      camera.position.set(x - fx * d, Math.max(0.5, h), z - fz * d);
-      fuoco.set(x + fx * 1.2, occhio + Math.sin(pitch) * 1.5, z + fz * 1.2);
+      for (let s = 0.4; s <= distCam; s += 0.2) if (pieno(x - fx * s, z - fz * s)) { d = Math.max(1.0, s - 0.3); break; }
+      const h = occhio + 0.55 - pitch * d * 0.5 + (distCam - d) * 0.7;   // muro dietro: invece di schiacciarsi addosso sale e guarda dall'alto
+      voluta.set(x - fx * d, Math.max(0.5, h), z - fz * d);
+      camera.position.lerp(voluta, k);
+      fuoco.set(x + fx * 1.5, occhio + 0.1 + Math.sin(pitch) * 1.8, z + fz * 1.5);
     }
     camera.lookAt(fuoco);
   }
@@ -331,6 +338,8 @@
     const b = document.getElementById("gdr3d"); if (b) b.textContent = "🚪 Esci";
     window.addEventListener("keydown", giu); window.addEventListener("keyup", su);
     tela.addEventListener("click", clicTela); document.addEventListener("mousemove", muovi);
+    tela.addEventListener("mousedown", premi); window.addEventListener("mouseup", lascia);
+    try { const r = tela.requestPointerLock && tela.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {}   // se il browser lo permette, mouse subito agganciato
     tela.addEventListener("wheel", rotella, { passive: false, capture: true });
     window.addEventListener("blur", vuota);
     U3.sveglia();
@@ -344,6 +353,7 @@
     pan.remove(); mirino.remove(); tasti.clear();
     window.removeEventListener("keydown", giu); window.removeEventListener("keyup", su);
     tela.removeEventListener("click", clicTela); document.removeEventListener("mousemove", muovi);
+    tela.removeEventListener("mousedown", premi); window.removeEventListener("mouseup", lascia); trascina = false;
     tela.removeEventListener("wheel", rotella, { capture: true });
     window.removeEventListener("blur", vuota);
     if (salvaCam) { camera.fov = salvaCam.fov; camera.near = salvaCam.near; camera.updateProjectionMatrix(); camera.position.copy(salvaCam.pos); controlli.target.copy(salvaCam.target); }
