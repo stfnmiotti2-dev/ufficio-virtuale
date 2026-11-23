@@ -40,7 +40,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/lib/BufferGeometryUtils.js": ("lib/BufferGeometryUtils.js", "text/javascript; charset=utf-8"),
           "/lib/modelli/omino.glb": ("lib/modelli/omino.glb", "model/gltf-binary"),
           "/plus3d.js": ("plus3d.js", "text/javascript; charset=utf-8")}
-VERSIONE = "task 9.65 (interruttore 📋 dei resoconti dell ispettrice: spento = zero token; ispettrice sui tacchi a spillo con camminata da passerella; modalita GDR)"
+VERSIONE = "task 9.66 (il pulsante AGGIORNA chiede il codice e lo salva da solo; interruttore 📋 dei resoconti dell ispettrice: spento = zero token; ispettrice sui tacchi a spillo con camminata da passerella; modalita GDR)"
 FERMI_ORE = 48          # thread e sessioni fermi da piu' di cosi' spariscono dalla pagina
 VECCHIO_S = 3600        # un thread del cloud "al lavoro" senza notizie da piu' di cosi' diventa "dato vecchio?"
 ATTESA_LUNGA_S = 2 * 3600   # chi aspetta Stefano da piu' di cosi' (o dati cloud piu' vecchi di cosi'): ⏳
@@ -817,6 +817,7 @@ def _watcher(hours):
 # "token": "sk-ant-oat01-..."}. Il POST avvia l'attivita' "Ufficio: pulsante AGGIORNA": apre un thread
 # "Capo › Giro AGGIORNA ufficio" che rilegge lo stato di tutti i thread, riscrive stato-thread.json e si chiude da solo.
 TOKEN_FILE = HERE / "aggiorna-token.json"
+URL_AGGIORNA = "https://api.anthropic.com/v1/claude_code/routines/trig_01B3kGy9WsMA7MWSVZfbPZQ5/fire"   # l'attivita' "Ufficio: pulsante AGGIORNA"
 _agg = {"ultima": 0}
 
 
@@ -829,7 +830,7 @@ def _chiedi_aggiornamento():
         cfg = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
         url, token = str(cfg["url"]).strip(), str(cfg["token"]).strip()
     except (OSError, ValueError, KeyError, TypeError):
-        return {"ok": False, "errore": "Manca aggiorna-token.json nella cartella dell'ufficio (vedi LEGGIMI-AGGIORNA.md)."}
+        return {"ok": False, "manca_token": True, "errore": "Manca il codice del pulsante: incollalo quando te lo chiede."}
     if not url.startswith("https://api.anthropic.com/") or not url.endswith("/fire"):
         return {"ok": False, "errore": "L'indirizzo in aggiorna-token.json non e' quello giusto (deve finire con /fire)."}
     req = urllib.request.Request(url, data=json.dumps({"text": "pulsante AGGIORNA dall'ufficio sul PC"}).encode("utf-8"),
@@ -896,10 +897,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._chiamata_lecita():
             return self._send(403, b"vietato", "text/plain; charset=utf-8")
+        self._corpo = b""
         try:
             n = int(self.headers.get("Content-Length") or 0)
             if n:
-                self.rfile.read(min(n, 65536))
+                self._corpo = self.rfile.read(min(n, 65536))
         except (ValueError, OSError):
             pass
         return self._azione(self.path.split("?", 1)[0])
@@ -925,6 +927,16 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 return self._send(500, b'{"ok": false}', "application/json")
             return self._send(200, json.dumps({"ok": True, "resoconti": isp_resoconti()}).encode("utf-8"), "application/json")
+        if path == "/api/aggiorna-token":   # la pagina salva il codice del pulsante AGGIORNA (resta solo sul PC)
+            try:
+                token = str(json.loads(self._corpo.decode("utf-8")).get("token") or "").strip()
+            except (ValueError, AttributeError):
+                token = ""
+            if not token.startswith("sk-ant-") or len(token) > 400 or any(c.isspace() for c in token):
+                return self._send(400, json.dumps({"ok": False, "errore": "Il codice deve iniziare con sk-ant-"}).encode("utf-8"),
+                                  "application/json; charset=utf-8")
+            TOKEN_FILE.write_text(json.dumps({"url": URL_AGGIORNA, "token": token}, indent=1), encoding="utf-8")
+            return self._send(200, b'{"ok": true}', "application/json")
         if path == "/api/aggiorna":         # pulsante AGGIORNA: sveglia il thread che rilegge lo stato dei thread
             esito = _chiedi_aggiornamento()
             return self._send(200 if esito.get("ok") else 502, json.dumps(esito, ensure_ascii=False).encode("utf-8"),
