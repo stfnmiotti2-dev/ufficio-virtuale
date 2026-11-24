@@ -63,7 +63,7 @@
   const salva = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
   let attivo = false, primaPersona = leggi("gdrVista", "3") === "1", look = leggi("gdrLook", "robot");
   if (!LOOK.some(l => l[0] === look)) look = "robot";
-  let av = null, x = 0, z = 0, yaw = 0, pitch = -0.12, passo = 0, alto = 1.5, distCam = 3.2;
+  let av = null, x = 0, z = 0, yaw = 0, testa = 0, pitch = -0.12, passo = 0, alto = 1.5, distCam = 3.2;
   const tasti = new Set();
   let salvaCam = null;
 
@@ -218,7 +218,7 @@
   <select title="Chi sei"></select>
   <button class="vista" title="Cambia visuale (tasto V)"></button>
   <button class="esci" title="Torna alla vista dall'alto">🚪 Esci</button>
-  <span class="gdr-aiuto"><b>Frecce</b> muovi · <b>mouse</b> gira (clic sull'ufficio per agganciarlo, Esc per sganciarlo) · Shift corre · V visuale · E scheda</span>`;
+  <span class="gdr-aiuto"><b>↑↓</b> avanti/indietro · <b>←→</b> ruota · <b>mouse</b> gira la testa (clic sull'ufficio per agganciarlo, Esc per sganciarlo) · Shift corre · V visuale · E scheda</span>`;
   const sel = pan.querySelector("select"), btnVista = pan.querySelector(".vista");
   for (const [k, n] of LOOK) { const o = document.createElement("option"); o.value = k; o.textContent = n; sel.append(o); }
   const mirino = document.createElement("div"); mirino.className = "gdr-mirino";
@@ -242,14 +242,16 @@
   }
   function su(e) { tasti.delete(e.code); }
   function clicTela() { if (attivo && document.pointerLockElement !== tela) tela.requestPointerLock && tela.requestPointerLock(); }
+  const TESTA = 1.4;                                                    // rotazione massima della testa (rad, ~80 gradi)
   let trascina = false;
   function premi(e) { if (attivo && e.button === 0) trascina = true; }
   function lascia() { trascina = false; }
   function muovi(e) {                                                    // mouse agganciato, oppure tasto premuto e trascina
     if (!attivo || (document.pointerLockElement !== tela && !trascina)) return;
     const mx_ = Math.max(-60, Math.min(60, e.movementX)), my_ = Math.max(-60, Math.min(60, e.movementY));   // niente salti se il browser manda un valore pazzo
-    yaw -= mx_ * 0.0028;
-    pitch = Math.max(-1.0, Math.min(0.8, pitch - my_ * 0.0028));
+    // il mouse muove solo la testa: come una persona vera, circa 80 gradi per lato, 50 in giu' e 40 in su
+    testa = Math.max(-TESTA, Math.min(TESTA, testa - mx_ * 0.0028));
+    pitch = Math.max(-0.9, Math.min(0.7, pitch - my_ * 0.0028));
     U3.sveglia();
   }
   function scheda() {                                                    // la mini-scheda di chi sta al centro della vista
@@ -270,10 +272,13 @@
     let av_ = 0, la = 0;
     if (tasti.has("KeyW") || tasti.has("ArrowUp")) av_ += 1;
     if (tasti.has("KeyS") || tasti.has("ArrowDown")) av_ -= 1;
-    if (tasti.has("KeyD") || tasti.has("ArrowRight")) la += 1;          // frecce laterali: passo di lato (a girare ci pensa il mouse)
-    if (tasti.has("KeyA") || tasti.has("ArrowLeft")) la -= 1;
+    if (tasti.has("KeyD")) la += 1;                                     // A e D: passo di lato
+    if (tasti.has("KeyA")) la -= 1;
+    if (tasti.has("ArrowLeft")) yaw += 2.4 * dt;                         // frecce laterali: ruotano il personaggio (per girarsi del tutto)
+    if (tasti.has("ArrowRight")) yaw -= 2.4 * dt;
     const vel = (tasti.has("ShiftLeft") || tasti.has("ShiftRight") ? 6 : 3) * dt;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    const vy = yaw + testa, cx = -Math.sin(vy), cz = -Math.cos(vy);       // dove guarda la testa
     let mx = fx * av_ + rx * la, mz = fz * av_ + rz * la;
     const n = Math.hypot(mx, mz), va = n > 0;
     if (va) {
@@ -288,8 +293,10 @@
     if (av) {
       const u = av.userData;
       av.position.set(x, 0, z);
-      if (va) {                                                          // si gira verso dove cammina, senza scatti
-        const voluto = Math.atan2(-mx, -mz); let d = voluto - av.rotation.y;
+      if (u.testa) u.testa.rotation.y = testa * 0.9;                     // si vede girare la testa
+      const gira = tasti.has("ArrowLeft") || tasti.has("ArrowRight");
+      if (va || gira) {                                                  // si gira verso dove cammina (o dove ruota), senza scatti
+        const voluto = va ? Math.atan2(-mx, -mz) : yaw; let d = voluto - av.rotation.y;
         d = Math.atan2(Math.sin(d), Math.cos(d)); av.rotation.y += d * Math.min(1, dt * 12);
       }
       const o = va ? Math.sin(passo) : 0;
@@ -310,16 +317,16 @@
     // telecamera (morbida: insegue il punto voluto invece di saltarci)
     const occhio = alto * 0.86, k = primaPersona ? 1 : Math.min(1, dt * 10);
     if (primaPersona) {
-      camera.position.set(x + fx * 0.15, occhio + (va ? Math.abs(Math.cos(passo)) * 0.025 : 0), z + fz * 0.15);
-      fuoco.set(x + fx * Math.cos(pitch) * 5, occhio + Math.sin(pitch) * 5, z + fz * Math.cos(pitch) * 5);
+      camera.position.set(x + cx * 0.15, occhio + (va ? Math.abs(Math.cos(passo)) * 0.025 : 0), z + cz * 0.15);
+      fuoco.set(x + cx * Math.cos(pitch) * 5, occhio + Math.sin(pitch) * 5, z + cz * Math.cos(pitch) * 5);
     } else {
       // dietro le spalle, un po' dall'alto; se dietro c'e' un muro si avvicina
       let d = distCam;
-      for (let s = 0.4; s <= distCam; s += 0.2) if (pieno(x - fx * s, z - fz * s)) { d = Math.max(1.0, s - 0.3); break; }
+      for (let s = 0.4; s <= distCam; s += 0.2) if (pieno(x - cx * s, z - cz * s)) { d = Math.max(1.0, s - 0.3); break; }
       const h = occhio + 0.55 - pitch * d * 0.5 + (distCam - d) * 0.7;   // muro dietro: invece di schiacciarsi addosso sale e guarda dall'alto
-      voluta.set(x - fx * d, Math.max(0.5, h), z - fz * d);
+      voluta.set(x - cx * d, Math.max(0.5, h), z - cz * d);
       camera.position.lerp(voluta, k);
-      fuoco.set(x + fx * 1.5, occhio + 0.1 + Math.sin(pitch) * 1.8, z + fz * 1.5);
+      fuoco.set(x + cx * 1.5, occhio + 0.1 + Math.sin(pitch) * 1.8, z + cz * 1.5);
     }
     camera.lookAt(fuoco);
   }
@@ -331,7 +338,7 @@
     controlli.enabled = false;
     camera.fov = 65; camera.near = 0.05; camera.updateProjectionMatrix();
     costruisciGriglia();
-    [x, z] = partenza(); yaw = Math.PI / 2;                                // guarda dentro l'ufficio, verso destra
+    [x, z] = partenza(); yaw = Math.PI / 2; testa = 0;                                // guarda dentro l'ufficio, verso destra
     if (U3.portaPos && U3.centro) yaw = Math.atan2(-(U3.centro.x - x), -(U3.centro.z - z));
     sel.value = look; creaAvatar(); scriviVista();
     wrap.append(pan, mirino);
@@ -364,7 +371,7 @@
   window.Gdr = {
     attivo: false, entra, esci, passo: passoGdr,
     ricostruito() { sporca = true; },                                    // i dati sono cambiati: muri e mobili da rifare
-    get pos() { return [x, z, yaw]; }, set pos(p) { [x, z, yaw] = p; },  // per le prove
+    get pos() { return [x, z, yaw, testa]; }, set pos(p) { [x, z, yaw] = p; },  // per le prove
     get griglia() { return { griglia, gx0, gz0, gnx, gnz, CELLA }; },
     galleria(x0, z0) {                                                   // per le prove: tutti gli eroi in fila
       return LOOK.map(([k], i) => { const o = U3.nuovoOmino({ id: "gdr-eroe", donna: false }, x0 + i * 1.15, z0, "dip"); vestiEroe(o, k);
